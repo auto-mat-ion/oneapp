@@ -1,0 +1,2 @@
+utils/chromedriver/chrome.dll filter=lfs diff=lfs merge=lfs -text
+utils/chromedriver/interactive_ui_tests.exe filter=lfs diff=lfs merge=lfs -text

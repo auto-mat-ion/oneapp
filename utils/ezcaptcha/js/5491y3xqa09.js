@@ -1,0 +1,1 @@
+const e="Image Element",t="Locate",c="CSS selector for the Captcha image",a="CSS selector for the Captcha Input",o="Enter CSS selector",l={imageElement:e,locate:t,captchaImage:c,captchaInput:a,placeholder:o};export{c as captchaImage,a as captchaInput,l as default,e as imageElement,t as locate,o as placeholder};

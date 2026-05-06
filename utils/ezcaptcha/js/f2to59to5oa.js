@@ -1,0 +1,1 @@
+const t="代理",o={title:"手动模式",description:"手动模式下，你需要手动交互「验证」按钮，插件才会开始自动解决。"},a={title:"黑名单控制",description:"已添加的网站将禁用验证码自动解决功能。",inputTips:"请不要输入如 http 等协议，也不要输入如 /a/b?a=b 的参数或路径，只需输入域名，例如 example.com。",addSite:"添加站点"},i={title:"获取参数"},l={proxy:t,manualSolving:o,blacklistControl:a,getParams:i};export{a as blacklistControl,l as default,i as getParams,o as manualSolving,t as proxy};

@@ -1,0 +1,1 @@
+const e={keyTitle:"YOUR CLIENT KEY",getKey:"GET MY KEY",balance:"BALANCE",point:"POINT",addFunds:"add funds",keyPlaceholder:"Please enter your api key here"},a={validation:e};export{a as default,e as validation};

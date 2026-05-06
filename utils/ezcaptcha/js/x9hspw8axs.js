@@ -1,0 +1,1 @@
+const a="Элемент изображения",c="Найти",t="CSS-селектор для изображения Captcha",e="CSS-селектор для ввода Captcha",o="Введите CSS-селектор",p={imageElement:a,locate:c,captchaImage:t,captchaInput:e,placeholder:o};export{t as captchaImage,e as captchaInput,p as default,a as imageElement,c as locate,o as placeholder};
