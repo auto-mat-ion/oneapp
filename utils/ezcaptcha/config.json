@@ -1,0 +1,71 @@
+{
+  "enabled": true,
+  "language": "",
+  "proxy": false,
+  "manualSolving": false,
+  "blacklistControl": false,
+  "getParams": false,
+  "disabledHosts": [],
+  "key": "7e3cc0fe7bcd4b269c7af393eba0cad5591719",
+  "apiBaseUrl": "https://sync.ez-captcha.com/",
+  "autoReport": true,
+  "enableLogging": false,
+  "maxRetries": 50,
+  "retryDelay": 1000,
+  "injectWindowFlag": false,
+  "workingFlagName": "ezcaptcha",
+  "showWorkStatus": true,
+  "HCaptcha": {
+    "enabled": true,
+    "delayTime": 500,
+    "method": "Click",
+    "advanced": {
+      "mouseDownDelay": 200,
+      "mouseUpDelay": 500,
+      "dragSteps": 50,
+      "dragStepDelay": 10,
+      "clickDelay": 500,
+      "canvasLoadWait": 2000,
+      "taskPreparePoll": 100,
+      "waitForNextTask": 1000,
+      "maxTaskReadyAttempts": 100,
+      "canvasCheckMaxAttempts": 5,
+      "canvasZeroThreshold": 0.7,
+      "canvasCheckInterval": 500
+    }
+  },
+  "ReCaptchaV2": {
+    "enabled": true,
+    "delayTime": 500,
+    "method": "Click",
+    "useFastDict": false,
+    "warmupKeywords": "",
+    "enable3x3": true,
+    "enable4x4": true,
+    "enable1x1": true,
+    "refresh3x3": false,
+    "refresh4x4": false,
+    "refresh1x1": false
+  },
+  "FunCaptcha": {
+    "enabled": true,
+    "delayTime": 800,
+    "method": "Click",
+    "advanced": {
+      "waitForNextTask": 2000,
+      "waitForCanvas": 3000,
+      "waitBeforeRetry": 2000,
+      "victoryWait": 100000,
+      "maxFailureRetries": 0
+    }
+  },
+  "TextCaptcha": {
+    "enabled": true,
+    "delayTime": 500,
+    "method": "Click",
+    "selector": {
+      "image": "",
+      "input": ""
+    }
+  }
+}

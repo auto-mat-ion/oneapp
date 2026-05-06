@@ -1,0 +1,10 @@
+selenium
+seleniumbase
+pandas
+requests
+python-dotenv
+msal
+pyautogui
+streamlit
+mysql-connector-python
+email_validator

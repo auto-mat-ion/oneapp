@@ -1,0 +1,1 @@
+const e={keyTitle:"ВАШ КЛИЕНТСКИЙ КЛЮЧ",getKey:"ПОЛУЧИТЬ МОЙ КЛЮЧ",balance:"БАЛАНС",point:"ОЧКИ",addFunds:"пополнить",keyPlaceholder:"Пожалуйста, введите ваш API-ключ здесь"},a={validation:e};export{a as default,e as validation};

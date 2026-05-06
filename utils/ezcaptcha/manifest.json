@@ -1,0 +1,117 @@
+{
+"update_url": "https://clients2.google.com/service/update2/crx",
+
+  "manifest_version": 3,
+  "name": "EZCaptcha Solver: Fast & Easy Captcha Recognition Service",
+  "description": "A powerful Chrome extension for solving various types of CAPTCHAs automatically",
+  "version": "0.9.16",
+  "icons": {
+    "16": "src/assets/icon/16.png",
+    "32": "src/assets/icon/32.png",
+    "48": "src/assets/icon/48.png",
+    "128": "src/assets/icon/128.png"
+  },
+  "action": {
+    "default_icon": {
+      "16": "src/assets/icon/16.png",
+      "32": "src/assets/icon/32.png",
+      "48": "src/assets/icon/48.png"
+    },
+    "default_popup": "src/popup/index.html",
+    "default_title": "EZCaptcha Solver: Fast & Easy Captcha Recognition Service"
+  },
+  "options_page": "src/options/index.html",
+  "background": {
+    "service_worker": "service-worker-loader.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "js": [
+        "assets/ecq2jwzi.o5ea.js"
+      ],
+      "matches": [
+        "<all_urls>"
+      ],
+      "run_at": "document_end",
+      "all_frames": false,
+      "css": [
+        "assets/7ijdoqun.eaph.css"
+      ]
+    },
+    {
+      "js": [
+        "assets/5n3h9225.saan.js"
+      ],
+      "matches": [
+        "<all_urls>"
+      ],
+      "run_at": "document_end",
+      "all_frames": true,
+      "css": [
+        "assets/7ijdoqun.eaph.css"
+      ]
+    }
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "permissions": [
+    "storage",
+    "scripting",
+    "activeTab",
+    "contextMenus"
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self' "
+  },
+  "web_accessible_resources": [
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "resources": [
+        "src/worker/inject/network.js",
+        "config.json"
+      ],
+      "use_dynamic_url": false
+    },
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "resources": [
+        "js/squlkw81zwd.js",
+        "js/ky7ddtal4da.js",
+        "js/5491y3xqa09.js",
+        "js/gg8u89t2cvh.js",
+        "js/82iwr2dmn8d.js",
+        "js/u5e9vk9uj9.js",
+        "js/ztsjc99yq1m.js",
+        "js/57wf2j1vaob.js",
+        "js/yuf2njfpdnk.js",
+        "js/kmmukwe4z3.js",
+        "js/x9hspw8axs.js",
+        "js/k6t7zn7mreh.js",
+        "js/dk2mms7zct5.js",
+        "js/ib0xlp4cpmq.js",
+        "js/sjvfi4kcayl.js",
+        "js/vq4i0av3t4.js",
+        "js/ypnetkmi58h.js",
+        "js/ahq203qwio.js",
+        "js/fsxsld16crd.js",
+        "js/5h2wp7vbns3.js",
+        "js/xaq5k3b1yj.js",
+        "js/wbpf25ciij.js",
+        "js/vu03q8h9rjf.js",
+        "js/f2to59to5oa.js",
+        "js/d2z87iguzwr.js",
+        "js/sw121blec5.js",
+        "js/83czqazpboi.js",
+        "js/yb8zlxejr1.js"
+      ],
+      "use_dynamic_url": false
+    }
+  ]
+}

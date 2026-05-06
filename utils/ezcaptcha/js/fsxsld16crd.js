@@ -1,0 +1,1 @@
+const c="图片元素",t="定位",a="验证码图片的 CSS 选择器",e="验证码输入框的 CSS 选择器",o="请输入css选择器",s={imageElement:c,locate:t,captchaImage:a,captchaInput:e,placeholder:o};export{a as captchaImage,e as captchaInput,s as default,c as imageElement,t as locate,o as placeholder};
