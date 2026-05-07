@@ -3496,7 +3496,7 @@ def run_password_changerbot():
             if status:
                 initialize_new_profile(new_profile_data)
             else:
-                print("No input emails in database...")
+                print("No input emails in database. Exiting...")
                 break
         except Exception as e:
             print(f"Error Getting emails from database: {e}")
