@@ -3502,7 +3502,3 @@ def run_password_changerbot():
             print(f"Error Getting emails from database: {e}")
             time.sleep(5)
             break
-
-
-# status, new_profile_data = get_new_profile_data()
-# d = initialize_new_profile(new_profile_data)
