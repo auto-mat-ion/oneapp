@@ -3506,7 +3506,8 @@ def login_on_country_page(driver, new_profile_data):
 def change_account_country(driver, new_profile_data):
     try:
         retries = 0
-        while retries < 3:
+        num_of_retries = 5
+        while retries < num_of_retries:
             try:
                 email = new_profile_data.get("email")
                 password = new_profile_data.get("pass")
@@ -3572,13 +3573,15 @@ def change_account_country(driver, new_profile_data):
                 if country_is_the_desired(driver):
                     return True
                 else:
-                    print(f"{email} : Country not changed. Retrying... ({retries}/3)")
+                    print(
+                        f"{email} : Country not changed. Retrying... ({retries}/{num_of_retries})"
+                    )
                     retries += 1
 
             except Exception as E:
                 retries += 1
                 print(
-                    f"{email} : Exception error changing country: {E}. Retrying... ({retries}/3)"
+                    f"{email} : Exception error changing country: {E}. Retrying... ({retries}/{num_of_retries})"
                 )
 
         return False
@@ -4323,11 +4326,11 @@ def store_extracted_link(new_profile_data, link):
         email = new_profile_data.get("email")
         recovery_email = new_profile_data.get("recovery_email")
         password = new_profile_data.get("pass")
-        with open("output_data/extracted_family_links_with_email.txt", "a") as f:
-            f.write(f"{email}:{password}:{recovery_email}:{link}\n")
+        # with open("output_data/extracted_family_links_with_email.txt", "a") as f:
+        #     f.write(f"{email}:{password}:{recovery_email}:{link}\n")
 
-        with open("output_data/extracted_family_links_pure.txt", "a") as f:
-            f.write(f"{link}\n")
+        # with open("output_data/extracted_family_links_pure.txt", "a") as f:
+        #     f.write(f"{link}\n")
 
         try:
             conn = mysql.connector.connect(
@@ -4804,11 +4807,25 @@ def get_new_profile_data():
             host=DB_HOST, user=DB_USER, password=DB_PASSWORD, database=DB_NAME
         )
         cursor = conn.cursor()
+
+        # First, check if there's an existing record in processing_emails for this server and bot type
+        cursor.execute(
+            "SELECT email, pass FROM processing_emails WHERE server_ip = %s AND bot_type = %s LIMIT 1",
+            (SERVER_IP, BOT_TYPE),
+        )
+        row = cursor.fetchone()
+        if row:
+            conn.close()
+            email, password = row
+            print(f"Found existing processing email: {email}")
+            return True, {"email": email, "pass": password}
+
+        # If no existing record, get a new one from input_emails
         cursor.execute("SELECT email, pass FROM input_emails LIMIT 1")
         row = cursor.fetchone()
         if not row:
             conn.close()
-            return {}
+            return False, {}
         email, password = row
         cursor.execute(
             "INSERT INTO processing_emails (email, pass, server_ip, bot_type, date_time) VALUES (%s, %s,%s, %s, %s)",
