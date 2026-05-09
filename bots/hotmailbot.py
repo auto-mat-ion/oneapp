@@ -3252,6 +3252,8 @@ def click_continue_if_you_see_this_code_button_smtp(driver):
             except:
                 pass
 
+            retries += 1
+
             time.sleep(2)
 
         return False
