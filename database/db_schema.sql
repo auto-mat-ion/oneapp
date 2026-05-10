@@ -296,14 +296,15 @@ CREATE TABLE
 
 -- EMAIL SENDER
 CREATE TABLE
-  IF NOT EXISTS email_sender_input_accounts (
+  IF NOT EXISTS sender_input_accounts (
     acc_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
     email VARCHAR(255) NULL,
     pass VARCHAR(255) NULL,
     recovery VARCHAR(255) NULL,
     country VARCHAR(255) NULL,
     last_used DATETIME NULL,
-    last_user VARCHAR(255) NULL
+    times_used INT NULL,
+    server_ip VARCHAR(255) NULL
   ) ENGINE = InnoDB;
 
 CREATE TABLE
@@ -314,6 +315,7 @@ CREATE TABLE
     recovery VARCHAR(255) NULL,
     date_time DATETIME NULL,
     country VARCHAR(255) NULL,
+    server_ip VARCHAR(255) NULL
   ) ENGINE = InnoDB;
 
 CREATE TABLE
@@ -323,6 +325,7 @@ CREATE TABLE
     pass VARCHAR(255) NULL,
     recovery VARCHAR(255) NULL,
     country VARCHAR(255) NULL,
+    server_ip VARCHAR(255) NULL,
     fail_reason TEXT NULL,
     date_time DATETIME NULL
   ) ENGINE = InnoDB;
@@ -345,7 +348,8 @@ CREATE TABLE
   IF NOT EXISTS sender_recipients (
     recipient_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
     recipient_email VARCHAR(255) NULL,
-    country VARCHAR(255) NULL
+    country VARCHAR(255) NULL,
+    server_ip VARCHAR(255) NULL
   ) ENGINE = InnoDB;
 
 CREATE TABLE
@@ -366,7 +370,8 @@ CREATE TABLE
   IF NOT EXISTS sender_log (
     log_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
     log_text TEXT NULL,
-    country VARCHAR(255) NULL
+    country VARCHAR(255) NULL,
+    server_ip VARCHAR(255) NULL
   ) ENGINE = InnoDB;
 
 CREATE TABLE
@@ -374,7 +379,8 @@ CREATE TABLE
     recipient_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
     recipient_email VARCHAR(255) NULL,
     date_time DATETIME NULL,
-    country VARCHAR(255) NULL
+    country VARCHAR(255) NULL,
+    server_ip VARCHAR(255) NULL
   ) ENGINE = InnoDB;
 
 CREATE TABLE
@@ -382,5 +388,6 @@ CREATE TABLE
     email_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
     recipient_email VARCHAR(255) NULL,
     reason DATETIME NULL,
-    country VARCHAR(255) NULL
+    country VARCHAR(255) NULL,
+    server_ip VARCHAR(255) NULL
   ) ENGINE = InnoDB;

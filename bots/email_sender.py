@@ -16,14 +16,6 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from email_validator import validate_email, EmailNotValidError
 
-INPUT_DIR = Path("input_data")
-ACCOUNTS_FILE = INPUT_DIR / "accounts.txt"
-HYPERLINK_TEXT_FILE = INPUT_DIR / "hyperlink_text.txt"
-LINKS_FILE = INPUT_DIR / "links.txt"
-RECIPIENTS_FILE = INPUT_DIR / "recipients.txt"
-SUBJECTS_FILE = INPUT_DIR / "subjects.txt"
-TEXTS_FILE = INPUT_DIR / "texts.txt"
-MSAL_CACHE_FILE = INPUT_DIR / "msal_cache.bin"
 SETTINGS_PATH = Path(__file__).resolve().parent / "settings.json"
 
 
@@ -45,6 +37,10 @@ def _get_email_sender_settings() -> dict:
 _EMAIL_SENDER_SETTINGS = _get_email_sender_settings()
 COUNTRY = str(_EMAIL_SENDER_SETTINGS.get("COUNTRY", "")).strip()
 
+APP_SETTINGS = _load_settings().get("app")
+SERVER_IP = APP_SETTINGS.get("SERVER_IP", "0.0.0.0")
+BOT_TYPE = "email_sender"
+
 FIRST_BATCH_BCC = int(_EMAIL_SENDER_SETTINGS.get("FIRST_BATCH_BCC", 9))
 SUBSEQUENT_BATCH_BCC = int(_EMAIL_SENDER_SETTINGS.get("SUBSEQUENT_BATCH_BCC", 329))
 SUBSEQUENT_BATCHES = int(_EMAIL_SENDER_SETTINGS.get("SUBSEQUENT_BATCHES", 3))
@@ -58,12 +54,6 @@ SAVE_TO_SENT = str(_EMAIL_SENDER_SETTINGS.get("SAVE_TO_SENT", False)).lower() ==
 CLIENT_ID = str(
     _EMAIL_SENDER_SETTINGS.get("CLIENT_ID", "e62beeb7-8a9b-4637-b57f-f8601c0d13f5")
 )
-
-LOG_DIR = Path("logs")
-LOG_FILE = LOG_DIR / "email_sender.log"
-PROCESSED_FILE = LOG_DIR / "processed_accounts.txt"
-FAILED_FILE = LOG_DIR / "failed_accounts.txt"
-SENT_RECIPIENTS_FILE = LOG_DIR / "sent_recipients.txt"
 
 
 FIRST_BATCH_BCC = int(os.getenv("FIRST_BATCH_BCC", "9"))
@@ -115,9 +105,16 @@ def log(msg: str):
     with _log_lock:
         print(console_line)
         try:
-            LOG_DIR.mkdir(exist_ok=True)
-            with open(LOG_FILE, "a", encoding="utf-8") as f:
-                f.write(file_line + "\n")
+            conn = _get_db_connection()
+            if conn is not None:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "INSERT INTO sender_log (log_text, country, server_ip) VALUES (%s, %s, %s)",
+                    (file_line, COUNTRY, SERVER_IP),
+                )
+                conn.commit()
+                cursor.close()
+                conn.close()
         except Exception:
             pass
 
@@ -136,25 +133,43 @@ except AttributeError:
 
 
 def load_cache():
-    if MSAL_CACHE_FILE.exists():
-        try:
-            with open(MSAL_CACHE_FILE, "r", encoding="utf-8") as f:
-                _shared_cache.deserialize(f.read())
-            log(f"Cache loaded: {MSAL_CACHE_FILE}")
-        except Exception as e:
-            log(f"Cache load error: {e}")
-    else:
-        log(f"Warning: no cache file ({MSAL_CACHE_FILE})")
+    try:
+        conn = _get_db_connection()
+        if conn is None:
+            log("Warning: unable to connect to database for cache")
+            return
+        cursor = conn.cursor()
+        cursor.execute("SELECT cache_bin_file FROM cache_bins")
+        results = cursor.fetchall()
+        cursor.close()
+        conn.close()
 
+        combined_data = {
+            "Account": {},
+            "IdToken": {},
+            "AccessToken": {},
+            "RefreshToken": {},
+            "AppMetadata": {},
+        }
 
-def save_cache():
-    with _cache_lock:
-        if _shared_cache.has_state_changed:
-            try:
-                with open(MSAL_CACHE_FILE, "w", encoding="utf-8") as f:
-                    f.write(_shared_cache.serialize())
-            except Exception:
-                pass
+        for result in results:
+            if result and result[0]:
+                temp_cache = msal.SerializableTokenCache()
+                temp_cache.deserialize(result[0].decode("utf-8"))
+                # _shared_cache.update(temp_cache)
+                raw_data = json.loads(temp_cache.serialize())
+                for category in combined_data.keys():
+                    if category in raw_data:
+                        combined_data[category].update(raw_data[category])
+
+        num_accounts = len(combined_data.get("Account", {}))
+        _shared_cache.deserialize(json.dumps(combined_data))
+
+        log(
+            f"Cache loaded from database: {len(results)} servers caches, {num_accounts} accounts"
+        )
+    except Exception as e:
+        log(f"Cache load error: {e}")
 
 
 def _load_db_config() -> dict:
@@ -209,7 +224,6 @@ def get_token(email: str) -> Optional[str]:
             result = app.acquire_token_silent(scopes=SCOPES, account=matching)
 
         if result and "access_token" in result:
-            save_cache()
             return result["access_token"]
 
         return None
@@ -239,7 +253,6 @@ def refresh_token(email: str) -> Optional[str]:
             )
 
         if result and "access_token" in result:
-            save_cache()
             return result["access_token"]
         return None
     except Exception:
@@ -334,77 +347,46 @@ class RecipientManager:
         self._load()
 
     def _load(self):
-        if not RECIPIENTS_FILE.exists():
-            log(f"Error: {RECIPIENTS_FILE} not found")
+        conn = _get_db_connection()
+        if conn is None:
+            log("Error: unable to connect to database for recipients")
             return
 
-        seen = set()
-        recipients = []
-        invalid_count = 0
-        invalid_preview = []
-        MAX_PREVIEW = 5
-
         try:
-            LOG_DIR.mkdir(exist_ok=True)
-            invalid_log_path = LOG_DIR / "invalid_recipients.txt"
-            invalid_log = open(invalid_log_path, "w", encoding="utf-8", buffering=1)
-            invalid_log.write(f"Invalid recipients from {RECIPIENTS_FILE}\n\n")
-            has_invalid_log = True
-        except Exception:
-            invalid_log = None
-            has_invalid_log = False
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT recipient_email FROM sender_recipients WHERE server_ip = %s AND COALESCE(country, '') = %s",
+                (SERVER_IP, COUNTRY),
+            )
+            rows = cursor.fetchall()
+            cursor.close()
 
-        try:
-            with open(RECIPIENTS_FILE, "r", encoding="utf-8", buffering=1 << 20) as f:
-                for line_num, line in enumerate(f, 1):
-                    original = line.rstrip("\n\r")
-                    email = "".join(original.split()).lower()
+            seen = set()
+            recipients = []
+            for row in rows:
+                if not row or row[0] is None:
+                    continue
+                email = str(row[0]).strip().lower()
+                if not email:
+                    continue
+                is_valid, normalized = _is_valid_email(email)
+                if not is_valid or normalized in seen:
+                    continue
+                seen.add(normalized)
+                recipients.append(normalized)
 
-                    if not email or email.startswith("#"):
-                        continue
+            random.shuffle(recipients)
+            self.queue.extend(recipients)
+            self._total_loaded = len(recipients)
 
-                    is_valid, normalized = _is_valid_email(email)
-
-                    if not is_valid:
-                        reason = f"Line {line_num}: Invalid format - '{original}'"
-                    elif normalized in seen:
-                        reason = f"Line {line_num}: Duplicate - {normalized}"
-                    else:
-                        seen.add(normalized)
-                        recipients.append(normalized)
-                        continue
-
-                    invalid_count += 1
-                    if len(invalid_preview) < MAX_PREVIEW:
-                        invalid_preview.append(reason)
-                    if invalid_log:
-                        try:
-                            invalid_log.write(reason + "\n")
-                        except Exception:
-                            pass
+            log(f"✓ Loaded {len(recipients)} valid recipients from DB")
+        except Exception as exc:
+            log(f"Error: failed to load recipients from database: {exc}")
         finally:
-            if invalid_log:
-                try:
-                    invalid_log.close()
-                except Exception:
-                    pass
-
-        random.shuffle(recipients)
-        self.queue.extend(recipients)
-        self._total_loaded = len(recipients)
-
-        log(
-            f"✓ Loaded {len(recipients)} valid recipients (deduped, validated, shuffled)"
-        )
-
-        if invalid_count:
-            log(f"⚠ Skipped {invalid_count} invalid/duplicate entries:")
-            for line in invalid_preview:
-                log(f"  {line}")
-            if invalid_count > MAX_PREVIEW:
-                log(f"  ... and {invalid_count - MAX_PREVIEW} more")
-            if has_invalid_log:
-                log(f"  Full list: {invalid_log_path}")
+            try:
+                conn.close()
+            except Exception:
+                pass
 
     def get_batch(self, size: int) -> List[str]:
         with _recipient_lock:
@@ -437,19 +419,6 @@ class RecipientManager:
         with _recipient_lock:
             return self._sent_count
 
-    def save_unsent(self):
-        with _recipient_lock:
-            remaining = list(self.queue)
-        if remaining:
-            with open(RECIPIENTS_FILE, "w", encoding="utf-8") as f:
-                for r in remaining:
-                    f.write(r + "\n")
-            log(f"Saved {len(remaining)} unsent recipients to {RECIPIENTS_FILE}")
-        else:
-            with open(RECIPIENTS_FILE, "w", encoding="utf-8") as f:
-                pass
-            log("All recipients sent!")
-
 
 class AccountManager:
     def __init__(self):
@@ -457,55 +426,93 @@ class AccountManager:
         self._load()
 
     def _load(self):
-        if not ACCOUNTS_FILE.exists():
-            log(f"Error: {ACCOUNTS_FILE} not found")
+        conn = _get_db_connection()
+        if conn is None:
+            log("Error: unable to connect to database for accounts")
             return
-        with open(ACCOUNTS_FILE, "r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line or line.startswith("#"):
+
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT email, pass, recovery FROM sender_input_accounts WHERE server_ip = %s AND COALESCE(country, '') = %s",
+                (SERVER_IP, COUNTRY),
+            )
+            rows = cursor.fetchall()
+            cursor.close()
+
+            for row in rows:
+                if not row or row[0] is None or row[1] is None:
                     continue
-                parts = line.split(",")
-                if len(parts) >= 2:
-                    self.accounts.append(
-                        {
-                            "email": parts[0].strip(),
-                            "password": parts[1].strip(),
-                            "recovery": parts[2].strip() if len(parts) > 2 else "",
-                            "creation_date": parts[3].strip() if len(parts) > 3 else "",
-                        }
-                    )
-        log(f"Accounts: {len(self.accounts)}")
+                email = str(row[0]).strip()
+                password = str(row[1]).strip()
+                recovery = (
+                    str(row[2]).strip() if len(row) > 2 and row[2] is not None else ""
+                )
+                if not email or not password:
+                    continue
+                self.accounts.append(
+                    {
+                        "email": email,
+                        "password": password,
+                        "recovery": recovery,
+                        "creation_date": "",
+                    }
+                )
+
+            log(f"Accounts: {len(self.accounts)}")
+        except Exception as exc:
+            log(f"Error: failed to load accounts from database: {exc}")
+        finally:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
     def mark_done(self, account: Dict):
-        with _file_lock:
-            LOG_DIR.mkdir(exist_ok=True)
-            ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            with open(PROCESSED_FILE, "a", encoding="utf-8") as f:
-                creation_date = account.get("creation_date", "")
-                f.write(
-                    f"{account['email']:40s} | {account['password']:20s} | {account.get('recovery', ''):30s} | {creation_date:15s} | {ts}\n"
-                )
+        try:
+            conn = _get_db_connection()
+            if conn is None:
+                return
+            cursor = conn.cursor()
+            cursor.execute(
+                "UPDATE sender_input_accounts SET times_used = COALESCE(times_used, 0) + 1, last_used = %s "
+                "WHERE email = %s AND server_ip = %s AND COALESCE(country, '') = %s",
+                (datetime.now(), account["email"], SERVER_IP, COUNTRY),
+            )
+            conn.commit()
+            cursor.close()
+            conn.close()
+        except Exception:
+            pass
 
     def mark_failed(self, account: Dict, reason: str):
-        with _file_lock:
-            LOG_DIR.mkdir(exist_ok=True)
-            clean = reason.replace("\n", " ").replace(",", ";")[:150]
-            ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            recovery = account.get("recovery", "")
-            creation_date = account.get("creation_date", "")
-            with open(FAILED_FILE, "a", encoding="utf-8") as f:
-                f.write(
-                    f"{account['email']:40s} | {account['password']:20s} | {recovery:30s} | {creation_date:15s} | {clean:50s} | {ts}\n"
-                )
-
-    def save_remaining(self, remaining: List[Dict]):
-        with _file_lock:
-            with open(ACCOUNTS_FILE, "w", encoding="utf-8") as f:
-                for a in remaining:
-                    f.write(
-                        f"{a['email']},{a['password']},{a['recovery']},{a.get('creation_date', '')}\n"
-                    )
+        try:
+            conn = _get_db_connection()
+            if conn is None:
+                return
+            cursor = conn.cursor()
+            cursor.execute(
+                "INSERT INTO sender_failed_accounts (email, pass, recovery, country, server_ip, fail_reason, date_time) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                (
+                    account["email"],
+                    account["password"],
+                    account.get("recovery", ""),
+                    COUNTRY,
+                    SERVER_IP,
+                    clean,
+                    datetime.now(),
+                ),
+            )
+            cursor.execute(
+                "DELETE FROM sender_input_accounts WHERE email = %s AND server_ip = %s AND COALESCE(country, '') = %s",
+                (account["email"], SERVER_IP, COUNTRY),
+            )
+            conn.commit()
+            cursor.close()
+            conn.close()
+        except Exception:
+            pass
 
 
 def make_session() -> requests.Session:
@@ -634,13 +641,36 @@ def _short(email: str) -> str:
 
 
 def log_sent(recipients: List[str]):
+
     try:
-        with _file_lock:
-            LOG_DIR.mkdir(exist_ok=True)
-            ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            with open(SENT_RECIPIENTS_FILE, "a", encoding="utf-8") as f:
-                for r in recipients:
-                    f.write(f"{r:40s} | {ts}\n")
+        if not recipients:
+            return
+        conn = _get_db_connection()
+        if conn is None:
+            return
+
+        unique_recipients = list(dict.fromkeys(recipients))
+        now = datetime.now()
+        delete_sql = (
+            "DELETE FROM sender_recipients "
+            "WHERE recipient_email = %s AND server_ip = %s AND COALESCE(country, '') = %s"
+        )
+        insert_sql = (
+            "INSERT INTO sender_sent_recipients "
+            "(recipient_email, date_time, country, server_ip) VALUES (%s, %s, %s, %s)"
+        )
+        cursor = conn.cursor()
+        cursor.executemany(
+            delete_sql,
+            [(r, SERVER_IP, COUNTRY) for r in unique_recipients],
+        )
+        cursor.executemany(
+            insert_sql,
+            [(r, now, COUNTRY, SERVER_IP) for r in unique_recipients],
+        )
+        conn.commit()
+        cursor.close()
+        conn.close()
     except Exception:
         pass
 
@@ -929,9 +959,6 @@ def main():
 
     processed = stats.get_processed()
     unused = [a for a in accounts.accounts if a not in processed]
-    accounts.save_remaining(unused)
-
-    recipients.save_unsent()
 
     final_stats = stats.get_stats()
 
@@ -944,8 +971,6 @@ def main():
     )
     log(f"  Time:       {final_stats['elapsed']:.1f}s ({final_stats['rate']:.1f}/s)")
     log(f"  Remaining:  {recipients.remaining()} recipients")
-    if final_stats["fail_count"]:
-        log(f"  Failures:   {FAILED_FILE}")
     log("=" * 55)
 
 
