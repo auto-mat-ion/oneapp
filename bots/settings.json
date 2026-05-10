@@ -4,7 +4,7 @@
     "DB_USER": "root",
     "DB_PASSWORD": "root101.",
     "DB_NAME": "oneapp",
-    "SERVER_IP": "NOT SET"
+    "SERVER_IP": "test ip"
   },
   "email_sender": {
     "COUNTRY": "United States",
@@ -18,7 +18,15 @@
     "STAGGER_MIN": 0.3,
     "STAGGER_MAX": 1.0,
     "SAVE_TO_SENT": false,
-    "CLIENT_ID": "e62beeb7-8a9b-4637-b57f-f8601c0d13f5"
+    "CLIENT_ID": "e62beeb7-8a9b-4637-b57f-f8601c0d13f5",
+    "SERVER_IPS": [
+      "51.161.34.220",
+      "51.77.195.218",
+      "51.91.97.55",
+      "51.255.193.28",
+      "162.19.229.213",
+      "51.178.51.6"
+    ]
   },
   "familybot": {
     "HERO_SMS_API_KEY": "34b95f20cb1c18b178c53bAd5018fdb1",
