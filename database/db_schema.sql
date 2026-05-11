@@ -350,8 +350,7 @@ CREATE TABLE
     recipient_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
     recipient_email VARCHAR(255) NULL,
     country VARCHAR(255) NULL,
-    server_ip VARCHAR(255) NULL,
-    batch VARCHAR(255) NULL
+    server_ip VARCHAR(255) NULL
   ) ENGINE = InnoDB;
 
 CREATE TABLE
