@@ -2,8 +2,10 @@
 setlocal
 
 echo Pulling latest code...
-git fetch origin main
+git stash push -m "preserving settings" -- bots/settings.json
+git reset --hard origin/main
 git pull origin main
+git stash pop
 
 REM 1. Check if Python 3.11 is installed
 py -3.11 --version >nul 2>&1
