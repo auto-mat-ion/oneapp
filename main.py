@@ -2,6 +2,16 @@ from bots.familybot import run_familybot
 from bots.hotmailbot import run_hotmailbot
 from bots.password_changer import run_password_changerbot
 from bots.email_sender import main
+import json
+
+if (
+    json.loads(open("bots/settings.json", "r").read()).get("app").get("SERVER_IP")
+    == "test ip"
+):
+    print(
+        "Please set the SERVER_IP in bots/settings.json before running the application."
+    )
+    exit(1)
 
 bot = int(
     input(
