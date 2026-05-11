@@ -12,6 +12,11 @@ try:
 except ImportError:
     mysql = None
 
+try:
+    import msal
+except ImportError:
+    msal = None
+
 THE_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
@@ -568,6 +573,107 @@ def parse_email_sender_input_accounts(uploaded_file):
     return pd.DataFrame(data)
 
 
+def load_emails_from_cache_bins():
+    """
+    Load emails from cache_bins table, parse them, and get password/recovery from database.
+    Returns a DataFrame with email, pass, and recovery columns.
+    """
+    if msal is None:
+        st.error("msal is not installed. Cannot load from cache bins.")
+        return None
+
+    conn = get_db_connection()
+    if conn is None:
+        st.error("Unable to connect to database")
+        return None
+
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT cache_bin_file FROM cache_bins")
+        results = cursor.fetchall()
+
+        # Parse all cache bins to extract emails
+        combined_data = {
+            "Account": {},
+            "IdToken": {},
+            "AccessToken": {},
+            "RefreshToken": {},
+            "AppMetadata": {},
+        }
+
+        for result in results:
+            if result and result[0]:
+                try:
+                    temp_cache = msal.SerializableTokenCache()
+                    temp_cache.deserialize(result[0].decode("utf-8"))
+                    raw_data = json.loads(temp_cache.serialize())
+                    for category in combined_data.keys():
+                        if category in raw_data:
+                            combined_data[category].update(raw_data[category])
+                except Exception as e:
+                    st.warning(f"Error parsing cache bin: {e}")
+                    continue
+
+        # Extract emails from Account data
+        account_data = combined_data.get("Account", {})
+        emails = set()
+        for account_key, account_info in account_data.items():
+            if isinstance(account_info, dict):
+                username = account_info.get("username", "")
+                if username:
+                    emails.add(username.lower())
+
+        if not emails:
+            st.warning("No emails found in cache bins")
+            return None
+
+        st.info(
+            f"Found {len(emails)} sender emails from cache bins in db. Getting Full info. Please wait..."
+        )
+
+        # Get password and recovery for these emails from accounts_details table in one batch
+        placeholders = ",".join(["%s"] * len(emails))
+        query = (
+            "SELECT email_acc, password, recovery_email "
+            "FROM accounts_details "
+            "WHERE LOWER(email_acc) IN (" + placeholders + ")"
+        )
+        cursor.execute(query, tuple(emails))
+        rows = cursor.fetchall()
+
+        lookup = {
+            row[0].lower(): (row[0], row[1], row[2] if row[2] else "") for row in rows
+        }
+
+        data = []
+        for email in sorted(emails):
+            if email in lookup:
+                row_email, password, recovery = lookup[email]
+                data.append(
+                    {"email": row_email, "pass": password, "recovery": recovery}
+                )
+            else:
+                st.warning(f"Email {email} not found in accounts_details table")
+
+        cursor.close()
+        conn.close()
+
+        if not data:
+            st.warning("No matching accounts found in database for emails from cache")
+            return None
+
+        return pd.DataFrame(data)
+
+    except Exception as e:
+        st.error(f"Error loading emails from cache bins: {e}")
+        return None
+    finally:
+        try:
+            conn.close()
+        except:
+            pass
+
+
 def parse_text_list(uploaded_file, column_name):
     content = uploaded_file.read().decode("utf-8", errors="replace")
     values = [line.strip() for line in content.splitlines() if line.strip()]
@@ -898,12 +1004,23 @@ def email_sender_uploader():
         "United Kingdom",
     ]
 
+    # Initialize session state keys at function start
+    if "sender_table_selected" not in st.session_state:
+        st.session_state.sender_table_selected = None
+    if "sender_df" not in st.session_state:
+        st.session_state.sender_df = None
+    if "sender_country" not in st.session_state:
+        st.session_state.sender_country = None
+    if "sender_data_source" not in st.session_state:
+        st.session_state.sender_data_source = None
+
     table_name = st.selectbox(
         "Select destination table",
         list(table_options.keys()),
         format_func=lambda x: table_options[x],
         key="sender_table",
     )
+    st.session_state.sender_table_selected = table_name
     st.markdown(f"**Target table:** `{table_name}`")
 
     selected_country = st.selectbox(
@@ -911,6 +1028,7 @@ def email_sender_uploader():
         country_options,
         key=f"sender_country_{table_name}",
     )
+    st.session_state.sender_country = selected_country
 
     upload_method = None
     if table_name == "sender_link":
@@ -920,10 +1038,38 @@ def email_sender_uploader():
             key=f"sender_link_method_{table_name}",
         )
 
+    # Data source option for sender_input_accounts
+    data_source = None
+    if table_name == "sender_input_accounts":
+        data_source = st.radio(
+            "Data source",
+            ["Upload file", "Get from Database (Cache Bins)"],
+            key=f"sender_data_source_{table_name}",
+        )
+        st.session_state.sender_data_source = data_source
+
     file_types = ["txt", "csv"]
-    uploaded_file = st.file_uploader(
-        "Choose your file", type=file_types, key=f"sender_file_{table_name}"
-    )
+    uploaded_file = None
+    df = None
+
+    # Handle file upload or database loading
+    if (
+        table_name == "sender_input_accounts"
+        and data_source == "Get from Database (Cache Bins)"
+    ):
+        st.info(
+            "This will load emails from cache_bins, parse them, and get password/recovery from the database."
+        )
+        if st.button("Load emails from cache bins", key=f"load_cache_{table_name}"):
+            with st.spinner("Loading emails from cache bins..."):
+                df = load_emails_from_cache_bins()
+            if df is not None:
+                st.session_state.sender_df = df
+                st.rerun()
+    else:
+        uploaded_file = st.file_uploader(
+            "Choose your file", type=file_types, key=f"sender_file_{table_name}"
+        )
 
     if uploaded_file is not None:
         if table_name == "sender_input_accounts":
@@ -939,7 +1085,15 @@ def email_sender_uploader():
         elif table_name == "sender_texts":
             df = parse_text_list(uploaded_file, "text")
 
-        if selected_country:
+        if df is not None:
+            st.session_state.sender_df = df
+
+    # Use cached dataframe if available
+    if df is None and st.session_state.sender_df is not None:
+        df = st.session_state.sender_df
+
+    if df is not None:
+        if selected_country and "country" not in df.columns:
             df["country"] = selected_country
 
         st.subheader("Preview top 10 files")
@@ -951,66 +1105,90 @@ def email_sender_uploader():
             return
 
         st.success(message)
-        st.write(f"Rows found: {len(df)}")
+        st.write(f"✓ Rows found: {len(df)}")
 
         # Distribution for sender_input_accounts and sender_recipients
         if table_name in ["sender_input_accounts", "sender_recipients"]:
-            st.subheader("Server Distribution")
+            st.subheader("Step 6: Server Distribution & Batching")
 
             settings = load_full_settings()
             server_ips = settings.get("email_sender", {}).get("SERVER_IPS", [])
 
-            # Add new server
-            col1, col2 = st.columns([4, 1])
-            with col1:
-                new_server = st.text_input(
-                    "Add new server IP", key=f"new_server_{table_name}"
-                )
-            with col2:
-                if st.button("Add Server", key=f"add_server_{table_name}"):
-                    if new_server and new_server not in server_ips:
-                        server_ips.append(new_server)
-                        settings["email_sender"]["SERVER_IPS"] = server_ips
-                        save_settings(settings)
-                        st.success(f"Added server {new_server}")
-                        st.rerun()
-
-            # Remove server
-            if server_ips:
-                col3, col4 = st.columns([4, 1])
-                with col3:
-                    remove_server = st.selectbox(
-                        "Select server to remove",
-                        server_ips,
-                        key=f"remove_server_{table_name}",
+            # Server management in expander
+            with st.expander("Manage Servers", expanded=False):
+                # Add new server
+                col1, col2 = st.columns([4, 1])
+                with col1:
+                    new_server = st.text_input(
+                        "Add new server IP", key=f"new_server_{table_name}"
                     )
-                with col4:
-                    if st.button(
-                        "Remove Server", key=f"remove_server_btn_{table_name}"
-                    ):
-                        if remove_server in server_ips:
-                            server_ips.remove(remove_server)
+                with col2:
+                    if st.button("Add Server", key=f"add_server_{table_name}"):
+                        if new_server and new_server not in server_ips:
+                            server_ips.append(new_server)
                             settings["email_sender"]["SERVER_IPS"] = server_ips
                             save_settings(settings)
-                            st.success(f"Removed server {remove_server}")
+                            st.success(f"Added server {new_server}")
                             st.rerun()
 
-            # Select servers
+                # Remove server
+                if server_ips:
+                    col3, col4 = st.columns([4, 1])
+                    with col3:
+                        remove_server = st.selectbox(
+                            "Select server to remove",
+                            server_ips,
+                            key=f"remove_server_{table_name}",
+                        )
+                    with col4:
+                        if st.button(
+                            "Remove Server", key=f"remove_server_btn_{table_name}"
+                        ):
+                            if remove_server in server_ips:
+                                server_ips.remove(remove_server)
+                                settings["email_sender"]["SERVER_IPS"] = server_ips
+                                save_settings(settings)
+                                st.success(f"Removed server {remove_server}")
+                                st.rerun()
+
+            if not server_ips:
+                st.error("No servers configured. Please add servers first.")
+                return
+
+            # Select servers with session state key that persists
             selected_servers = st.multiselect(
                 "Select servers for distribution",
                 server_ips,
-                key=f"selected_servers_{table_name}",
+                key=f"selected_servers_multi_{table_name}",
             )
 
             if not selected_servers:
                 st.warning("Select at least one server to proceed.")
                 return
 
+            # Store selected servers in session state
+            servers_key = f"selected_servers_{table_name}"
+            st.session_state[servers_key] = selected_servers
+
+            # Configure batches for each server
+            st.write("**Configure batch count for each server:**")
+            server_batches = {}
+            for server in selected_servers:
+                batch_count_key = f"batch_count_{server}_{table_name}"
+                num_batches = st.number_input(
+                    f"Number of batches for server {server}",
+                    min_value=1,
+                    value=1,
+                    key=batch_count_key,
+                )
+                server_batches[server] = num_batches
+
             # Distribution method
             dist_method = st.radio(
-                "Distribution method",
+                "Server distribution method",
                 ["Manual", "Equal"],
                 key=f"dist_method_{table_name}",
+                horizontal=True,
             )
 
             # Initialize distribution in session state
@@ -1021,7 +1199,9 @@ def email_sender_uploader():
             distribution = st.session_state[dist_key]
 
             if dist_method == "Equal":
-                if st.button("Distribute Equally", key=f"equal_dist_{table_name}"):
+                if st.button(
+                    "Distribute Equally Across Servers", key=f"equal_dist_{table_name}"
+                ):
                     total = len(df)
                     num_servers = len(selected_servers)
                     base = total // num_servers
@@ -1029,15 +1209,18 @@ def email_sender_uploader():
                     distribution = []
                     for i, server in enumerate(selected_servers):
                         count = base + (1 if i < remainder else 0)
-                        distribution.append({"server": server, "count": count})
+                        distribution.append(
+                            {"server": server, "count": count, "batches": []}
+                        )
                     st.session_state[dist_key] = distribution
-                    st.success("Distributed equally across servers.")
+                    st.success("✓ Distributed equally across servers.")
+                    st.rerun()
             else:  # Manual
                 st.write(
-                    "Assign servers sequentially. First assignment gets the top rows, second gets the next, etc."
+                    "📌 Assign servers sequentially. First assignment gets the top rows, etc."
                 )
                 remaining = len(df) - sum(d["count"] for d in distribution)
-                st.write(f"Remaining rows to assign: {remaining}")
+                st.write(f"Remaining rows to assign: **{remaining}**")
 
                 if remaining > 0:
                     col1, col2, col3 = st.columns([2, 1, 1])
@@ -1057,7 +1240,6 @@ def email_sender_uploader():
                         )
                     with col3:
                         if st.button("Assign", key=f"assign_{table_name}"):
-                            # Check if server already assigned, overwrite count
                             found = False
                             for d in distribution:
                                 if d["server"] == manual_server:
@@ -1066,55 +1248,218 @@ def email_sender_uploader():
                                     break
                             if not found:
                                 distribution.append(
-                                    {"server": manual_server, "count": manual_count}
+                                    {
+                                        "server": manual_server,
+                                        "count": manual_count,
+                                        "batches": [],
+                                    }
                                 )
                             st.session_state[dist_key] = distribution
                             st.success(
-                                f"Assigned {manual_count} rows to {manual_server}"
+                                f"✓ Assigned {manual_count} rows to {manual_server}"
                             )
                             st.rerun()
 
-            # Show current distribution
-            st.subheader("Current Distribution")
+            # Show current distribution and configure batches
+            st.write("---")
+            st.write("**Current Distribution & Batch Configuration:**")
             total_assigned = sum(d["count"] for d in distribution)
-            st.write(
-                f"Total rows: {len(df)}, Assigned: {total_assigned}, Remaining: {len(df) - total_assigned}"
-            )
+            progress_text = f"Total: {len(df)} | Assigned: {total_assigned} | Remaining: {len(df) - total_assigned}"
+
+            if total_assigned > 0:
+                progress = min(total_assigned / len(df), 1.0)
+                st.progress(progress, text=progress_text)
+            else:
+                st.info(progress_text)
 
             if distribution:
                 for i, d in enumerate(distribution):
-                    st.write(f"{i + 1}. Server {d['server']}: {d['count']} rows")
+                    server = d["server"]
+                    count = d["count"]
+                    num_batches = server_batches.get(server, 1)
 
-                if st.button("Clear Distribution", key=f"clear_dist_{table_name}"):
+                    status_icon = (
+                        "✓ Complete"
+                        if d.get("batches")
+                        and sum(b["count"] for b in d["batches"]) == count
+                        else "⧖ Pending"
+                    )
+                    with st.expander(
+                        f"**{i + 1}. Server {server}: {count} rows** ({status_icon})",
+                        expanded=False,
+                    ):
+                        # Batch distribution for this server
+                        batch_dist_method = st.radio(
+                            f"Batch distribution method for {server}",
+                            ["Manual", "Equal"],
+                            key=f"batch_dist_{server}_{table_name}",
+                            horizontal=True,
+                        )
+
+                        if batch_dist_method == "Equal":
+                            if st.button(
+                                f"Distribute {server} batches equally",
+                                key=f"equal_batch_{server}_{table_name}",
+                            ):
+                                base = count // num_batches
+                                remainder = count % num_batches
+                                batches = []
+                                for j in range(num_batches):
+                                    batch_count = base + (1 if j < remainder else 0)
+                                    batches.append(
+                                        {
+                                            "batch": f"batch_{j + 1}",
+                                            "count": batch_count,
+                                        }
+                                    )
+                                d["batches"] = batches
+                                st.session_state[dist_key] = distribution
+                                st.success(f"✓ Distributed {server} batches equally.")
+                                st.rerun()
+                        else:  # Manual batch distribution
+                            st.write(
+                                f"📌 Enter counts for each batch (total must equal {count}):"
+                            )
+
+                            # Initialize batch counts in session state
+                            batch_counts_key = f"batch_counts_{server}_{table_name}"
+                            if batch_counts_key not in st.session_state:
+                                st.session_state[batch_counts_key] = [0] * num_batches
+
+                            batch_counts = st.session_state[batch_counts_key]
+
+                            # Ensure we have the right number of batch counts
+                            if len(batch_counts) != num_batches:
+                                batch_counts = [0] * num_batches
+                                st.session_state[batch_counts_key] = batch_counts
+
+                            # Input boxes for each batch
+                            cols = st.columns(min(num_batches, 3))  # Max 3 columns
+                            for j in range(num_batches):
+                                col_idx = j % 3
+                                with cols[col_idx]:
+                                    batch_counts[j] = st.number_input(
+                                        f"Batch {j + 1}",
+                                        min_value=0,
+                                        max_value=count,
+                                        value=batch_counts[j],
+                                        key=f"batch_{j}_{server}_{table_name}",
+                                    )
+
+                            current_total = sum(batch_counts)
+                            st.write(f"Total: {current_total} / {count}")
+
+                            if current_total != count:
+                                st.warning(f"⚠ Batch counts must total exactly {count}")
+                            else:
+                                if st.button(
+                                    f"Apply batch distribution for {server}",
+                                    key=f"apply_batches_{server}_{table_name}",
+                                ):
+                                    batches = []
+                                    for j in range(num_batches):
+                                        if batch_counts[j] > 0:
+                                            batches.append(
+                                                {
+                                                    "batch": f"batch_{j + 1}",
+                                                    "count": batch_counts[j],
+                                                }
+                                            )
+                                    d["batches"] = batches
+                                    st.session_state[dist_key] = distribution
+                                    st.success(
+                                        f"✓ Applied batch distribution for {server}"
+                                    )
+                                    st.rerun()
+
+                        # Show batches for this server
+                        if d.get("batches"):
+                            st.write("**Configured batches:**")
+                            for j, batch in enumerate(d["batches"]):
+                                st.write(f"  • {batch['batch']}: {batch['count']} rows")
+
+                            if st.button(
+                                f"Clear batches for {server}",
+                                key=f"clear_batches_{server}_{table_name}",
+                            ):
+                                d["batches"] = []
+                                batch_counts_key = f"batch_counts_{server}_{table_name}"
+                                if batch_counts_key in st.session_state:
+                                    del st.session_state[batch_counts_key]
+                                st.session_state[dist_key] = distribution
+                                st.rerun()
+
+                st.write("---")
+
+                if st.button("Reset Distribution", key=f"clear_dist_{table_name}"):
                     st.session_state[dist_key] = []
+                    for server in selected_servers:
+                        batch_counts_key = f"batch_counts_{server}_{table_name}"
+                        if batch_counts_key in st.session_state:
+                            del st.session_state[batch_counts_key]
                     st.rerun()
 
-            # Check if distribution is complete
-            if total_assigned != len(df):
-                st.warning("Please complete the distribution before uploading.")
+            # Check if distribution and batching is complete
+            distribution_complete = total_assigned == len(df)
+            batching_complete = all(
+                sum(b.get("count", 0) for b in d.get("batches", [])) == d["count"]
+                for d in distribution
+            )
+
+            if not distribution_complete:
+                st.info("📌 Please complete the server distribution before uploading.")
+                return
+            if not batching_complete:
+                st.info(
+                    "📌 Please complete the batch distribution for all servers before uploading."
+                )
                 return
 
-            # Assign server_ip to df
+            st.success("✓ All distributions configured!")
+
+            # Assign server_ip and batch to df
             df["server_ip"] = ""
+            df["batch"] = ""
             start_idx = 0
             for d in distribution:
-                end_idx = start_idx + d["count"]
-                df.loc[start_idx : end_idx - 1, "server_ip"] = d["server"]
-                start_idx = end_idx
+                server = d["server"]
+                server_count = d["count"]
+                end_idx = start_idx + server_count
 
+                # Assign server_ip
+                df.loc[start_idx : end_idx - 1, "server_ip"] = server
+
+                # Assign batches within this server's rows
+                batch_start = start_idx
+                for batch in d.get("batches", []):
+                    batch_end = batch_start + batch["count"]
+                    df.loc[batch_start : batch_end - 1, "batch"] = batch["batch"]
+                    batch_start = batch_end
+
+                start_idx = end_idx
+        else:
+            # For other tables without distribution
+            df["server_ip"] = ""
+            df["batch"] = ""
+
+        # Final upload step
+        st.subheader("Step 7: Upload to Database")
         overwrite = (
             upload_method == "Overwrite existing links"
             if table_name == "sender_link"
             else False
         )
 
-        if st.button("Upload to database", key=f"sender_upload_{table_name}"):
+        if st.button("🚀 Upload to database", key=f"sender_upload_{table_name}"):
             with st.spinner("Uploading..."):
                 success, result_message = insert_into_db(
                     table_name, df, overwrite=overwrite
                 )
                 if success:
                     st.success(result_message)
+                    st.session_state.sender_df = (
+                        None  # Clear state after successful upload
+                    )
                 else:
                     st.error(result_message)
 
@@ -1207,372 +1552,99 @@ def render_stats_cards(cards):
 
 
 def stats_page():
-    st.header("Stats")
-    st.markdown("Choose a bot to see focused metrics.")
+    st.header("Email Sender Stats")
 
-    if "stats_bot" not in st.session_state:
-        st.session_state.stats_bot = "FamilyBot"
-
-    bot_options = ["FamilyBot", "Hotmail Bot", "Email Sender", "Password Changer"]
-    cols = st.columns(len(bot_options))
-    for idx, bot in enumerate(bot_options):
-        with cols[idx]:
-            if st.button(bot, key=f"stats_bot_{idx}"):
-                st.session_state.stats_bot = bot
-
-    selected_bot = st.session_state.stats_bot
-    st.markdown(f"### {selected_bot}")
-
-    today = datetime.now().date()
-    date_range = st.date_input(
-        "Filter by date range",
-        [today - timedelta(days=7), today],
-        key="stats_date_range",
-    )
-    if isinstance(date_range, (tuple, list)) and len(date_range) == 2:
-        start_date, end_date = date_range
-    elif isinstance(date_range, (tuple, list)) and len(date_range) == 1:
-        start_date = end_date = date_range[0]
-    else:
-        start_date = end_date = date_range
-
-    if end_date < start_date:
-        st.error("End date must be after the start date.")
-        return
-
-    start_dt = datetime.combine(start_date, datetime.min.time())
-    end_dt = datetime.combine(end_date, datetime.max.time())
-
-    if selected_bot == "FamilyBot":
-        try:
-            cards = [
-                {
-                    "label": "Available cards",
-                    "value": db_count("familybot_card_details"),
-                },
-                {"label": "Failed cards", "value": db_count("familybot_failed_cards")},
-                {
-                    "label": "Fully used cards",
-                    "value": db_count("familybot_fully_used_cards"),
-                },
-                {
-                    "label": "Processing emails",
-                    "value": db_count(
-                        "processing_emails", "bot_type = %s", ("familybot",)
-                    ),
-                },
-                {
-                    "label": "Processed accounts",
-                    "value": db_count(
-                        "processed_emails", "bot_type = %s", ("familybot",)
-                    ),
-                },
-                {"label": "Input emails total", "value": db_count("input_emails")},
-            ]
-            render_stats_cards(cards)
-        except Exception as e:
-            st.error(f"Error loading FamilyBot stats: {e}")
-
-        try:
-            st.markdown("### FamilyBot link stats")
-            family_link_stats = db_count("link_stats", "bot_type = %s", ("familybot",))
-            st.write(f"Link stats rows: {family_link_stats}")
-        except Exception as e:
-            st.error(f"Error loading link stats: {e}")
-
-        try:
-            st.markdown("### Top FamilyBot servers")
-            family_rank = db_top_servers(
-                "processed_emails",
-                bot_type="familybot",
-                start_date=start_dt,
-                end_date=end_dt,
-                limit=5,
-            )
-            if family_rank:
-                st.table(
-                    [
-                        {"Server IP": server or "Unknown", "Processed": count}
-                        for server, count in family_rank
-                    ]
-                )
-            else:
-                st.write("No FamilyBot server data found for the selected range.")
-        except Exception as e:
-            st.error(f"Error loading server stats: {e}")
-
-        try:
-            st.markdown("### Recent failed card reasons")
-            failed_reasons = db_group_count(
-                "familybot_failed_cards",
-                "reason_for_fail",
-                "bot_type = %s",
-                ("familybot",),
-                limit=5,
-            )
-            if failed_reasons:
-                st.table(
-                    [
-                        {"Reason": reason or "Unknown", "Count": count}
-                        for reason, count in failed_reasons
-                    ]
-                )
-            else:
-                st.write("No recent failed card reasons found.")
-        except Exception as e:
-            st.error(f"Error loading failed reasons: {e}")
-
-    elif selected_bot == "Hotmail Bot":
-        try:
-            cards = [
-                {
-                    "label": "Processed emails",
-                    "value": db_count(
-                        "processed_emails", "bot_type = %s", ("hotmailbot",)
-                    ),
-                },
-                {
-                    "label": "Signin log rows",
-                    "value": db_count("signin_log", "bot_type = %s", ("hotmailbot",)),
-                },
-                {
-                    "label": "Account details",
-                    "value": db_count(
-                        "accounts_details", "bot_type = %s", ("hotmailbot",)
-                    ),
-                },
-                {
-                    "label": "Processing emails",
-                    "value": db_count(
-                        "processing_emails", "bot_type = %s", ("hotmailbot",)
-                    ),
-                },
-                {"label": "Input emails total", "value": db_count("input_emails")},
-            ]
-            render_stats_cards(cards)
-        except Exception as e:
-            st.error(f"Error loading Hotmail Bot stats: {e}")
-
-        try:
-            st.markdown("### Top Hotmail servers")
-            hotmail_rank = db_top_servers(
-                "processed_emails",
-                bot_type="hotmailbot",
-                start_date=start_dt,
-                end_date=end_dt,
-                limit=5,
-            )
-            if hotmail_rank:
-                st.table(
-                    [
-                        {"Server IP": server or "Unknown", "Processed": count}
-                        for server, count in hotmail_rank
-                    ]
-                )
-            else:
-                st.write("No Hotmail server data found for the selected range.")
-        except Exception as e:
-            st.error(f"Error loading Hotmail server stats: {e}")
-
-        try:
-            st.markdown("### Signin status breakdown")
-            signin_status = db_group_count(
-                "signin_log",
-                "status",
-                "bot_type = %s",
-                ("hotmailbot",),
-                limit=6,
-            )
-            if signin_status:
-                st.table(
-                    [
-                        {"Status": status or "Unknown", "Count": count}
-                        for status, count in signin_status
-                    ]
-                )
-            else:
-                st.write("No signin status data found.")
-        except Exception as e:
-            st.error(f"Error loading signin status: {e}")
-
-    elif selected_bot == "Email Sender":
-        try:
-            cards = [
-                {
-                    "label": "Sender input accounts",
-                    "value": db_count("sender_input_accounts"),
-                },
-                {
-                    "label": "Sender processed accounts",
-                    "value": db_count("sender_processed_accounts"),
-                },
-                {"label": "Failed SMTP rows", "value": db_count("failed_smtp")},
-                {
-                    "label": "Processing queue",
-                    "value": db_count("processing_smtp_emails"),
-                },
-                {
-                    "label": "Link stats rows",
-                    "value": db_count("link_stats", "bot_type = %s", ("email_sender",)),
-                },
-            ]
-            render_stats_cards(cards)
-        except Exception as e:
-            st.error(f"Error loading Email Sender stats: {e}")
-
-        try:
-            st.markdown("### Top Email Sender servers")
-            sender_rank = db_top_servers(
-                "sender_processed_accounts",
-                start_date=start_dt,
-                end_date=end_dt,
-                limit=5,
-            )
-            if sender_rank:
-                st.table(
-                    [
-                        {"Server IP": server or "Unknown", "Processed": count}
-                        for server, count in sender_rank
-                    ]
-                )
-            else:
-                st.write("No sender server data found for the selected range.")
-        except Exception as e:
-            st.error(f"Error loading sender server stats: {e}")
-
-        try:
-            st.markdown("### Top sender countries")
-            sender_countries = db_group_count(
-                "sender_processed_accounts",
-                "country",
-                limit=6,
-            )
-            if sender_countries:
-                st.table(
-                    [
-                        {"Country": country or "Unknown", "Count": count}
-                        for country, count in sender_countries
-                    ]
-                )
-            else:
-                st.write("No sender country data found.")
-        except Exception as e:
-            st.error(f"Error loading sender countries: {e}")
-
-    elif selected_bot == "Password Changer":
-        try:
-            cards = [
-                {
-                    "label": "Input accounts",
-                    "value": db_count("password_changer_accounts"),
-                },
-                {
-                    "label": "Processed accounts",
-                    "value": db_count(
-                        "processed_emails", "bot_type = %s", ("password_changer",)
-                    ),
-                },
-                {
-                    "label": "Processing changes",
-                    "value": db_count(
-                        "processing_password_changes",
-                        "bot_type = %s",
-                        ("password_changer",),
-                    ),
-                },
-                {
-                    "label": "Failed changes",
-                    "value": db_count(
-                        "failed_smtp", "bot_type = %s", ("password_changer",)
-                    ),
-                },
-                {
-                    "label": "Signin log entries",
-                    "value": db_count(
-                        "signin_log", "bot_type = %s", ("password_changer",)
-                    ),
-                },
-                {
-                    "label": "Account details",
-                    "value": db_count(
-                        "accounts_details", "bot_type = %s", ("password_changer",)
-                    ),
-                },
-            ]
-            render_stats_cards(cards)
-        except Exception as e:
-            st.error(f"Error loading Password Changer stats: {e}")
-
-        try:
-            st.markdown("### Top Password Changer servers")
-            password_changer_rank = db_top_servers(
-                "processed_emails",
-                bot_type="password_changer",
-                start_date=start_dt,
-                end_date=end_dt,
-                limit=5,
-            )
-            if password_changer_rank:
-                st.table(
-                    [
-                        {"Server IP": server or "Unknown", "Processed": count}
-                        for server, count in password_changer_rank
-                    ]
-                )
-            else:
-                st.write(
-                    "No Password Changer server data found for the selected range."
-                )
-        except Exception as e:
-            st.error(f"Error loading Password Changer server stats: {e}")
-
-        try:
-            st.markdown("### Password change status breakdown")
-            password_status = db_group_count(
-                "signin_log",
-                "status",
-                "bot_type = %s",
-                ("password_changer",),
-                limit=6,
-            )
-            if password_status:
-                st.table(
-                    [
-                        {"Status": status or "Unknown", "Count": count}
-                        for status, count in password_status
-                    ]
-                )
-            else:
-                st.write("No password change status data found.")
-        except Exception as e:
-            st.error(f"Error loading password change status: {e}")
-
-        try:
-            st.markdown("### Failed password change reasons")
-            failed_reasons = db_group_count(
-                "failed_smtp",
-                "temp_email",
-                "bot_type = %s",
-                ("password_changer",),
-                limit=5,
-            )
-            if failed_reasons:
-                st.table(
-                    [
-                        {"Reason": reason or "Unknown", "Count": count}
-                        for reason, count in failed_reasons
-                    ]
-                )
-            else:
-                st.write("No failed password change reasons found.")
-        except Exception as e:
-            st.error(f"Error loading failed password change reasons: {e}")
+    # Basic stats cards
+    try:
+        cards = [
+            {
+                "label": "Total Sender Accounts",
+                "value": db_count("sender_input_accounts"),
+            },
+            {
+                "label": "Processed Accounts",
+                "value": db_count("sender_processed_accounts"),
+            },
+            # {
+            #     "label": "Failed SMTP",
+            #     "value": db_count("failed_smtp"),
+            # },
+            # {
+            #     "label": "Processing Queue",
+            #     "value": db_count("processing_smtp_emails"),
+            # },
+        ]
+        render_stats_cards(cards)
+    except Exception as e:
+        st.error(f"Error loading Email Sender stats: {e}")
 
     st.divider()
-    st.subheader("Insights")
-    st.write(
-        "Use these bot-specific metrics as a starting point. Add more cards or tables for deeper visibility as you build additional data flows."
-    )
+
+    # Breakdown by Server and Batch
+    st.subheader("Sender Accounts by Server & Batch")
+
+    try:
+        conn = get_db_connection()
+        if conn is not None:
+            cursor = conn.cursor()
+
+            # Query to get breakdown by server_ip and batch
+            cursor.execute("""
+                SELECT
+                    COALESCE(server_ip, 'Unassigned') as server,
+                    COALESCE(batch, 'No Batch') as batch_name,
+                    COUNT(*) as count
+                FROM sender_input_accounts
+                GROUP BY server_ip, batch
+                ORDER BY server_ip, batch
+            """)
+
+            results = cursor.fetchall()
+            cursor.close()
+            conn.close()
+
+            if results:
+                # Group by server for better display
+                server_data = {}
+                for server, batch, count in results:
+                    if server not in server_data:
+                        server_data[server] = []
+                    server_data[server].append((batch, count))
+
+                # Display each server in an expander
+                for server in sorted(server_data.keys()):
+                    with st.expander(
+                        f"**Server: {server}** (Total: {sum(count for _, count in server_data[server])} accounts)"
+                    ):
+                        batch_data = server_data[server]
+
+                        # Create a nice table for batches
+                        if batch_data:
+                            batch_df = pd.DataFrame(
+                                batch_data, columns=["Batch", "Count"]
+                            )
+                            batch_df = batch_df.sort_values("Batch")
+                            st.dataframe(batch_df, width="stretch")
+
+                            # Summary for this server
+                            total_accounts = batch_df["Count"].sum()
+                            unique_batches = len(batch_df)
+                            st.write(
+                                f"**Summary:** {total_accounts} accounts across {unique_batches} batches"
+                            )
+                        else:
+                            st.write("No batch data available")
+            else:
+                st.info("No sender accounts found in the database.")
+        else:
+            st.error("Unable to connect to database")
+    except Exception as e:
+        st.error(f"Error loading server/batch breakdown: {e}")
+
+    st.divider()
+    st.subheader("Quick Insights")
+    st.write("📊 Monitor your email sender distribution across servers and batches")
+    st.write("🔄 Use this data to balance load and optimize performance")
 
 
 def render_setting_input(key, value, setting_key):
@@ -1614,7 +1686,7 @@ def database_management():
     # Connection status
     col1, col2, col3 = st.columns(3)
     with col1:
-        if st.button("Test Connection", use_container_width=True):
+        if st.button("Test Connection", width="stretch"):
             with st.spinner("Testing connection..."):
                 success, message = test_db_connection()
                 if success:
@@ -1646,7 +1718,7 @@ def database_management():
     #         if st.button(
     #             "⚠️ Confirm - Delete & Create",
     #             key="create_db_confirm",
-    #             use_container_width=True,
+    #             width='stretch',
     #         ):
     #             with st.spinner("Creating database..."):
     #                 success, message = create_database()
@@ -1661,7 +1733,7 @@ def database_management():
     # with tab2:
     #     st.subheader("Update Schema to Match db_schema.sql")
 
-    #     if st.button("🔍 Analyze Schema Differences", use_container_width=True):
+    #     if st.button("🔍 Analyze Schema Differences", width='stretch'):
     #         with st.spinner("Analyzing schema..."):
     #             differences, error = get_schema_comparison()
 
@@ -1770,7 +1842,7 @@ def database_management():
     #                     if st.button(
     #                         "✅ Apply Schema Update",
     #                         key="apply_schema",
-    #                         use_container_width=True,
+    #                         width='stretch',
     #                     ):
     #                         with st.spinner("Applying schema changes..."):
     #                             success, message = apply_schema_changes(
@@ -1790,7 +1862,7 @@ def database_management():
             "Creates a timestamped backup in `database/backup_YYYY-MM-DD_HH-MM-SS/backup.sql`"
         )
 
-        if st.button("💾 Create Backup", use_container_width=True):
+        if st.button("💾 Create Backup", width="stretch"):
             with st.spinner("Backing up database..."):
                 success, message = backup_database()
                 if success:
@@ -1847,7 +1919,7 @@ def bot_settings():
     cols = st.columns(len(categories))
     for idx, (cat_key, cat_label) in enumerate(categories.items()):
         with cols[idx]:
-            if st.button(cat_label, use_container_width=True, key=f"btn_{cat_key}"):
+            if st.button(cat_label, width="stretch", key=f"btn_{cat_key}"):
                 st.session_state.selected_category = cat_key
                 st.rerun()
 
@@ -1892,11 +1964,9 @@ def bot_settings():
         # Submit button
         col1, col2, col3 = st.columns([1, 1, 2])
         with col1:
-            submitted = st.form_submit_button(
-                "💾 Save Changes", use_container_width=True
-            )
+            submitted = st.form_submit_button("💾 Save Changes", width="stretch")
         with col2:
-            reset = st.form_submit_button("↻ Reset", use_container_width=True)
+            reset = st.form_submit_button("↻ Reset", width="stretch")
 
         if submitted:
             # Update the settings
@@ -1997,15 +2067,15 @@ def main():
         st.session_state.selected_page = "Bot Settings"
 
     st.sidebar.markdown("### 📄 Pages")
-    if st.sidebar.button("Bot Settings", use_container_width=True):
+    if st.sidebar.button("Bot Settings", width="stretch"):
         st.session_state.selected_page = "Bot Settings"
-    if st.sidebar.button("General Upload", use_container_width=True):
+    if st.sidebar.button("General Upload", width="stretch"):
         st.session_state.selected_page = "General Upload"
-    if st.sidebar.button("Email Sender Upload", use_container_width=True):
+    if st.sidebar.button("Email Sender Upload", width="stretch"):
         st.session_state.selected_page = "Email Sender Upload"
-    if st.sidebar.button("Stats", use_container_width=True):
+    if st.sidebar.button("Stats", width="stretch"):
         st.session_state.selected_page = "Stats"
-    if st.sidebar.button("🗄️ Database Management", use_container_width=True):
+    if st.sidebar.button("🗄️ Database Management", width="stretch"):
         st.session_state.selected_page = "Database Management"
 
     st.sidebar.markdown("---")
@@ -2024,6 +2094,7 @@ def main():
     elif st.session_state.selected_page == "Email Sender Upload":
         email_sender_uploader()
     elif st.session_state.selected_page == "Stats":
+        # pass
         stats_page()
     elif st.session_state.selected_page == "Database Management":
         database_management()
