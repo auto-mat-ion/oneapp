@@ -1436,21 +1436,26 @@ def get_family_link(driver):
                 return False, "NO_LINK"
 
             for link in links:
+                # print(f"Checking link usage for: {link}")
                 conn = get_db_connection()
                 if conn is None:
                     continue
                 cursor = conn.cursor()
                 cursor.execute(
-                    "SELECT times_used FROM link_stats WHERE link = %s", (link,)
+                    "SELECT times_used FROM link_stats WHERE link = %s  LIMIT 1",
+                    (link,),
                 )
                 result = cursor.fetchone()
                 times_used = result[0] if result else 0
                 cursor.close()
                 conn.close()
+                # print(f"Link {link} has been used {times_used} times.")
 
                 if times_used >= 5:
                     successfully_worked_links(link)
                 else:
+                    # print(f"Link {link} has not been used enough times.")
+                    # break
                     return True, link
 
             return False, "NO_LINK"
