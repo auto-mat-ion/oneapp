@@ -1107,8 +1107,158 @@ def email_sender_uploader():
         st.success(message)
         st.write(f"✓ Rows found: {len(df)}")
 
-        # Distribution for sender_input_accounts and sender_recipients
-        if table_name in ["sender_input_accounts", "sender_recipients"]:
+        if table_name == "sender_recipients":
+            st.subheader("Step 6: Assign servers to recipients")
+
+            settings = load_full_settings()
+            server_ips = settings.get("email_sender", {}).get("SERVER_IPS", [])
+
+            # Server management in expander
+            with st.expander("Manage Servers", expanded=False):
+                # Add new server
+                col1, col2 = st.columns([4, 1])
+                with col1:
+                    new_server = st.text_input(
+                        "Add new server IP", key=f"new_server_{table_name}"
+                    )
+                with col2:
+                    if st.button("Add Server", key=f"add_server_{table_name}"):
+                        if new_server and new_server not in server_ips:
+                            server_ips.append(new_server)
+                            settings["email_sender"]["SERVER_IPS"] = server_ips
+                            save_settings(settings)
+                            st.success(f"Added server {new_server}")
+                            st.rerun()
+
+                # Remove server
+                if server_ips:
+                    col3, col4 = st.columns([4, 1])
+                    with col3:
+                        remove_server = st.selectbox(
+                            "Select server to remove",
+                            server_ips,
+                            key=f"remove_server_{table_name}",
+                        )
+                    with col4:
+                        if st.button(
+                            "Remove Server", key=f"remove_server_btn_{table_name}"
+                        ):
+                            if remove_server in server_ips:
+                                server_ips.remove(remove_server)
+                                settings["email_sender"]["SERVER_IPS"] = server_ips
+                                save_settings(settings)
+                                st.success(f"Removed server {remove_server}")
+                                st.rerun()
+
+            if not server_ips:
+                st.error("No servers configured. Please add servers first.")
+                return
+
+            selected_servers = st.multiselect(
+                "Select servers for recipient assignment",
+                server_ips,
+                key=f"selected_servers_multi_{table_name}",
+            )
+
+            if not selected_servers:
+                st.warning("Select at least one server to proceed.")
+                return
+
+            dist_method = st.radio(
+                "Recipient distribution method",
+                ["Equal", "Manual"],
+                key=f"recipient_dist_method_{table_name}",
+                horizontal=True,
+            )
+
+            dist_key = f"recipient_distribution_{table_name}"
+            if dist_key not in st.session_state:
+                st.session_state[dist_key] = []
+            distribution = st.session_state[dist_key]
+
+            if dist_method == "Equal":
+                if st.button(
+                    "Distribute recipients equally",
+                    key=f"equal_recipient_dist_{table_name}",
+                ):
+                    total = len(df)
+                    num_servers = len(selected_servers)
+                    base = total // num_servers
+                    remainder = total % num_servers
+                    distribution = []
+                    for i, server in enumerate(selected_servers):
+                        count = base + (1 if i < remainder else 0)
+                        distribution.append({"server": server, "count": count})
+                    st.session_state[dist_key] = distribution
+                    st.success("✓ Recipients distributed equally across servers.")
+                    st.rerun()
+            else:
+                st.write(
+                    "**Manual distribution**: set how many recipients each selected server should receive."
+                )
+                manual_counts = {}
+                total_assigned = 0
+                for server in selected_servers:
+                    count = st.number_input(
+                        f"Recipients for {server}",
+                        min_value=0,
+                        max_value=len(df),
+                        value=0,
+                        key=f"manual_recipient_count_{server}_{table_name}",
+                    )
+                    manual_counts[server] = count
+                    total_assigned += count
+
+                st.write(f"Total assigned: {total_assigned} / {len(df)}")
+                if total_assigned != len(df):
+                    st.warning(
+                        "Total recipient counts must equal the number of uploaded recipients."
+                    )
+                if st.button(
+                    "Apply manual distribution",
+                    key=f"apply_manual_recipient_dist_{table_name}",
+                ):
+                    if total_assigned != len(df):
+                        st.error(
+                            "Please assign exactly the total number of recipients across selected servers."
+                        )
+                    else:
+                        distribution = [
+                            {"server": server, "count": count}
+                            for server, count in manual_counts.items()
+                            if count > 0
+                        ]
+                        st.session_state[dist_key] = distribution
+                        st.success("✓ Manual recipient distribution saved.")
+                        st.rerun()
+
+            total_assigned = sum(d["count"] for d in distribution)
+            st.write("---")
+            st.write("**Current Recipient Distribution:**")
+            if distribution:
+                for d in distribution:
+                    st.write(f"- {d['server']}: {d['count']} recipients")
+            else:
+                st.info("No distribution configured yet.")
+
+            if total_assigned != len(df):
+                st.info("Please complete recipient distribution before upload.")
+                return
+
+            df["server_ip"] = ""
+            start_idx = 0
+            for d in distribution:
+                server = d["server"]
+                server_count = d["count"]
+                end_idx = start_idx + server_count
+                df.loc[start_idx : end_idx - 1, "server_ip"] = server
+                start_idx = end_idx
+
+            st.success("✓ Recipients assigned to servers.")
+            st.write(
+                f"Assigned {len(df)} recipients across servers: {', '.join([d['server'] for d in distribution])}"
+            )
+        elif table_name == "sender_input_accounts":
             st.subheader("Step 6: Server Distribution & Batching")
 
             settings = load_full_settings()

@@ -40,6 +40,7 @@ COUNTRY = str(_EMAIL_SENDER_SETTINGS.get("COUNTRY", "")).strip()
 APP_SETTINGS = _load_settings().get("app")
 SERVER_IP = APP_SETTINGS.get("SERVER_IP", "0.0.0.0")
 BOT_TYPE = "email_sender"
+BATCH_NUMBER: Optional[str] = None
 
 FIRST_BATCH_BCC = int(_EMAIL_SENDER_SETTINGS.get("FIRST_BATCH_BCC", 9))
 SUBSEQUENT_BATCH_BCC = int(_EMAIL_SENDER_SETTINGS.get("SUBSEQUENT_BATCH_BCC", 329))
@@ -204,6 +205,67 @@ def _get_db_connection():
         return None
 
 
+def available_batches_for_server() -> List[str]:
+    conn = _get_db_connection()
+    if conn is None:
+        return []
+
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT DISTINCT batch FROM sender_input_accounts "
+            "WHERE server_ip = %s AND COALESCE(batch, '') != '' ",
+            (SERVER_IP,),
+        )
+        rows = [
+            str(row[0]).strip()
+            for row in cursor.fetchall()
+            if row and row[0] is not None and str(row[0]).strip()
+        ]
+        cursor.close()
+        return sorted(set(rows))
+    except Exception as exc:
+        log(f"Error: failed to load available sender batches: {exc}")
+        return []
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+def prompt_for_batch_selection() -> Optional[str]:
+    batches = available_batches_for_server()
+    if not batches:
+        print(
+            "No available sender batches found for this server. "
+            "Please configure batch values in sender_input_accounts and sender_recipients."
+        )
+        return None
+
+    print("Available sender batches for this server:")
+    for idx, batch in enumerate(batches, start=1):
+        print(f"  {idx}. {batch}")
+
+    while True:
+        choice = input(
+            f"Select batch by number or name (1-{len(batches)}), or type 'exit' to cancel: "
+        ).strip()
+        if not choice:
+            continue
+        if choice.lower() in {"exit", "quit", "q"}:
+            return None
+        if choice.isdigit():
+            selection = int(choice)
+            if 1 <= selection <= len(batches):
+                return batches[selection - 1]
+            print(f"Invalid number. Enter a value between 1 and {len(batches)}.")
+            continue
+        if choice in batches:
+            return choice
+        print("Invalid batch name. Please enter one of the listed batch values.")
+
+
 def get_token(email: str) -> Optional[str]:
     try:
         with _cache_lock:
@@ -354,10 +416,15 @@ class RecipientManager:
 
         try:
             cursor = conn.cursor()
-            cursor.execute(
-                "SELECT recipient_email FROM sender_recipients WHERE server_ip = %s AND COALESCE(country, '') = %s",
-                (SERVER_IP, COUNTRY),
+            query = (
+                "SELECT recipient_email FROM sender_recipients "
+                "WHERE server_ip = %s AND COALESCE(country, '') = %s"
             )
+            params = [SERVER_IP, COUNTRY]
+            # if BATCH_NUMBER:
+            #     query += " AND batch = %s"
+            #     params.append(BATCH_NUMBER)
+            cursor.execute(query, params)
             rows = cursor.fetchall()
             cursor.close()
 
@@ -433,10 +500,15 @@ class AccountManager:
 
         try:
             cursor = conn.cursor()
-            cursor.execute(
-                "SELECT email, pass, recovery FROM sender_input_accounts WHERE server_ip = %s AND COALESCE(country, '') = %s",
-                (SERVER_IP, COUNTRY),
+            query = (
+                "SELECT email, pass, recovery FROM sender_input_accounts "
+                "WHERE server_ip = %s AND COALESCE(country, '') = %s"
             )
+            params = [SERVER_IP, COUNTRY]
+            if BATCH_NUMBER:
+                query += " AND batch = %s"
+                params.append(BATCH_NUMBER)
+            cursor.execute(query, params)
             rows = cursor.fetchall()
             cursor.close()
 
@@ -500,7 +572,7 @@ class AccountManager:
                     account.get("recovery", ""),
                     COUNTRY,
                     SERVER_IP,
-                    clean,
+                    reason,
                     datetime.now(),
                 ),
             )
@@ -884,8 +956,15 @@ def process_account_wrapper(
 
 
 def main():
+    global BATCH_NUMBER
+    BATCH_NUMBER = prompt_for_batch_selection()
+    if not BATCH_NUMBER:
+        print("No batch selected. Exiting.")
+        return
+
     log("=" * 55)
     log("EMAIL SENDER | Graph API")
+    log(f"Selected batch: {BATCH_NUMBER}")
     log(
         f"Config: warmup={FIRST_BATCH_BCC + 1} big={SUBSEQUENT_BATCHES}x"
         f"{SUBSEQUENT_BATCH_BCC + 1} batch_threads={MAX_CONCURRENT_BATCHES}"
