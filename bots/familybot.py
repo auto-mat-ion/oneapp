@@ -286,6 +286,10 @@ def wait_for_code_by_recovery_mail(recovery_email, timeout=120, poll_interval=1)
     return False, "Message not sent - Timed out"
 
 
+THE_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+utils_dir = os.path.normpath(os.path.join(THE_BASE_DIR, "../utils"))
+
+
 def connect_new_random_old():
     try:
 
@@ -313,7 +317,11 @@ def connect_new_random_old():
         time.sleep(1)
         try:
             random_location = str(
-                random.choice(pd.read_csv("utils/express_countries.csv").id.to_list())
+                random.choice(
+                    pd.read_csv(
+                        os.path.join(utils_dir, "express_countries.csv")
+                    ).id.to_list()
+                )
             )
         except:
             locations = "93,208,156,209,81,162,219,192,193,194,175,238,160,114,63,152,112,80,57,224,223,133,195,174,111,137,196,197,113,198,164,190,107,154,37,58,199,108,101,128,117,88,115,243,232,91,163,45,79,169,181,245,125,131,100,246,240,144,141,247,241,132,20,142,242,244,140,95,271,19,283,288,270,276,265,273,17,302,299,304,292,306,9,294,18,172,278,284,293,275,165,277,286,290,161,272,6,70,74,71,280,291,54,202,305,285,301,26,155,168,281,75,295,289,297,94,282,296,298,204,1,207,2,300,287,166,303,25,279,274,143,126,184,185,21,307,186,85,147,110,118,124,56,78,130,34,150,153,104,8,103,136,7,92,210,102,99,106,33,129,182,157,29,188,122,119,36,12,134,120,187,189,4,16,212,146,96,32,31,86,145,127,121,211,35,22,23,203,11,201,89,53,178,5,15,263,90,87,139,84,239,105,176,248,249,109,264".split(
@@ -382,13 +390,19 @@ def connect_new_random():
         disconnect()
         time.sleep(1)
         try:
-            df = pd.read_csv("utils/express_countries_all.csv")
+            df = pd.read_csv(os.path.join(utils_dir, "express_countries_all.csv"))
             df = get_locations()
 
             # df[df.country.apply(lambda x: x.lower().startswith('indonesia'))]
 
             rand_locations = df[
-                df.country.apply(lambda x: x.lower().startswith(PREFERRED_SMS_COUNTRY))
+                df.country.apply(
+                    lambda x: x.lower().startswith(
+                        "usa"
+                        if PREFERRED_SMS_COUNTRY.lower() == "united states"
+                        else PREFERRED_SMS_COUNTRY.lower()
+                    )
+                )
             ].id.to_list()
 
             random_location = str(random.choice(rand_locations))
@@ -3470,6 +3484,215 @@ def country_is_the_desired(driver):
         return False
 
 
+def language_is_the_desired(driver):
+    try:
+        LANGUAGE_EDIT_BUTTON_ELEMENT = (
+            By.CSS_SELECTOR,
+            'select[id="cultureSelectId"]',
+        )
+
+        language_edit_button = WebDriverWait(driver, wait_time * 2).until(
+            EC.element_to_be_clickable(LANGUAGE_EDIT_BUTTON_ELEMENT)
+        )
+
+        # scroll to view first
+        driver.execute_script(
+            "arguments[0].scrollIntoView({ behavior: 'smooth', block: 'center' });",
+            language_edit_button,
+        )
+        time.sleep(1)
+
+        if (
+            Select(language_edit_button).first_selected_option.text
+            == "English (United States)"
+        ):
+            return True
+        else:
+            return False
+
+    except:
+        return False
+
+
+def select_english_language(driver):
+    try:
+        LANGUAGE_EDIT_BUTTON_ELEMENT = (
+            By.CSS_SELECTOR,
+            'select[id="cultureSelectId"]',
+        )
+
+        SAVE_BUTTON_ELEMENT = (
+            By.CSS_SELECTOR,
+            'div[class="Xut6I"]>button',
+        )
+
+        language_edit_button = WebDriverWait(driver, wait_time / 3).until(
+            EC.element_to_be_clickable(LANGUAGE_EDIT_BUTTON_ELEMENT)
+        )
+
+        # scroll to view first
+        driver.execute_script(
+            "arguments[0].scrollIntoView({ behavior: 'smooth', block: 'center' });",
+            language_edit_button,
+        )
+        time.sleep(1)
+
+        Select(language_edit_button).select_by_value("en-US")
+
+        time.sleep(1)
+
+        save_button_element = WebDriverWait(driver, wait_time / 3).until(
+            EC.element_to_be_clickable(SAVE_BUTTON_ELEMENT)
+        )
+        save_button_element.click()
+
+        return True
+
+    except:
+        return False
+
+
+def change_timezone(driver):
+    try:
+        timezone_url = "https://outlook.live.com/mail/options/calendar/view/timezones"
+        driver.get(timezone_url)
+
+        card_details_dict = get_processing_card()
+
+        TZ_EDIT_BUTTON_ELEMENT = (
+            By.CSS_SELECTOR,
+            'input[placeholder="Search for a city"]',
+        )
+
+        UPDATE_BUTTON_ELEMENT = (
+            By.CSS_SELECTOR,
+            'div[class*="fui-MessageBarActions "] > button',
+        )
+
+        OPTIONS_BUTTON_ELEMENT = (
+            By.CSS_SELECTOR,
+            "button[role='option']",
+        )
+
+        SAVE_BUTTON_ELEMENT = (
+            By.CSS_SELECTOR,
+            'div[class="Xut6I"]>button',
+        )
+
+        tz_edit_button = WebDriverWait(driver, wait_time * 2).until(
+            EC.element_to_be_clickable(TZ_EDIT_BUTTON_ELEMENT)
+        )
+
+        tz_edit_button.clear()
+
+        try:
+            city_state = (
+                card_details_dict.get("city") + " " + card_details_dict.get("state")
+            )
+        except:
+            city_state = "Washington, District of Columbia"
+
+        tz_edit_button.send_keys(city_state)
+        time.sleep(3)
+        tz_options = WebDriverWait(driver, wait_time / 2).until(
+            EC.presence_of_all_elements_located(OPTIONS_BUTTON_ELEMENT)
+        )
+
+        if len(tz_options) > 0:
+            tz_edit_button.send_keys(Keys.ENTER)
+        else:
+            city_state = "Washington, District of Columbia"
+
+            tz_edit_button.send_keys(city_state)
+            time.sleep(3)
+            tz_edit_button.send_keys(Keys.ENTER)
+
+        time.sleep(1)
+
+        try:
+            save_button = WebDriverWait(driver, wait_time / 2).until(
+                EC.element_to_be_clickable(SAVE_BUTTON_ELEMENT)
+            )
+
+            # scroll to view first
+            driver.execute_script(
+                "arguments[0].scrollIntoView({ behavior: 'smooth', block: 'center' });",
+                save_button,
+            )
+            time.sleep(1)
+            save_button.click()
+        except:
+            pass
+
+        time.sleep(1)
+
+        try:
+            update_button = WebDriverWait(driver, wait_time / 2).until(
+                EC.element_to_be_clickable(UPDATE_BUTTON_ELEMENT)
+            )
+
+            # scroll to view first
+            driver.execute_script(
+                "arguments[0].scrollIntoView({ behavior: 'smooth', block: 'center' });",
+                update_button,
+            )
+            time.sleep(1)
+            update_button.click()
+        except:
+            pass
+
+        return True
+
+    except:
+        return False
+
+
+def click_accept_preferences_button(driver):
+    try:
+        retries = 0
+        while retries < 10:
+            try:
+                LANGUAGE_EDIT_BUTTON_ELEMENT = (
+                    By.CSS_SELECTOR,
+                    'div[class="X6UT9"] > button:nth-child(3)',
+                )
+
+                NO_THANKS_BUTTON_ELEMENT = (
+                    By.CSS_SELECTOR,
+                    'button[class="fui-Button r1f29ykk"]',
+                )
+
+                try:
+                    language_edit_button = WebDriverWait(driver, 1).until(
+                        EC.element_to_be_clickable(LANGUAGE_EDIT_BUTTON_ELEMENT)
+                    )
+                except:
+                    language_edit_button = WebDriverWait(driver, 1).until(
+                        EC.element_to_be_clickable(NO_THANKS_BUTTON_ELEMENT)
+                    )
+
+                # scroll to view first
+                driver.execute_script(
+                    "arguments[0].scrollIntoView({ behavior: 'smooth', block: 'center' });",
+                    language_edit_button,
+                )
+                time.sleep(1)
+
+                language_edit_button.click()
+
+                return True
+
+            except:
+                pass
+
+            time.sleep(1)
+            retries += 1
+
+        return False
+    except:
+        return False
+
+
 def login_on_country_page(driver, new_profile_data):
     try:
         email = new_profile_data.get("email")
@@ -3582,6 +3805,47 @@ def change_account_country(driver, new_profile_data):
                 retries += 1
                 print(
                     f"{email} : Exception error changing country: {E}. Retrying... ({retries}/{num_of_retries})"
+                )
+
+        return False
+    except:
+        return False
+
+
+def change_account_language(driver, new_profile_data):
+    try:
+        retries = 0
+        num_of_retries = 5
+        while retries < num_of_retries:
+            try:
+                email = new_profile_data.get("email")
+                password = new_profile_data.get("pass")
+                bring_to_front(driver)
+                language_url = (
+                    "https://outlook.live.com/mail/options/general/timeAndLanguage"
+                )
+
+                driver.get(language_url)
+
+                # login_on_country_page(driver, new_profile_data)
+
+                click_accept_preferences_button(driver)
+
+                if language_is_the_desired(driver):
+                    change_timezone(driver)
+                    return True
+
+                select_english_language(driver)
+                change_timezone(driver)
+                driver.get(language_url)
+
+                if language_is_the_desired(driver):
+                    return True
+
+            except Exception as E:
+                retries += 1
+                print(
+                    f"{email} : Exception error changing language: {E}. Retrying... ({retries}/{num_of_retries})"
                 )
 
         return False
@@ -3810,21 +4074,30 @@ def get_creditcard_details():
     )
     cursor = conn.cursor(dictionary=True)
 
-    # Get all card details
-    cursor.execute("SELECT * FROM familybot_card_details")
+    # Get all card details for preferred country
+    cursor.execute(
+        "SELECT * FROM familybot_card_details WHERE LOWER(country) = %s",
+        (PREFERRED_SMS_COUNTRY,),
+    )
     cards = cursor.fetchall()
 
-    # Get first names
-    cursor.execute("SELECT firstnames FROM familybot_first_names")
+    # Get first names for preferred country
+    cursor.execute(
+        "SELECT firstnames FROM familybot_first_names WHERE LOWER(country) = %s",
+        (PREFERRED_SMS_COUNTRY,),
+    )
     first_names = [row["firstnames"] for row in cursor.fetchall()]
 
-    # Get surnames
-    cursor.execute("SELECT surnames FROM familybot_surnames")
+    # Get surnames for preferred country
+    cursor.execute(
+        "SELECT surnames FROM familybot_surnames WHERE LOWER(country) = %s",
+        (PREFERRED_SMS_COUNTRY,),
+    )
     surnames = [row["surnames"] for row in cursor.fetchall()]
 
     # Get fake details for preferred country
     cursor.execute(
-        "SELECT * FROM familybot_fake_details WHERE country = %s",
+        "SELECT * FROM familybot_fake_details WHERE LOWER(country) = %s",
         (PREFERRED_SMS_COUNTRY,),
     )
     locations = cursor.fetchall()
@@ -3846,6 +4119,7 @@ def get_creditcard_details():
                 "cvv": card["cvv"],
                 "address_line1": random_location.get("address_line1", ""),
                 "city": random_location.get("city", ""),
+                "state": random_location.get("state", ""),
                 "postal_code": random_location.get("postal_code", ""),
             }
         )
@@ -3862,8 +4136,16 @@ def log_card_usage(card_details):
     expiry = f"{card_details.get('expiry_month')}/{card_details.get('expiry_year')[2:]}"  # MM/YY
     cvv = card_details.get("cvv")
     cursor.execute(
-        "INSERT INTO familybot_card_usage_log (server_ip, bot_type, use_datetime, card_num, `exp_month/year`, cvv) VALUES (%s, %s, %s, %s, %s, %s)",
-        (SERVER_IP, BOT_TYPE, timestamp, card_number, expiry, cvv),
+        "INSERT INTO familybot_card_usage_log (server_ip, bot_type, use_datetime, card_num, `exp_month/year`, cvv, country) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+        (
+            SERVER_IP,
+            BOT_TYPE,
+            timestamp,
+            card_number,
+            expiry,
+            cvv,
+            PREFERRED_SMS_COUNTRY,
+        ),
     )
     conn.commit()
     conn.close()
@@ -3971,8 +4253,8 @@ def mark_card_failed(card_details):
 
         # Get logs from DB
         cursor.execute(
-            "SELECT use_datetime FROM familybot_card_usage_log WHERE card_num = %s AND `exp_month/year` = %s AND cvv = %s ORDER BY use_datetime",
-            (card_number, expiry, cvv),
+            "SELECT use_datetime FROM familybot_card_usage_log WHERE LOWER(country) = %s AND card_num = %s AND `exp_month/year` = %s AND cvv = %s ORDER BY use_datetime",
+            (PREFERRED_SMS_COUNTRY, card_number, expiry, cvv),
         )
         logs = cursor.fetchall()
         timestamps = [row["use_datetime"] for row in logs]
@@ -4014,8 +4296,17 @@ def mark_card_failed(card_details):
     expiry = f"{card_details.get('expiry_month')}/{card_details.get('expiry_year')[2:]}"
     cvv = card_details.get("cvv")
     cursor.execute(
-        "INSERT INTO familybot_failed_cards (server_ip, bot_type,date_time, card_number, expiry_month_year, cvv, reason_for_fail) VALUES (%s, %s,%s, %s, %s, %s, %s)",
-        (SERVER_IP, BOT_TYPE, datetime.now(), card_number, expiry, cvv, failure_reason),
+        "INSERT INTO familybot_failed_cards (server_ip, bot_type,date_time, card_number, expiry_month_year, cvv, country, reason_for_fail) VALUES (%s, %s,%s, %s, %s, %s, %s, %s)",
+        (
+            SERVER_IP,
+            BOT_TYPE,
+            datetime.now(),
+            card_number,
+            expiry,
+            cvv,
+            PREFERRED_SMS_COUNTRY,
+            failure_reason,
+        ),
     )
 
     # Remove from processing_card_details
@@ -4128,9 +4419,10 @@ def get_next_card():
 
     all_cards = get_creditcard_details()
 
-    # Load usage log from DB
+    # Load usage log from DB for preferred country only
     cursor.execute(
-        "SELECT card_num, `exp_month/year`, cvv, use_datetime FROM familybot_card_usage_log"
+        "SELECT card_num, `exp_month/year`, cvv, use_datetime FROM familybot_card_usage_log WHERE LOWER(country) = %s",
+        (PREFERRED_SMS_COUNTRY,),
     )
     usage_rows = cursor.fetchall()
     usage = {}
@@ -4175,7 +4467,7 @@ def get_next_card():
     for card in fully_used:
         expiry = f"{card['expiry_month']}/{card['expiry_year'][2:]}"
         cursor.execute(
-            "INSERT INTO familybot_fully_used_cards (server_ip, bot_type,date_time, card_number, expiry_month_year, cvv) VALUES (%s, %s,%s, %s, %s, %s)",
+            "INSERT INTO familybot_fully_used_cards (server_ip, bot_type,date_time, card_number, expiry_month_year, cvv, country) VALUES (%s, %s,%s, %s, %s, %s, %s)",
             (
                 SERVER_IP,
                 BOT_TYPE,
@@ -4183,6 +4475,7 @@ def get_next_card():
                 card["card_number"],
                 expiry,
                 card["cvv"],
+                card.get("country", PREFERRED_SMS_COUNTRY),
             ),
         )
         cursor.execute(
@@ -4195,7 +4488,7 @@ def get_next_card():
         card = available_cards[0]
         expiry = f"{card['expiry_month']}/{card['expiry_year'][2:]}"
         cursor.execute(
-            "INSERT INTO processing_card_details (server_ip, bot_type,date_time,name_on_card, card_number, expiry_month_year, cvv, address_line1, city, postal_code) VALUES (%s, %s, %s, %s,%s, %s,%s, %s, %s, %s)",
+            "INSERT INTO processing_card_details (server_ip, bot_type,date_time,name_on_card, card_number, expiry_month_year, cvv, address_line1, city, state, postal_code) VALUES (%s, %s, %s,%s, %s,%s, %s, %s, %s, %s, %s)",
             (
                 SERVER_IP,
                 BOT_TYPE,
@@ -4206,6 +4499,7 @@ def get_next_card():
                 card["cvv"],
                 card["address_line1"],
                 card["city"],
+                card["state"],
                 card["postal_code"],
             ),
         )
@@ -4341,7 +4635,7 @@ def store_extracted_link(new_profile_data, link):
             )
             cursor = conn.cursor()
             cursor.execute(
-                "INSERT INTO familybot_extracted_family_links (server_ip, bot_type, date_time, email, pass, recovery, link) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                "INSERT INTO familybot_extracted_family_links (server_ip, bot_type, date_time, email, pass, recovery, link, country) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
                 (
                     SERVER_IP,
                     BOT_TYPE,
@@ -4350,6 +4644,7 @@ def store_extracted_link(new_profile_data, link):
                     password,
                     recovery_email,
                     link,
+                    PREFERRED_SMS_COUNTRY,
                 ),
             )
             conn.commit()
@@ -4364,6 +4659,489 @@ def store_extracted_link(new_profile_data, link):
 
 
 def get_microsoft_premium(driver, new_profile_data):
+    try:
+        email_address = new_profile_data.get("email")
+        # password = new_profile_data.get("pass")
+        # recovery_email = new_profile_data.get("recovery_email")
+
+        current_status = "getting card details"
+        try:
+            card_details_dict = get_processing_card()
+            # get_next_card()
+            if not card_details_dict:
+                print(
+                    f"{email_address} : No available cards to use. Check logs/card_usage.log and output_data/fully_used_cards.txt for more info."
+                )
+                return False, "No available cards to use"
+        except Exception as E:
+            print(f"{email_address} : Error getting next card: {E}")
+            return False, current_status
+
+        driver.get("https://account.microsoft.com/services/")
+        time.sleep(1)
+
+        current_status = "clicking premium element"
+        PREMIUM_ELEMENT = (
+            By.CSS_SELECTOR,
+            'button[data-bi-id="Office_Upsells_Try"]',
+        )
+
+        premium_element = WebDriverWait(driver, wait_time).until(
+            EC.visibility_of_element_located(PREMIUM_ELEMENT)
+        )
+        premium_element.click()
+
+        time.sleep(1)
+        current_status = "selecting premium subscription"
+        PREMIUM_SUBSCRIPTIONS_TYPES_ELEMENTS = (
+            By.CSS_SELECTOR,
+            'div[class^="buttonsWrapper"] > button',
+        )
+        premium_subscriptions_element = WebDriverWait(driver, wait_time).until(
+            EC.visibility_of_all_elements_located(PREMIUM_SUBSCRIPTIONS_TYPES_ELEMENTS)
+        )[1]
+        premium_subscriptions_element.click()
+        current_status = "clicking signin on adding card"
+        click_signin_on_adding_card(driver)
+
+        # click checkbox
+        current_status = "clicking checkbox"
+        time.sleep(1)
+        CHECKBOX_ELEMENT = (
+            By.CSS_SELECTOR,
+            'i[data-icon-name="CheckMark"]',
+        )
+        checkbox_element = WebDriverWait(driver, wait_time).until(
+            EC.presence_of_element_located(CHECKBOX_ELEMENT)
+        )
+        time.sleep(2)
+        checkbox_element.click()
+
+        time.sleep(1)
+        # click next btn
+        current_status = "clicking next button after checkbox"
+        NEXT_BTN_ELEMENT = (
+            By.CSS_SELECTOR,
+            'button[aria-label="Next"]',
+        )
+        next_btn_element = WebDriverWait(driver, wait_time).until(
+            EC.element_to_be_clickable(NEXT_BTN_ELEMENT)
+        )
+        next_btn_element.click()
+        time.sleep(1)
+
+        # click card btn
+        current_status = "clicking card button"
+
+        CARD_BTN_ELEMENT = (
+            By.CSS_SELECTOR,
+            'button[aria-label="Debit card or credit card"]',
+        )
+        try:
+            card_btn_element = WebDriverWait(driver, wait_time).until(
+                EC.element_to_be_clickable(CARD_BTN_ELEMENT)
+            )
+        except:
+            CARD_BTN_ELEMENT = (
+                By.CSS_SELECTOR,
+                'button[aria-label="Credit card or debit card"]',
+            )
+            card_btn_element = WebDriverWait(driver, wait_time).until(
+                EC.element_to_be_clickable(CARD_BTN_ELEMENT)
+            )
+
+        card_btn_element.click()
+        time.sleep(1)
+
+        # INPUT ELEMENTS FOR CARD DETAILS
+        current_status = "entering card details"
+        CREDIT_CARD_NUMBER_ELEMENT = (
+            By.CSS_SELECTOR,
+            'input[id="accountToken"]',
+        )
+        NAME_ON_CARD_ELEMENT = (
+            By.CSS_SELECTOR,
+            'input[id="accountHolderName"]',
+        )
+
+        EXPIRY_MONTH_ELEMENT = (
+            By.CSS_SELECTOR,
+            'span[id="input_expiryMonth-option"]',
+        )
+
+        EXPIRY_YEAR_ELEMENT = (
+            By.CSS_SELECTOR,
+            'span[id="input_expiryYear-option"]',
+        )
+        CVV_ELEMENT = (
+            By.CSS_SELECTOR,
+            'input[id="cvvToken"]',
+        )
+
+        ADDRESS_LINE1_ELEMENT = (
+            By.CSS_SELECTOR,
+            'input[id="address_line1"]',
+        )
+        CITY_ELEMENT = (
+            By.CSS_SELECTOR,
+            'input[id="city"]',
+        )
+        STATE_CLICK_ELEMENT = (
+            By.CSS_SELECTOR,
+            'div[id="input_region"]',
+        )
+
+        STATE_OPTIONS_ELEMENT = (
+            By.CSS_SELECTOR,
+            'button[id*="input_region-list"]',
+        )
+
+        POSTAL_CODE_ELEMENT = (
+            By.CSS_SELECTOR,
+            'input[id="postal_code"]',
+        )
+
+        SAVE_BUTTON_ELEMENT = (
+            By.CSS_SELECTOR,
+            'button[aria-label="Save"]',
+        )
+
+        SCROLL_DOWN_BUTTON_ELEMENT = (
+            By.CSS_SELECTOR,
+            'button[aria-label="Scroll Down"]',
+        )
+
+        START_TRIAL_BUTTON_ELEMENT = (
+            By.CSS_SELECTOR,
+            'button[aria-label="Start trial, pay later"]',
+        )
+        # ENTERING CARD DETAILS
+        current_status = "entering card number"
+        card_number_element = WebDriverWait(driver, wait_time).until(
+            EC.visibility_of_element_located(CREDIT_CARD_NUMBER_ELEMENT)
+        )
+        card_number_element.clear()
+        time.sleep(0.5)
+        card_number_element.send_keys(
+            card_details_dict.get("card_number").replace(" ", "")
+        )
+        print(
+            f"{email_address} : Entered card number: {card_details_dict.get('card_number')}"
+        )
+
+        time.sleep(0.5)
+        current_status = "entering name on card"
+        name_on_card_element = WebDriverWait(driver, wait_time).until(
+            EC.visibility_of_element_located(NAME_ON_CARD_ELEMENT)
+        )
+        name_on_card_element.clear()
+        time.sleep(1)
+        name_on_card_element.send_keys(card_details_dict.get("name_on_card"))
+        print(
+            f"{email_address} : Entered name on card: {card_details_dict.get('name_on_card')}"
+        )
+
+        time.sleep(1)
+
+        # use keyboard to press tab and enter
+
+        print(
+            f"{email_address} : Selecting expiry month: {card_details_dict.get('expiry_month')}"
+        )
+
+        # expiry_month_element = WebDriverWait(driver, wait_time).until(
+        #     EC.visibility_of_element_located(EXPIRY_MONTH_ELEMENT)
+        # )
+        # # scroll into view
+        # driver.execute_script(
+        #     "arguments[0].scrollIntoView({ behavior: 'smooth', block: 'center' });",
+        #     expiry_month_element,
+        # )
+        # time.sleep(0.5)
+        # expiry_month_element.click()
+        action = ActionChains(driver)
+        action.send_keys(Keys.TAB).perform()
+        action.send_keys(Keys.ENTER).perform()
+        time.sleep(1.3)
+
+        # button[data-index=f"{int(card_details_dict.get('expiry_month'))-1}"] element
+        current_status = "selecting expiry month"
+        print(f"{email_address} : Selecting expiry month option")
+        expiry_month_option_element = WebDriverWait(driver, wait_time).until(
+            EC.element_to_be_clickable(
+                (
+                    By.CSS_SELECTOR,
+                    f"""button[data-index="{int(card_details_dict.get("expiry_month")) - 1}"]""",
+                )
+            )
+        )
+        expiry_month_option_element.click()
+        print(
+            f"{email_address} : Selected expiry month: {card_details_dict.get('expiry_month')}"
+        )
+
+        time.sleep(1)
+        current_status = "selecting expiry year"
+        # expiry_year_element = WebDriverWait(driver, wait_time).until(
+        #     EC.visibility_of_element_located(EXPIRY_YEAR_ELEMENT)
+        # )
+        # # scroll into view
+        # driver.execute_script(
+        #     "arguments[0].scrollIntoView({ behavior: 'smooth', block: 'center' });",
+        #     expiry_year_element,
+        # )
+        # time.sleep(0.5)
+        # expiry_year_element.click()
+        action = ActionChains(driver)
+        action.send_keys(Keys.TAB).perform()
+        action.send_keys(Keys.ENTER).perform()
+        time.sleep(1)
+        expiry_year_option_element = WebDriverWait(driver, wait_time).until(
+            EC.element_to_be_clickable(
+                (
+                    By.CSS_SELECTOR,
+                    f"""button[data-index="{int(card_details_dict.get("expiry_year")) - 2026}"]""",
+                )
+            )
+        )
+        expiry_year_option_element.click()
+        print(
+            f"{email_address} : Selected expiry year: {card_details_dict.get('expiry_year')}"
+        )
+        time.sleep(0.5)
+        current_status = "entering cvv"
+        cvv_element = WebDriverWait(driver, wait_time).until(
+            EC.visibility_of_element_located(CVV_ELEMENT)
+        )
+        cvv_element.clear()
+        time.sleep(0.5)
+        cvv_element.send_keys(card_details_dict.get("cvv"))
+        print(f"{email_address} : Entered CVV: {card_details_dict.get('cvv')}")
+        time.sleep(1)
+
+        current_status = "entering address line 1"
+        address_line1_element = WebDriverWait(driver, wait_time).until(
+            EC.visibility_of_element_located(ADDRESS_LINE1_ELEMENT)
+        )
+        address_line1_element.clear()
+        time.sleep(0.5)
+        address_line1_element.send_keys(card_details_dict.get("address_line1"))
+        print(
+            f"{email_address} : Entered address line 1: {card_details_dict.get('address_line1')}"
+        )
+        time.sleep(0.5)
+        current_status = "entering city"
+
+        city_element = WebDriverWait(driver, wait_time).until(
+            EC.visibility_of_element_located(CITY_ELEMENT)
+        )
+        city_element.clear()
+        time.sleep(0.5)
+        city_element.send_keys(card_details_dict.get("city"))
+        print(f"{email_address} : Entered city: {card_details_dict.get('city')}")
+        time.sleep(0.5)
+
+        if PREFERRED_SMS_COUNTRY.lower() == "united states":
+            current_status = "entering state"
+
+            state_element = WebDriverWait(driver, wait_time).until(
+                EC.visibility_of_element_located(STATE_CLICK_ELEMENT)
+            )
+
+            time.sleep(3)
+            state_element.click()
+            time.sleep(0.5)
+
+            state_options_element = WebDriverWait(driver, wait_time).until(
+                EC.visibility_of_all_elements_located(STATE_OPTIONS_ELEMENT)
+            )
+
+            city_element = [
+                i
+                for i in state_options_element
+                if i.text.lower() == card_details_dict.get("state", "").lower()
+            ][0]
+
+            # scroll into view
+            driver.execute_script(
+                "arguments[0].scrollIntoView({ behavior: 'smooth', block: 'center' });",
+                city_element,
+            )
+            time.sleep(1)
+            city_element.click()
+
+            print(f"{email_address} : Entered state: {card_details_dict.get('state')}")
+            time.sleep(0.5)
+
+        current_status = "entering postal code"
+        postal_code_element = WebDriverWait(driver, wait_time).until(
+            EC.visibility_of_element_located(POSTAL_CODE_ELEMENT)
+        )
+        postal_code_element.clear()
+        time.sleep(0.5)
+        postal_code_element.send_keys(card_details_dict.get("postal_code"))
+        print(
+            f"{email_address} : Entered postal code: {card_details_dict.get('postal_code')}"
+        )
+        time.sleep(0.5)
+        current_status = "clicking save button"
+        save_button_element = WebDriverWait(driver, wait_time).until(
+            EC.element_to_be_clickable(SAVE_BUTTON_ELEMENT)
+        )
+        save_button_element.click()
+        print(f"{email_address} : Clicked save button")
+
+        current_status = "checking if card is declined"
+        if credit_card_is_declined(driver):
+            print(f"{email_address} : Card was declined")
+            # log_card_usage(card_details_dict)
+            mark_card_failed(card_details_dict)
+
+            return False, "Card was declined"
+        else:
+            print(f"{email_address} : Card accepted.")
+
+        current_status = "checking if card is added to payments"
+        if affirm_card_is_added(driver, card_details_dict.get("name_on_card")):
+            print(f"{email_address} : Affirm Card added to payments successfully.")
+        else:
+            print(f"{email_address} : Card not added to payments.")
+            return False, "Card not added to payments"
+
+        time.sleep(2)
+        try:
+            current_status = "clicking scroll down button"
+            scroll_button_element = WebDriverWait(driver, wait_time).until(
+                EC.element_to_be_clickable(SCROLL_DOWN_BUTTON_ELEMENT)
+            )
+            scroll_button_element.click()
+            print(f"{email_address} : Clicked scroll down button")
+        except:
+            pass
+
+        current_status = "clicking start trial button"
+        try:
+            time.sleep(4)
+            print(f"{email_address} : Clicking start trial button")
+
+            start_trial_button_element = WebDriverWait(driver, wait_time).until(
+                EC.element_to_be_clickable(START_TRIAL_BUTTON_ELEMENT)
+            )
+            time.sleep(0.5)
+            start_trial_button_element = WebDriverWait(driver, wait_time).until(
+                EC.element_to_be_clickable(START_TRIAL_BUTTON_ELEMENT)
+            )
+            start_trial_button_element.click()
+            print(f"{email_address} : Clicked start trial button")
+        except:
+            pass
+
+        current_status = "checking if card is authorized"
+        print(f"{email_address} : Waiting 5 minutes for card authorization...")
+        if not affirm_congrats_card_added(driver):
+            print(f"{email_address} : Card not authorized")
+            return False, "card not authorized"
+        else:
+            log_card_usage(card_details_dict)
+
+        time.sleep(2)
+
+        try:
+            current_status = "clicking start sharing button"
+            START_SHARING_ELEMENT = (
+                By.CSS_SELECTOR,
+                'button[type="button"]',
+            )
+            name_on_card_elements = WebDriverWait(driver, wait_time).until(
+                EC.presence_of_all_elements_located(START_SHARING_ELEMENT)
+            )
+
+            [i for i in name_on_card_elements if i.text.lower() == "start sharing"][
+                0
+            ].click()
+            print(f"{email_address} : Clicked start sharing button")
+        except:
+            print(f"{email_address} : Start sharing button not found")
+            return False, "error clicking start sharing button"
+
+        time.sleep(2)
+        try:
+            current_status = "clicking share button"
+            SHARE_ELEMENT = (
+                By.CSS_SELECTOR,
+                'button[aria-label="Share subscription"]',
+            )
+
+            COPY_BUTTON_ELEMENT = (
+                By.CSS_SELECTOR,
+                'button[aria-label="Copy link"]',
+            )
+
+            LINK_INPUT_ELEMENT = (
+                By.CSS_SELECTOR,
+                'input[aria-label="Sharing link"]',
+            )
+
+            share_btn_element = WebDriverWait(driver, wait_time).until(
+                EC.visibility_of_element_located(SHARE_ELEMENT)
+            )
+            # scroll into center view
+            driver.execute_script(
+                "arguments[0].scrollIntoView({block: 'center'});", share_btn_element
+            )
+            time.sleep(1)
+
+            share_btn_element.click()
+            print(f"{email_address} : Clicked share button")
+            time.sleep(2)
+            current_status = "clicking copy link button"
+            copy_btn_element = WebDriverWait(driver, wait_time).until(
+                EC.visibility_of_element_located(COPY_BUTTON_ELEMENT)
+            )
+            copy_btn_element.click()
+            print(f"{email_address} : Clicked copy link button")
+
+            time.sleep(5)
+            current_status = "retrieving sharing link"
+            link_input_element = WebDriverWait(driver, wait_time + 40).until(
+                EC.visibility_of_element_located(LINK_INPUT_ELEMENT)
+            )
+            link = link_input_element.get_attribute("value")
+            print(f"{email_address} : Retrieved sharing link: {link}")
+            store_extracted_link(new_profile_data, link)
+            time.sleep(4)
+
+            print(f"{email_address} : Stored extracted link successfully")
+            return True, "Success"
+        except Exception as E:
+            print(f"{email_address} : Error copying sharing link: {E}")
+            return False, "Error copying sharing link"
+
+    except Exception as E:
+        print(
+            f"{email_address} : Exception error occurred at step: {current_status}:\nError: {E} "
+        )
+        # create screenshot directory if not exists
+        try:
+            os.makedirs("utils/screenshots", exist_ok=True)
+            driver.save_screenshot(
+                f"utils/screenshots/{email_address.split('@')[0]}_{current_status}_error.png".replace(
+                    " ", "_"
+                )
+                .replace(":", "")
+                .replace("@", "")
+            )
+        except:
+            pass
+        return False, f"Error occurred: {E} at step: {current_status}"
+    finally:
+        try:
+            return_card_to_familybot_card_details(card_details_dict)
+        except Exception as E:
+            print(f"Error returning card to familybot_card_details: {E}")
+
+
+def get_microsoft_premium_old_(driver, new_profile_data):
     try:
         email_address = new_profile_data.get("email")
         # password = new_profile_data.get("pass")
@@ -4866,7 +5644,9 @@ def get_processing_card():
             "cvv": str(row["cvv"]),
             "address_line1": row.get("address_line1"),
             "city": row.get("city"),
+            "state": row.get("state"),
             "postal_code": row.get("postal_code"),
+            "country": row.get("country", PREFERRED_SMS_COUNTRY),
         }
     return None
 
@@ -4878,8 +5658,13 @@ def return_card_to_familybot_card_details(card_details):
     cursor = conn.cursor()
     expiry = f"{card_details['expiry_month']}/{card_details['expiry_year'][2:]}"
     cursor.execute(
-        "INSERT INTO familybot_card_details (card_number, expiry_month_year, cvv) VALUES (%s, %s, %s)",
-        (card_details["card_number"], expiry, card_details["cvv"]),
+        "INSERT INTO familybot_card_details (card_number, expiry_month_year, cvv, country) VALUES (%s, %s, %s, %s)",
+        (
+            card_details["card_number"],
+            expiry,
+            card_details["cvv"],
+            card_details.get("country", PREFERRED_SMS_COUNTRY),
+        ),
     )
     cursor.execute(
         "DELETE FROM processing_card_details WHERE card_number = %s AND expiry_month_year = %s AND cvv = %s",
@@ -5234,6 +6019,13 @@ def initialize_new_profile(new_profile_data):
         else:
             print(f"{email_address}: Country changed successfully")
 
+        print(f"{email_address}: Changing account language to english")
+        status = change_account_language(driver, new_profile_data)
+        if not status:
+            print(f"{email_address}: Error changing account language to english")
+        else:
+            print(f"{email_address}: Account language changed to english successfully")
+
         # return driver
 
         status, error = get_microsoft_premium(driver, new_profile_data)
@@ -5271,8 +6063,8 @@ def initialize_new_profile(new_profile_data):
                 email_address, "SUCCESS", f"SUCESSFULLY GOT MICROSOFT PREMIUM"
             )
 
-        return True, "Success"
-        # return driver
+        # return True, "Success"
+        return driver
 
     except Exception as E:
         try:
@@ -5308,3 +6100,12 @@ def run_familybot():
         else:
             print("No input emails in database...")
             break
+
+
+# test = "ghost.proof@outlook.com,I5erp8a361u7"
+# new_profile_data = {"email": test.split(",")[0], "pass": test.split(",")[1]}
+
+# driver = initialize_new_profile(new_profile_data)
+
+
+# driver.refresh()
