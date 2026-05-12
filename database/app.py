@@ -1588,10 +1588,10 @@ def email_sender_uploader():
                     batch_start = batch_end
 
                 start_idx = end_idx
-        else:
-            # For other tables without distribution
-            df["server_ip"] = ""
-            df["batch"] = ""
+        # else:
+        #     # For other tables without distribution
+        #     df["server_ip"] = ""
+        #     df["batch"] = ""
 
         # Final upload step
         st.subheader("Step 7: Upload to Database")
