@@ -1080,9 +1080,13 @@ def main():
     log(f"        account_threads={MAX_CONCURRENT_ACCOUNTS}")
     log("=" * 55)
 
+    log("Loading senders. Please wait...")
     accounts = AccountManager()
-    recipients = RecipientManager()
+    log("Loading content. Please wait...")
     content = ContentManager()
+    log("Loading recipients. Please wait...")
+    recipients = RecipientManager()
+
     load_cache()
 
     if not accounts.accounts:
