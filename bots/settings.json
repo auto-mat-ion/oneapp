@@ -4,28 +4,28 @@
     "DB_USER": "root",
     "DB_PASSWORD": "root101.",
     "DB_NAME": "oneapp",
-    "SERVER_IP": "test ip"
+    "SERVER_IP": "79.137.75.57"
   },
   "email_sender": {
-    "COUNTRY": "United States",
+    "COUNTRY": "Netherlands",
     "FIRST_BATCH_BCC": 9,
     "SUBSEQUENT_BATCH_BCC": 329,
     "SUBSEQUENT_BATCHES": 3,
-    "MAX_CONCURRENT_BATCHES": 4,
-    "MAX_CONCURRENT_ACCOUNTS": 10,
+    "MAX_CONCURRENT_BATCHES": 1,
+    "MAX_CONCURRENT_ACCOUNTS": 4,
     "BATCH_DELAY_MIN": 1.0,
-    "BATCH_DELAY_MAX": 3.0,
-    "STAGGER_MIN": 0.3,
+    "BATCH_DELAY_MAX": 1.0,
+    "STAGGER_MIN": 1.0,
     "STAGGER_MAX": 1.0,
     "SAVE_TO_SENT": false,
     "CLIENT_ID": "e62beeb7-8a9b-4637-b57f-f8601c0d13f5",
     "SERVER_IPS": [
       "51.161.34.220",
       "51.77.195.218",
-      "51.91.97.55",
-      "51.255.193.28",
-      "162.19.229.213",
-      "51.178.51.6"
+      "79.137.75.57",
+      "51.91.56.36",
+      "51.91.59.107",
+      "193.70.86.209"
     ]
   },
   "familybot": {
@@ -41,14 +41,14 @@
     "OUTLOOK_URL": "https://outlook.live.com/",
     "BITLY_SIGNUP_PAGE": "https://bitly.com/a/sign_up",
     "MAX_SIGNIN_THREADS": 1,
-    "PREFERRED_SMS_COUNTRY": "sweden",
+    "PREFERRED_SMS_COUNTRY": "Sweden",
     "EMAIL_WAIT_TIME": 120,
     "CATCHA_WAIT_TIME": 300,
     "SAVE_COOKIES": false,
     "EXPRESSVPN_CMD": "C:\\Program Files (x86)\\ExpressVPN\\services\\ExpressVPN.CLI.exe",
     "CLIENT_ID": "e62beeb7-8a9b-4637-b57f-f8601c0d13f5",
     "CACHE_PATH": "../cache_folder/msal_cache.bin",
-    "CHANGE_COUNTRY": "sweden",
+    "CHANGE_COUNTRY": "Sweden",
     "CHANGE_COUNTRY_TEMP": "Australia",
     "CREDIT_CARD_INTERVAL_HRS": 50
   },
