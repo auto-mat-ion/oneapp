@@ -1,3 +1,4 @@
+import math
 import os
 
 import streamlit as st
@@ -5,6 +6,7 @@ import pandas as pd
 import json
 from pathlib import Path
 from datetime import datetime, timedelta
+from sqlalchemy import create_engine
 import re
 
 try:
@@ -742,7 +744,9 @@ def parse_fake_json(uploaded_file):
     return pd.DataFrame(data)
 
 
-def insert_into_db(table_name, df, server_ip=None, bot_type=None, overwrite=False):
+def insert_into_db(
+    table_name, df, server_ip=None, bot_type=None, overwrite=False, chunk_size=10000
+):
     conn = get_db_connection()
     if conn is None:
         return False, "No database connection"
@@ -792,9 +796,93 @@ def insert_into_db(table_name, df, server_ip=None, bot_type=None, overwrite=Fals
             placeholders = ", ".join(["%s"] * len(df.columns))
             values = [tuple(row) for row in df.itertuples(index=False, name=None)]
         query = f"INSERT INTO {table_name} ({columns}) VALUES ({placeholders})"
-        cursor.executemany(query, values)
-        conn.commit()
-        inserted = cursor.rowcount
+        total_rows = len(values)
+        if total_rows == 0:
+            cursor.close()
+            conn.close()
+            return True, f"Inserted 0 rows into {table_name}."
+
+        if total_rows > chunk_size:
+            if table_name == "sender_recipients":
+                # df = pd.read_csv(
+                #     r"C:\Users\USER\Desktop\serious\freelance\oneapp\bots\total andrew_8.1mln_bounces_cleaned.txt",
+                #     sep="[[[]]]",
+                #     names=["recipient_email"],
+                #     header=None,
+                # )
+
+                # df["country"] = "test"
+                # df["server_ip"] = "testy"
+
+                # df = df.head(1000000)
+
+                db_configs = get_db_config()
+                engine = create_engine(
+                    f"mysql+pymysql://{db_configs['user']}:{db_configs['password']}@{db_configs['host']}/{db_configs['database']}"
+                )
+                total_rows = len(df)
+                # Lowering chunk_size to 10,000 prevents MySQL server thread-RAM exhaustion
+                chunk_size = 10000
+
+                if total_rows > 0:
+                    # Initialize Streamlit UI components
+                    progress_bar = st.progress(0.0)
+                    status_text = st.empty()
+
+                    inserted = 0
+                    total_chunks = math.ceil(total_rows / chunk_size)
+
+                    # 3. Explicitly loop through the DataFrame in chunks
+                    for i in range(total_chunks):
+                        start_idx = i * chunk_size
+                        end_idx = min(start_idx + chunk_size, total_rows)
+
+                        # Slice the DataFrame (pandas uses memory views, so it does not duplicate data)
+                        chunk_df = df.iloc[start_idx:end_idx]
+
+                        # Upload this specific chunk using optimized multi-row inserts
+                        chunk_df.to_sql(
+                            name=table_name,
+                            con=engine,
+                            if_exists="append",
+                            index=False,
+                            method="multi",
+                        )
+
+                        # 4. Update progress metrics immediately after the chunk completes
+                        inserted += len(chunk_df)
+                        progress_percentage = min(inserted / total_rows, 1.0)
+
+                        progress_bar.progress(progress_percentage)
+                        status_text.text(
+                            f"Uploading {inserted:,} / {total_rows:,} rows into {table_name}..."
+                        )
+
+                    # 5. Clean up UI states upon successful completion
+                    status_text.text(
+                        f"Finished uploading all {inserted:,} rows into {table_name}."
+                    )
+
+            else:
+                progress_bar = st.progress(0)
+                status_text = st.empty()
+                inserted = 0
+                for start in range(0, total_rows, chunk_size):
+                    chunk_values = values[start : start + chunk_size]
+                    cursor.executemany(query, chunk_values)
+                    conn.commit()
+                    inserted += len(chunk_values)
+                    progress_bar.progress(min(inserted / total_rows, 1.0))
+                    status_text.text(
+                        f"Uploading {inserted} / {total_rows} rows into {table_name}..."
+                    )
+                status_text.text(
+                    f"Finished uploading {inserted} / {total_rows} rows into {table_name}."
+                )
+        else:
+            cursor.executemany(query, values)
+            conn.commit()
+            inserted = cursor.rowcount if cursor.rowcount != -1 else total_rows
         cursor.close()
         conn.close()
         return True, f"Inserted {inserted} rows into {table_name}."
@@ -1604,7 +1692,10 @@ def email_sender_uploader():
         if st.button("🚀 Upload to database", key=f"sender_upload_{table_name}"):
             with st.spinner("Uploading..."):
                 success, result_message = insert_into_db(
-                    table_name, df, overwrite=overwrite
+                    table_name,
+                    df,
+                    overwrite=overwrite,
+                    chunk_size=50000 if table_name == "sender_recipients" else 50000,
                 )
                 if success:
                     st.success(result_message)
