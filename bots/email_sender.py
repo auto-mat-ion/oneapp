@@ -1058,12 +1058,17 @@ def process_account_wrapper(
 
 
 def main():
+    print("Starting...")
+    connect_new_random()
+
+    time.sleep(5)
+    print("Connected VPN...")
+
     global BATCH_NUMBER
     BATCH_NUMBER = prompt_for_batch_selection()
     if not BATCH_NUMBER:
         print("No batch selected. Exiting.")
         return
-    connect_new_random()
 
     log("=" * 55)
     log("EMAIL SENDER | Graph API")
