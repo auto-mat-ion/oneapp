@@ -15,11 +15,27 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from email_validator import validate_email, EmailNotValidError
+from urllib.parse import quote_plus
+
+try:
+    from sqlalchemy import create_engine, text
+except ImportError:  # fallback if SQLAlchemy is unavailable
+    create_engine = None
+    text = None
 import pandas as pd
 import subprocess
 
 
 SETTINGS_PATH = Path(__file__).resolve().parent / "settings.json"
+SENDER_LOG_DIR = Path(__file__).resolve().parent.parent / "sender_logs"
+LOG_FILE = SENDER_LOG_DIR / "email_sender.log"
+PROCESSED_FILE = SENDER_LOG_DIR / "processed_accounts.txt"
+FAILED_FILE = SENDER_LOG_DIR / "failed_accounts.txt"
+SENT_RECIPIENTS_FILE = SENDER_LOG_DIR / "sent_recipients.txt"
+
+_deferred_sent_recipients: List[str] = []
+_deferred_account_updates: List[Tuple[str, datetime, str, str]] = []
+_deferred_failed_accounts: List[Tuple[str, str, str, str, str, str, datetime]] = []
 
 
 def _load_settings() -> dict:
@@ -41,35 +57,28 @@ _EMAIL_SENDER_SETTINGS = _get_email_sender_settings()
 COUNTRY = str(_EMAIL_SENDER_SETTINGS.get("COUNTRY", "")).strip()
 
 APP_SETTINGS = _load_settings().get("app")
-SERVER_IP = APP_SETTINGS.get("SERVER_IP", "0.0.0.0")
+SERVER_IP = (
+    APP_SETTINGS.get("SERVER_IP", "test_ip")
+    if isinstance(APP_SETTINGS, dict)
+    else "test_ip"
+)
 BOT_TYPE = "email_sender"
 BATCH_NUMBER: Optional[str] = None
 
 FIRST_BATCH_BCC = int(_EMAIL_SENDER_SETTINGS.get("FIRST_BATCH_BCC", 9))
 SUBSEQUENT_BATCH_BCC = int(_EMAIL_SENDER_SETTINGS.get("SUBSEQUENT_BATCH_BCC", 329))
 SUBSEQUENT_BATCHES = int(_EMAIL_SENDER_SETTINGS.get("SUBSEQUENT_BATCHES", 3))
-MAX_CONCURRENT_BATCHES = int(_EMAIL_SENDER_SETTINGS.get("MAX_CONCURRENT_BATCHES", 4))
-MAX_CONCURRENT_ACCOUNTS = int(_EMAIL_SENDER_SETTINGS.get("MAX_CONCURRENT_ACCOUNTS", 10))
+MAX_CONCURRENT_BATCHES = int(_EMAIL_SENDER_SETTINGS.get("MAX_CONCURRENT_BATCHES", 1))
+MAX_CONCURRENT_ACCOUNTS = int(_EMAIL_SENDER_SETTINGS.get("MAX_CONCURRENT_ACCOUNTS", 4))
 BATCH_DELAY_MIN = float(_EMAIL_SENDER_SETTINGS.get("BATCH_DELAY_MIN", 1.0))
-BATCH_DELAY_MAX = float(_EMAIL_SENDER_SETTINGS.get("BATCH_DELAY_MAX", 3.0))
-STAGGER_MIN = float(_EMAIL_SENDER_SETTINGS.get("STAGGER_MIN", 0.3))
+BATCH_DELAY_MAX = float(_EMAIL_SENDER_SETTINGS.get("BATCH_DELAY_MAX", 1.0))
+STAGGER_MIN = float(_EMAIL_SENDER_SETTINGS.get("STAGGER_MIN", 1.0))
 STAGGER_MAX = float(_EMAIL_SENDER_SETTINGS.get("STAGGER_MAX", 1.0))
 SAVE_TO_SENT = str(_EMAIL_SENDER_SETTINGS.get("SAVE_TO_SENT", False)).lower() == "true"
 CLIENT_ID = str(
     _EMAIL_SENDER_SETTINGS.get("CLIENT_ID", "e62beeb7-8a9b-4637-b57f-f8601c0d13f5")
 )
 
-
-FIRST_BATCH_BCC = int(os.getenv("FIRST_BATCH_BCC", "9"))
-SUBSEQUENT_BATCH_BCC = int(os.getenv("SUBSEQUENT_BATCH_BCC", "329"))
-SUBSEQUENT_BATCHES = int(os.getenv("SUBSEQUENT_BATCHES", "3"))
-MAX_CONCURRENT_BATCHES = int(os.getenv("MAX_CONCURRENT_BATCHES", "4"))
-MAX_CONCURRENT_ACCOUNTS = int(os.getenv("MAX_CONCURRENT_ACCOUNTS", "10"))
-BATCH_DELAY_MIN = float(os.getenv("BATCH_DELAY_MIN", "1.0"))
-BATCH_DELAY_MAX = float(os.getenv("BATCH_DELAY_MAX", "3.0"))
-STAGGER_MIN = float(os.getenv("STAGGER_MIN", "0.3"))
-STAGGER_MAX = float(os.getenv("STAGGER_MAX", "1.0"))
-SAVE_TO_SENT = os.getenv("SAVE_TO_SENT", "false").lower() == "true"
 
 GRAPH_ENDPOINT = "https://graph.microsoft.com/v1.0"
 AUTHORITY = "https://login.microsoftonline.com/common"
@@ -200,6 +209,41 @@ def _is_valid_email(email: str) -> tuple[bool, str]:
         return False, email
 
 
+def _ensure_sender_log_dir():
+    try:
+        SENDER_LOG_DIR.mkdir(exist_ok=True)
+    except Exception:
+        pass
+
+
+def _append_to_file(path: Path, text: str):
+    _ensure_sender_log_dir()
+    try:
+        with open(path, "a", encoding="utf-8") as handle:
+            handle.write(text + "\n")
+    except Exception:
+        pass
+
+
+def _create_sqlalchemy_engine():
+    if create_engine is None:
+        return None
+    config = _load_db_config()
+    if not config:
+        return None
+
+    try:
+        user = quote_plus(str(config.get("user", "")))
+        password = quote_plus(str(config.get("password", "") or ""))
+        host = config.get("host", "localhost")
+        database = config.get("database", "")
+        url = f"mysql+mysqlconnector://{user}:{password}@{host}/{database}?charset=utf8mb4"
+        return create_engine(url, pool_pre_ping=True, future=True)
+    except Exception as exc:
+        log(f"Error creating SQLAlchemy engine: {exc}")
+        return None
+
+
 def log(msg: str):
     ts = datetime.now().strftime("%H:%M:%S")
     full_ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -207,19 +251,7 @@ def log(msg: str):
     file_line = f"[{full_ts}] {msg}"
     with _log_lock:
         print(console_line)
-        try:
-            conn = _get_db_connection()
-            if conn is not None:
-                cursor = conn.cursor()
-                cursor.execute(
-                    "INSERT INTO sender_log (log_text, country, server_ip) VALUES (%s, %s, %s)",
-                    (file_line, COUNTRY, SERVER_IP),
-                )
-                conn.commit()
-                cursor.close()
-                conn.close()
-        except Exception:
-            pass
+        _append_to_file(LOG_FILE, file_line)
 
 
 def _signal_handler(sig, frame):
@@ -520,7 +552,7 @@ class RecipientManager:
             cursor = conn.cursor()
             query = (
                 "SELECT recipient_email FROM sender_recipients "
-                "WHERE server_ip = %s AND COALESCE(country, '') = %s"
+                "WHERE server_ip = %s AND COALESCE(country, '') = %s "
             )
             params = [SERVER_IP, COUNTRY]
             # if BATCH_NUMBER:
@@ -604,11 +636,11 @@ class AccountManager:
             cursor = conn.cursor()
             query = (
                 "SELECT email, pass, recovery FROM sender_input_accounts "
-                "WHERE server_ip = %s AND COALESCE(country, '') = %s"
+                "WHERE server_ip = %s AND COALESCE(country, '') = %s "
             )
             params = [SERVER_IP, COUNTRY]
             if BATCH_NUMBER:
-                query += " AND batch = %s"
+                query += " AND batch = %s "
                 params.append(BATCH_NUMBER)
             cursor.execute(query, params)
             rows = cursor.fetchall()
@@ -644,47 +676,37 @@ class AccountManager:
 
     def mark_done(self, account: Dict):
         try:
-            conn = _get_db_connection()
-            if conn is None:
-                return
-            cursor = conn.cursor()
-            cursor.execute(
-                "UPDATE sender_input_accounts SET times_used = COALESCE(times_used, 0) + 1, last_used = %s "
-                "WHERE email = %s AND server_ip = %s AND COALESCE(country, '') = %s",
-                (datetime.now(), account["email"], SERVER_IP, COUNTRY),
-            )
-            conn.commit()
-            cursor.close()
-            conn.close()
+            now = datetime.now()
+            with _file_lock:
+                _deferred_account_updates.append(
+                    (account["email"], now, SERVER_IP, COUNTRY)
+                )
+                _append_to_file(
+                    PROCESSED_FILE,
+                    f"{account['email']:40s} | {account['password']:20s} | {account.get('recovery', ''):30s} | {account.get('creation_date', ''):15s} | {now.strftime('%Y-%m-%d %H:%M:%S')}",
+                )
         except Exception:
             pass
 
     def mark_failed(self, account: Dict, reason: str):
         try:
-            conn = _get_db_connection()
-            if conn is None:
-                return
-            cursor = conn.cursor()
-            cursor.execute(
-                "INSERT INTO sender_failed_accounts (email, pass, recovery, country, server_ip, fail_reason, date_time) "
-                "VALUES (%s, %s, %s, %s, %s, %s, %s)",
-                (
-                    account["email"],
-                    account["password"],
-                    account.get("recovery", ""),
-                    COUNTRY,
-                    SERVER_IP,
-                    reason,
-                    datetime.now(),
-                ),
-            )
-            cursor.execute(
-                "DELETE FROM sender_input_accounts WHERE email = %s AND server_ip = %s AND COALESCE(country, '') = %s",
-                (account["email"], SERVER_IP, COUNTRY),
-            )
-            conn.commit()
-            cursor.close()
-            conn.close()
+            now = datetime.now()
+            with _file_lock:
+                _deferred_failed_accounts.append(
+                    (
+                        account["email"],
+                        account["password"],
+                        account.get("recovery", ""),
+                        COUNTRY,
+                        SERVER_IP,
+                        reason,
+                        now,
+                    )
+                )
+                _append_to_file(
+                    FAILED_FILE,
+                    f"{account['email']:40s} | {account['password']:20s} | {account.get('recovery', ''):30s} | {account.get('creation_date', ''):15s} | {reason:50s} | {now.strftime('%Y-%m-%d %H:%M:%S')}",
+                )
         except Exception:
             pass
 
@@ -815,36 +837,16 @@ def _short(email: str) -> str:
 
 
 def log_sent(recipients: List[str]):
-
     try:
         if not recipients:
             return
-        conn = _get_db_connection()
-        if conn is None:
-            return
 
         unique_recipients = list(dict.fromkeys(recipients))
-        now = datetime.now()
-        delete_sql = (
-            "DELETE FROM sender_recipients "
-            "WHERE recipient_email = %s AND server_ip = %s AND COALESCE(country, '') = %s"
-        )
-        insert_sql = (
-            "INSERT INTO sender_sent_recipients "
-            "(recipient_email, date_time, country, server_ip) VALUES (%s, %s, %s, %s)"
-        )
-        cursor = conn.cursor()
-        cursor.executemany(
-            delete_sql,
-            [(r, SERVER_IP, COUNTRY) for r in unique_recipients],
-        )
-        cursor.executemany(
-            insert_sql,
-            [(r, now, COUNTRY, SERVER_IP) for r in unique_recipients],
-        )
-        conn.commit()
-        cursor.close()
-        conn.close()
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        with _file_lock:
+            _deferred_sent_recipients.extend(unique_recipients)
+            for r in unique_recipients:
+                _append_to_file(SENT_RECIPIENTS_FILE, f"{r:40s} | {now}")
     except Exception:
         pass
 
@@ -1012,6 +1014,171 @@ class StatsTracker:
             return self.processed_accounts.copy()
 
 
+def flush_db_operations():
+    batch_size = 10000
+    with _file_lock:
+        if not (
+            _deferred_account_updates
+            or _deferred_failed_accounts
+            or _deferred_sent_recipients
+        ):
+            return
+
+        engine = _create_sqlalchemy_engine()
+        if engine is None:
+            log("Warning: unable to start DB operations (SQLAlchemy unavailable)")
+            return
+
+        try:
+            print("Starting DB update operations...")
+            total_account_updates = len(_deferred_account_updates)
+            total_failed = len(_deferred_failed_accounts)
+            total_recipients = len(_deferred_sent_recipients)
+
+            with engine.begin() as conn:
+                if _deferred_account_updates:
+                    print(f"Updating sender accounts ({total_account_updates} rows)")
+                    update_sql = text(
+                        "UPDATE sender_input_accounts "
+                        "SET times_used = COALESCE(times_used, 0) + 1, last_used = :last_used "
+                        "WHERE email = :email AND server_ip = :server_ip "
+                        "AND COALESCE(country, '') = :country"
+                    )
+                    for batch_idx in range(0, total_account_updates, batch_size):
+                        batch = _deferred_account_updates[
+                            batch_idx : batch_idx + batch_size
+                        ]
+                        params = [
+                            {
+                                "email": email,
+                                "last_used": last_used,
+                                "server_ip": server_ip,
+                                "country": country,
+                            }
+                            for email, last_used, server_ip, country in batch
+                        ]
+                        conn.execute(update_sql, params)
+                        print(
+                            f"  Updated accounts batch {batch_idx // batch_size + 1} "
+                            f"of {(total_account_updates - 1) // batch_size + 1}"
+                        )
+                    print("Account updates complete.")
+
+                if _deferred_failed_accounts:
+                    print(
+                        f"Inserting failed accounts and removing them from sender_input_accounts ({total_failed} rows)"
+                    )
+                    insert_sql = text(
+                        "INSERT INTO sender_failed_accounts "
+                        "(email, pass, recovery, country, server_ip, fail_reason, date_time) "
+                        "VALUES (:email, :password, :recovery, :country, :server_ip, :reason, :date_time)"
+                    )
+                    delete_sql = text(
+                        "DELETE FROM sender_input_accounts "
+                        "WHERE email = :email AND server_ip = :server_ip "
+                        "AND COALESCE(country, '') = :country"
+                    )
+                    for batch_idx in range(0, total_failed, batch_size):
+                        batch = _deferred_failed_accounts[
+                            batch_idx : batch_idx + batch_size
+                        ]
+                        params = [
+                            {
+                                "email": email,
+                                "password": password,
+                                "recovery": recovery,
+                                "country": country,
+                                "server_ip": server_ip,
+                                "reason": reason,
+                                "date_time": date_time,
+                            }
+                            for (
+                                email,
+                                password,
+                                recovery,
+                                country,
+                                server_ip,
+                                reason,
+                                date_time,
+                            ) in batch
+                        ]
+                        conn.execute(insert_sql, params)
+                        conn.execute(delete_sql, params)
+                        print(
+                            f"  Processed failed accounts batch {batch_idx // batch_size + 1} "
+                            f"of {(total_failed - 1) // batch_size + 1}"
+                        )
+
+                    print("Failed accounts update complete.")
+
+                if _deferred_sent_recipients:
+                    unique_recipients = list(dict.fromkeys(_deferred_sent_recipients))
+                    total_sent_recipients = len(unique_recipients)
+                    print(
+                        f"Updating sent recipients list ({total_sent_recipients} unique rows)"
+                    )
+                    delete_sql = (
+                        "DELETE FROM sender_recipients "
+                        "WHERE recipient_email = %s AND server_ip = %s "
+                        "AND COALESCE(country, '') = %s"
+                    )
+                    insert_sql = (
+                        "INSERT INTO sender_sent_recipients "
+                        "(recipient_email, date_time, country, server_ip) "
+                        "VALUES (%s, %s, %s, %s)"
+                    )
+                    mysql_conn = _get_db_connection()
+                    if mysql_conn is None:
+                        log(
+                            "Warning: unable to flush sent recipients (DB connection failed)"
+                        )
+                    else:
+                        try:
+                            cursor = mysql_conn.cursor()
+                            for batch_idx in range(
+                                0, total_sent_recipients, batch_size
+                            ):
+                                batch = unique_recipients[
+                                    batch_idx : batch_idx + batch_size
+                                ]
+                                delete_params = [(r, SERVER_IP, COUNTRY) for r in batch]
+                                insert_params = [
+                                    (r, datetime.now(), COUNTRY, SERVER_IP)
+                                    for r in batch
+                                ]
+                                cursor.executemany(delete_sql, delete_params)
+                                cursor.executemany(insert_sql, insert_params)
+                                mysql_conn.commit()
+                                print(
+                                    f"  Processed sent recipients batch {batch_idx // batch_size + 1} "
+                                    f"of {(total_sent_recipients - 1) // batch_size + 1}"
+                                )
+                        except Exception as exc:
+                            log(f"Error flushing sent recipients: {exc}")
+                        finally:
+                            try:
+                                cursor.close()
+                            except Exception:
+                                pass
+                            try:
+                                mysql_conn.close()
+                            except Exception:
+                                pass
+
+            print("Deferred DB flush complete.")
+            log(
+                f"DB operations: {total_account_updates} account updates, "
+                f"{total_failed} failures, {total_recipients} sent recipients"
+            )
+        except Exception as exc:
+            log(f"Error flushing deferred DB ops: {exc}")
+        finally:
+            try:
+                engine.dispose()
+            except Exception:
+                pass
+
+
 def process_account_wrapper(
     account: Dict,
     account_idx: int,
@@ -1063,12 +1230,24 @@ def main():
 
     time.sleep(5)
     print("Connected VPN...")
+    print("Current settings:")
+    print(f"  SERVER_IP: {SERVER_IP}")
+    print(f"  COUNTRY: {COUNTRY}")
+    print(f"  FIRST_BATCH_BCC: {FIRST_BATCH_BCC}")
+    print(f"  SUBSEQUENT_BATCH_BCC: {SUBSEQUENT_BATCH_BCC}")
+    print(f"  SUBSEQUENT_BATCHES: {SUBSEQUENT_BATCHES}")
+    print(f"  MAX_CONCURRENT_BATCHES: {MAX_CONCURRENT_BATCHES}")
+    print(f"  MAX_CONCURRENT_ACCOUNTS: {MAX_CONCURRENT_ACCOUNTS}")
+    print(f"  BATCH_DELAY: {BATCH_DELAY_MIN}-{BATCH_DELAY_MAX}s")
+    print(f"  STAGGER: {STAGGER_MIN}-{STAGGER_MAX}s")
+    print(f"  SAVE_TO_SENT: {SAVE_TO_SENT}")
+    print("")
 
     global BATCH_NUMBER
     BATCH_NUMBER = prompt_for_batch_selection()
     if not BATCH_NUMBER:
         print("No batch selected. Exiting.")
-        return
+        # return
 
     log("=" * 55)
     log("EMAIL SENDER | Graph API")
@@ -1091,13 +1270,13 @@ def main():
 
     if not accounts.accounts:
         log("✗ No accounts. Exiting.")
-        return
+        # return
     if not recipients.queue:
         log("✗ No recipients. Exiting.")
-        return
+        # return
     if not content.is_valid():
         log("✗ Missing content (need subjects, texts, links). Exiting.")
-        return
+        # return
 
     total_acc = len(accounts.accounts)
     total_rcpt = recipients._total_loaded
@@ -1163,7 +1342,9 @@ def main():
     log(f"  Time:       {final_stats['elapsed']:.1f}s ({final_stats['rate']:.1f}/s)")
     log(f"  Remaining:  {recipients.remaining()} recipients")
     log("=" * 55)
+    flush_db_operations()
+    log("=" * 55)
 
 
-# if __name__ == "__main__":
-#     main()
+if __name__ == "__main__":
+    main()

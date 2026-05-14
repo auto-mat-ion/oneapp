@@ -4,7 +4,7 @@
     "DB_USER": "root",
     "DB_PASSWORD": "root101.",
     "DB_NAME": "oneapp",
-    "SERVER_IP": "79.137.75.57"
+    "SERVER_IP": "test_ip"
   },
   "email_sender": {
     "COUNTRY": "Netherlands",
