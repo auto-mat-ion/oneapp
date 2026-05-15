@@ -562,8 +562,8 @@ class ContentManager:
             query = f"SELECT `{column_name}` FROM `{table_name}`"
             params = []
             if country:
-                query += " WHERE country = %s"
-                params.append(country)
+                query += " WHERE LOWER(country) = %s"
+                params.append(country.lower())
             cursor.execute(query, params)
             rows = [
                 str(row[0]).strip()
@@ -1313,7 +1313,7 @@ def main():
     BATCH_NUMBER = prompt_for_batch_selection()
     if not BATCH_NUMBER:
         print("No batch selected. Exiting.")
-        # return
+        return
 
     log("=" * 55)
     log("EMAIL SENDER | Graph API")
@@ -1336,13 +1336,13 @@ def main():
 
     if not accounts.accounts:
         log("✗ No accounts. Exiting.")
-        # return
+        return
     if not recipients.queue:
         log("✗ No recipients. Exiting.")
-        # return
+        return
     if not content.is_valid():
         log("✗ Missing content (need subjects, texts, links). Exiting.")
-        # return
+        return
 
     total_acc = len(accounts.accounts)
     total_rcpt = recipients._total_loaded
@@ -1412,5 +1412,5 @@ def main():
     log("=" * 55)
 
 
-if __name__ == "__main__":
-    main()
+# if __name__ == "__main__":
+#     main()
