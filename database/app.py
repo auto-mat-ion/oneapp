@@ -290,7 +290,7 @@ def apply_schema_changes(differences, skip_drop_tables=True):
                         f"CREATE TABLE `{table}` (" + ", ".join(cols_def) + ")"
                     )
                     cursor.execute(create_stmt)
-                    changes_applied.append(f"✓ Created table: {table}")
+                    changes_applied.append(f"Created table: {table}")
                 except Exception as e:
                     return False, f"Failed to create table {table}: {str(e)}"
 
@@ -302,7 +302,7 @@ def apply_schema_changes(differences, skip_drop_tables=True):
                     cursor.execute(
                         f"ALTER TABLE `{table}` ADD COLUMN IF NOT EXISTS `{col_name}` {col_def}"
                     )
-                    changes_applied.append(f"✓ Added column {col_name} to {table}")
+                    changes_applied.append(f"Added column {col_name} to {table}")
 
                 # Modify changed columns
                 for change in changes["modified_columns"]:
@@ -312,9 +312,7 @@ def apply_schema_changes(differences, skip_drop_tables=True):
                         cursor.execute(
                             f"ALTER TABLE `{table}` MODIFY COLUMN `{col_name}` {new_type}"
                         )
-                        changes_applied.append(
-                            f"✓ Modified column {col_name} in {table}"
-                        )
+                        changes_applied.append(f"Modified column {col_name} in {table}")
                     except Exception as col_err:
                         return (
                             False,
@@ -329,7 +327,7 @@ def apply_schema_changes(differences, skip_drop_tables=True):
                                 f"ALTER TABLE `{table}` DROP COLUMN `{col_name}`"
                             )
                             changes_applied.append(
-                                f"✓ Dropped column {col_name} from {table}"
+                                f"Dropped column {col_name} from {table}"
                             )
                         except Exception as drop_err:
                             pass  # Silently skip if column doesn't exist
@@ -341,7 +339,7 @@ def apply_schema_changes(differences, skip_drop_tables=True):
             for table in differences["dropped_tables"]:
                 try:
                     cursor.execute(f"DROP TABLE IF EXISTS `{table}`")
-                    changes_applied.append(f"✓ Dropped table: {table}")
+                    changes_applied.append(f"Dropped table: {table}")
                 except Exception as e:
                     return False, f"Failed to drop table {table}: {str(e)}"
 
@@ -669,6 +667,77 @@ def load_emails_from_cache_bins():
     except Exception as e:
         st.error(f"Error loading emails from cache bins: {e}")
         return None
+    finally:
+        try:
+            conn.close()
+        except:
+            pass
+
+
+def get_cached_sender_emails():
+    """Return a set of sender account emails found in all cache bins."""
+    conn = get_db_connection()
+    if conn is None:
+        return set()
+
+    emails = set()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT cache_bin_file FROM cache_bins")
+        rows = cursor.fetchall()
+        cursor.close()
+
+        for row in rows:
+            cache_bin = row[0]
+            if not cache_bin:
+                continue
+
+            try:
+                content = (
+                    cache_bin.decode("utf-8")
+                    if isinstance(cache_bin, (bytes, bytearray))
+                    else str(cache_bin)
+                )
+                token_cache = msal.SerializableTokenCache()
+                token_cache.deserialize(content)
+                raw_data = json.loads(token_cache.serialize())
+                account_data = raw_data.get("Account", {})
+                for account_info in account_data.values():
+                    if isinstance(account_info, dict):
+                        username = account_info.get("username", "")
+                        if username:
+                            emails.add(username.lower())
+            except Exception:
+                continue
+
+    except Exception:
+        pass
+    finally:
+        try:
+            conn.close()
+        except:
+            pass
+
+    return emails
+
+
+def count_unassigned_sender_accounts():
+    cached_emails = get_cached_sender_emails()
+    if not cached_emails:
+        return 0
+
+    conn = get_db_connection()
+    if conn is None:
+        return 0
+
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT LOWER(email) FROM sender_input_accounts")
+        assigned_emails = {row[0] for row in cursor.fetchall() if row and row[0]}
+        cursor.close()
+        return len(cached_emails - assigned_emails)
+    except Exception:
+        return 0
     finally:
         try:
             conn.close()
@@ -1194,7 +1263,7 @@ def email_sender_uploader():
             return
 
         st.success(message)
-        st.write(f"✓ Rows found: {len(df)}")
+        st.write(f"Rows found: {len(df)}")
 
         if table_name == "sender_recipients":
             st.subheader("Step 6: Assign servers to recipients")
@@ -1279,7 +1348,7 @@ def email_sender_uploader():
                         count = base + (1 if i < remainder else 0)
                         distribution.append({"server": server, "count": count})
                     st.session_state[dist_key] = distribution
-                    st.success("✓ Recipients distributed equally across servers.")
+                    st.success("Recipients distributed equally across servers.")
                     st.rerun()
             else:
                 st.write(
@@ -1318,7 +1387,7 @@ def email_sender_uploader():
                             if count > 0
                         ]
                         st.session_state[dist_key] = distribution
-                        st.success("✓ Manual recipient distribution saved.")
+                        st.success("Manual recipient distribution saved.")
                         st.rerun()
 
             total_assigned = sum(d["count"] for d in distribution)
@@ -1343,7 +1412,7 @@ def email_sender_uploader():
                 df.loc[start_idx : end_idx - 1, "server_ip"] = server
                 start_idx = end_idx
 
-            st.success("✓ Recipients assigned to servers.")
+            st.success("Recipients assigned to servers.")
             st.write(
                 f"Assigned {len(df)} recipients across servers: {', '.join([d['server'] for d in distribution])}"
             )
@@ -1452,11 +1521,11 @@ def email_sender_uploader():
                             {"server": server, "count": count, "batches": []}
                         )
                     st.session_state[dist_key] = distribution
-                    st.success("✓ Distributed equally across servers.")
+                    st.success("Distributed equally across servers.")
                     st.rerun()
             else:  # Manual
                 st.write(
-                    "📌 Assign servers sequentially. First assignment gets the top rows, etc."
+                    "Assign servers sequentially. First assignment gets the top rows, etc."
                 )
                 remaining = len(df) - sum(d["count"] for d in distribution)
                 st.write(f"Remaining rows to assign: **{remaining}**")
@@ -1495,7 +1564,7 @@ def email_sender_uploader():
                                 )
                             st.session_state[dist_key] = distribution
                             st.success(
-                                f"✓ Assigned {manual_count} rows to {manual_server}"
+                                f"Assigned {manual_count} rows to {manual_server}"
                             )
                             st.rerun()
 
@@ -1557,7 +1626,7 @@ def email_sender_uploader():
                                 st.rerun()
                         else:  # Manual batch distribution
                             st.write(
-                                f"📌 Enter counts for each batch (total must equal {count}):"
+                                f"Enter counts for each batch (total must equal {count}):"
                             )
 
                             # Initialize batch counts in session state
@@ -1589,7 +1658,7 @@ def email_sender_uploader():
                             st.write(f"Total: {current_total} / {count}")
 
                             if current_total != count:
-                                st.warning(f"⚠ Batch counts must total exactly {count}")
+                                st.warning(f"Batch counts must total exactly {count}")
                             else:
                                 if st.button(
                                     f"Apply batch distribution for {server}",
@@ -1607,7 +1676,7 @@ def email_sender_uploader():
                                     d["batches"] = batches
                                     st.session_state[dist_key] = distribution
                                     st.success(
-                                        f"✓ Applied batch distribution for {server}"
+                                        f"Applied batch distribution for {server}"
                                     )
                                     st.rerun()
 
@@ -1646,11 +1715,11 @@ def email_sender_uploader():
             )
 
             if not distribution_complete:
-                st.info("📌 Please complete the server distribution before uploading.")
+                st.info("Please complete the server distribution before uploading.")
                 return
             if not batching_complete:
                 st.info(
-                    "📌 Please complete the batch distribution for all servers before uploading."
+                    "Please complete the batch distribution for all servers before uploading."
                 )
                 return
 
@@ -1689,7 +1758,7 @@ def email_sender_uploader():
             else False
         )
 
-        if st.button("🚀 Upload to database", key=f"sender_upload_{table_name}"):
+        if st.button("Upload to database", key=f"sender_upload_{table_name}"):
             with st.spinner("Uploading..."):
                 success, result_message = insert_into_db(
                     table_name,
@@ -1734,10 +1803,10 @@ def db_group_count(table, group_column, where_clause=None, params=None, limit=5)
         return []
     try:
         cursor = conn.cursor()
-        query = f"SELECT {group_column}, COUNT(*) as total FROM {table}"
+        query = f"SELECT LOWER({group_column}), COUNT(*) as total FROM {table}"
         if where_clause:
             query += f" WHERE {where_clause}"
-        query += " GROUP BY " + group_column + " ORDER BY total DESC"
+        query += " GROUP BY LOWER(" + group_column + ") ORDER BY total DESC"
         if limit:
             query += " LIMIT %s"
             params = tuple(params or ()) + (limit,)
@@ -1785,6 +1854,95 @@ def db_top_servers(table, bot_type=None, start_date=None, end_date=None, limit=5
             pass
 
 
+def get_table_distinct_values(table, column, where_clause=None, params=None):
+    conn = get_db_connection()
+    if conn is None:
+        return []
+    try:
+        cursor = conn.cursor()
+        query = f"SELECT DISTINCT {column} FROM {table}"
+        if where_clause:
+            query += f" WHERE {where_clause}"
+        cursor.execute(query, params or ())
+        return [row[0] for row in cursor.fetchall() if row and row[0]]
+    except Exception:
+        return []
+    finally:
+        try:
+            conn.close()
+        except:
+            pass
+
+
+def get_familybot_card_interval_hours():
+    settings = load_full_settings()
+    try:
+        interval = int(
+            settings.get("familybot", {}).get("CREDIT_CARD_INTERVAL_HRS", 50)
+        )
+        if interval <= 0:
+            interval = 50
+    except Exception:
+        interval = 50
+    return interval
+
+
+def get_familybot_available_cards_count():
+    conn = get_db_connection()
+    if conn is None:
+        return 0
+
+    try:
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(
+            "SELECT card_number, expiry_month_year, cvv FROM familybot_card_details"
+        )
+        cards = cursor.fetchall()
+
+        cursor.execute(
+            "SELECT card_num, `exp_month/year` AS exp_month_year, cvv, use_datetime FROM familybot_card_usage_log"
+        )
+        usage_rows = cursor.fetchall()
+
+        usage = {}
+        for row in usage_rows:
+            key = (
+                str(row["card_num"]),
+                row["exp_month_year"],
+                str(row["cvv"]),
+            )
+            usage.setdefault(key, []).append(row["use_datetime"])
+
+        interval_hours = get_familybot_card_interval_hours()
+        now = datetime.now()
+        available_cards = 0
+
+        for card in cards:
+            card_num = str(card.get("card_number", ""))
+            expiry = card.get("expiry_month_year") or ""
+            cvv = str(card.get("cvv", ""))
+            key = (card_num, expiry, cvv)
+            timestamps = sorted(usage.get(key, []))
+            uses = len(timestamps)
+            if uses >= 5:
+                continue
+            if uses in [0, 1, 3]:
+                available_cards += 1
+                continue
+            if uses in [2, 4] and timestamps:
+                if now > timestamps[-1] + timedelta(hours=interval_hours):
+                    available_cards += 1
+
+        return available_cards
+    except Exception:
+        return 0
+    finally:
+        try:
+            conn.close()
+        except:
+            pass
+
+
 def render_stats_cards(cards):
     for i in range(0, len(cards), 3):
         row = cards[i : i + 3]
@@ -1793,36 +1951,476 @@ def render_stats_cards(cards):
             col.metric(stat["label"], stat["value"], stat.get("delta", ""))
 
 
-def stats_page():
-    st.header("Email Sender Stats")
+def render_hotmail_stats():
+    st.header("Hotmail Bot Stats")
 
-    # Basic stats cards
     try:
         cards = [
             {
-                "label": "Total Sender Accounts",
-                "value": db_count("sender_input_accounts"),
+                "label": "Total Available Input Accounts",
+                "value": db_count("input_emails"),
             },
             {
-                "label": "Processed Accounts",
-                "value": db_count("sender_processed_accounts"),
+                "label": "Total Available Family Links (from FamilyBot)",
+                "value": db_count("familybot_extracted_family_links"),
             },
-            # {
-            #     "label": "Failed SMTP",
-            #     "value": db_count("failed_smtp"),
-            # },
-            # {
-            #     "label": "Processing Queue",
-            #     "value": db_count("processing_smtp_emails"),
-            # },
+            {
+                "label": "Total Processed Hotmail Accounts",
+                "value": db_count("processed_emails", "bot_type = %s", ("hotmailbot",)),
+            },
+            {
+                "label": "Total Failed Accounts",
+                "value": db_count("failed_smtp", "bot_type = %s", ("hotmailbot",)),
+            },
+        ]
+        render_stats_cards(cards)
+    except Exception as e:
+        st.error(f"Error loading Hotmail Bot stats: {e}")
+
+    st.divider()
+
+
+def render_familybot_stats():
+    st.header("Family Bot Stats")
+
+    today = datetime.now().date()
+    default_start = today - timedelta(days=30)
+    date_range = st.date_input(
+        "Select date range",
+        [default_start, today],
+        key="familybot_stats_date_range",
+    )
+    if not isinstance(date_range, list) and not isinstance(date_range, tuple):
+        st.error("Please select a valid start and end date.")
+        return
+    if len(date_range) != 2:
+        st.error("Please select both a start date and an end date.")
+        return
+
+    start_date, end_date = date_range
+    if start_date is None or end_date is None:
+        st.error("Please select a valid date range.")
+        return
+
+    start_dt = datetime.combine(start_date, datetime.min.time())
+    end_dt = datetime.combine(end_date, datetime.max.time())
+    if start_dt > end_dt:
+        st.error("Start date must be before end date.")
+        return
+
+    total_cards = db_count("familybot_card_details")
+    total_failed_cards = db_count(
+        "familybot_failed_cards",
+        "date_time BETWEEN %s AND %s",
+        (start_dt, end_dt),
+    )
+    available_cards = get_familybot_available_cards_count()
+    total_fully_used_cards = db_count(
+        "familybot_fully_used_cards",
+        "date_time BETWEEN %s AND %s",
+        (start_dt, end_dt),
+    )
+    total_firstnames = sum(
+        count for _, count in db_group_count("familybot_first_names", "country")
+    )
+    total_surnames = sum(
+        count for _, count in db_group_count("familybot_surnames", "country")
+    )
+    total_fake_details = sum(
+        count for _, count in db_group_count("familybot_fake_details", "country")
+    )
+
+    try:
+        cards = [
+            {
+                "label": "Total Email Inputs",
+                "value": db_count("input_emails"),
+            },
+            {
+                "label": "Extracted Family Links",
+                "value": db_count("familybot_extracted_family_links"),
+            },
+            {"label": "Total Cards", "value": total_cards},
+            {"label": "Total Failed Cards", "value": total_failed_cards},
+            {"label": "Cards Available for Use", "value": available_cards},
+            {"label": "Total Fully Used Cards", "value": total_fully_used_cards},
+            {"label": "Available First Names", "value": total_firstnames},
+            {"label": "Available Surnames", "value": total_surnames},
+        ]
+        render_stats_cards(cards)
+    except Exception as e:
+        st.error(f"Error loading Family Bot stats: {e}")
+        return
+
+    st.divider()
+
+    try:
+        card_by_country = db_group_count(
+            "familybot_card_details",
+            "country",
+            "country IS NOT NULL AND country <> ''",
+            (),
+            limit=1000,
+        )
+        failed_by_country = db_group_count(
+            "familybot_failed_cards",
+            "country",
+            "date_time BETWEEN %s AND %s AND country IS NOT NULL AND country <> ''",
+            (start_dt, end_dt),
+            limit=1000,
+        )
+        fully_used_by_country = db_group_count(
+            "familybot_fully_used_cards",
+            "country",
+            "date_time BETWEEN %s AND %s AND country IS NOT NULL AND country <> ''",
+            (start_dt, end_dt),
+            limit=1000,
+        )
+        firstnames_by_country = db_group_count(
+            "familybot_first_names",
+            "country",
+            "country IS NOT NULL AND country <> ''",
+            (),
+            limit=1000,
+        )
+        surnames_by_country = db_group_count(
+            "familybot_surnames",
+            "country",
+            "country IS NOT NULL AND country <> ''",
+            (),
+            limit=1000,
+        )
+        fake_details_by_country = db_group_count(
+            "familybot_fake_details",
+            "country",
+            "country IS NOT NULL AND country <> ''",
+            (),
+            limit=1000,
+        )
+
+        if card_by_country:
+            st.subheader("Total Cards by Country")
+            st.dataframe(
+                pd.DataFrame(card_by_country, columns=["Country", "Count"]),
+                width="stretch",
+            )
+
+        if failed_by_country:
+            st.subheader("Failed Cards by Country")
+            st.dataframe(
+                pd.DataFrame(failed_by_country, columns=["Country", "Count"]),
+                width="stretch",
+            )
+
+        if fully_used_by_country:
+            st.subheader("Fully Used Cards by Country")
+            st.dataframe(
+                pd.DataFrame(fully_used_by_country, columns=["Country", "Count"]),
+                width="stretch",
+            )
+
+        if firstnames_by_country or surnames_by_country or fake_details_by_country:
+            st.subheader("Available Data by Country")
+            country_rows = {}
+            for country, count in firstnames_by_country:
+                country_rows.setdefault(country, {})["First Names"] = count
+            for country, count in surnames_by_country:
+                country_rows.setdefault(country, {})["Surnames"] = count
+            for country, count in fake_details_by_country:
+                country_rows.setdefault(country, {})["Fake Details"] = count
+
+            breakdown = []
+            for country, values in sorted(country_rows.items()):
+                breakdown.append(
+                    {
+                        "Country": country,
+                        "First Names": values.get("First Names", 0),
+                        "Surnames": values.get("Surnames", 0),
+                        "Fake Details": values.get("Fake Details", 0),
+                    }
+                )
+            st.dataframe(pd.DataFrame(breakdown), width="stretch")
+
+    except Exception as e:
+        st.error(f"Error building Family Bot breakdowns: {e}")
+
+    st.divider()
+    st.subheader("Failed Cards")
+
+    failed_countries = get_table_distinct_values("familybot_failed_cards", "country")
+    if failed_countries:
+        selected_failed_countries = st.multiselect(
+            "Filter failed cards by country",
+            failed_countries,
+            default=failed_countries,
+            key="failed_cards_country_filter",
+        )
+    else:
+        selected_failed_countries = []
+
+    failed_where = "date_time BETWEEN %s AND %s"
+    failed_params = [start_dt, end_dt]
+    if selected_failed_countries:
+        placeholders = ",".join(["%s"] * len(selected_failed_countries))
+        failed_where += f" AND country IN ({placeholders})"
+        failed_params += selected_failed_countries
+
+    try:
+        conn = get_db_connection()
+        if conn is None:
+            st.error("Unable to connect to database")
+            return
+
+        cursor = conn.cursor()
+        query = (
+            "SELECT date_time, card_number, expiry_month_year, cvv, reason_for_fail, country "
+            f"FROM familybot_failed_cards WHERE {failed_where} ORDER BY date_time DESC"
+        )
+        cursor.execute(query, tuple(failed_params))
+        failed_rows = cursor.fetchall()
+        cursor.close()
+        conn.close()
+
+        if not failed_rows:
+            st.info("No failed cards found for the selected filters.")
+            return
+
+        failed_df = pd.DataFrame(
+            failed_rows,
+            columns=[
+                "Date Time",
+                "Card Number",
+                "Expiry Month/Year",
+                "CVV",
+                "Reason For Fail",
+                "Country",
+            ],
+        )
+        st.dataframe(failed_df, width="stretch")
+
+        csv = failed_df.to_csv(index=False)
+        st.download_button(
+            "Download failed cards as CSV",
+            csv,
+            file_name="familybot_failed_cards.csv",
+            mime="text/csv",
+        )
+    except Exception as e:
+        st.error(f"Error loading failed cards table: {e}")
+
+
+def render_email_sender_stats():
+    st.header("Email Sender Stats")
+
+    today = datetime.now().date()
+    default_start = today - timedelta(days=30)
+    date_range = st.date_input(
+        "Select date range for date-based sender stats",
+        [default_start, today],
+        key="email_sender_stats_date_range",
+    )
+    if not isinstance(date_range, (list, tuple)):
+        st.error("Please select a valid start and end date.")
+        return
+    if len(date_range) != 2:
+        st.error("Please select both a start date and an end date.")
+        return
+
+    start_date, end_date = date_range
+    if start_date is None or end_date is None:
+        st.error("Please select a valid date range.")
+        return
+
+    start_dt = datetime.combine(start_date, datetime.min.time())
+    end_dt = datetime.combine(end_date, datetime.max.time())
+    if start_dt > end_dt:
+        st.error("Start date must be before end date.")
+        return
+
+    # Unassigned sender accounts insight from cache bins
+    try:
+        unassigned_count = count_unassigned_sender_accounts()
+        st.info(f"Total unassigned sender accounts in cache bins: {unassigned_count}")
+    except Exception as e:
+        st.warning(f"Unable to compute unassigned sender accounts: {e}")
+
+    try:
+        total_sender_accounts = db_count("sender_input_accounts")
+        total_recipients = db_count("sender_recipients")
+        total_invalid_recipients = db_count("sender_invalid_recipients")
+        total_available_hyperlinks = db_count("sender_hyperlink_text")
+        total_links = db_count("sender_link")
+        total_subjects = db_count("sender_subjects")
+        total_texts = db_count("sender_texts")
+
+        total_processed_range = db_count(
+            "sender_processed_accounts",
+            "date_time BETWEEN %s AND %s",
+            (start_dt, end_dt),
+        )
+        total_failed_range = db_count(
+            "sender_failed_accounts",
+            "date_time BETWEEN %s AND %s",
+            (start_dt, end_dt),
+        )
+        total_sent_recipients_range = db_count(
+            "sender_sent_recipients",
+            "date_time BETWEEN %s AND %s",
+            (start_dt, end_dt),
+        )
+
+        cards = [
+            {"label": "Total Sender Accounts", "value": total_sender_accounts},
+            {"label": "Total Recipients", "value": total_recipients},
+            {"label": "Invalid Recipients", "value": total_invalid_recipients},
+            {"label": "Available Hyperlinks", "value": total_available_hyperlinks},
+            {"label": "Total Links", "value": total_links},
+            {"label": "Total Subjects", "value": total_subjects},
+            {"label": "Total Texts", "value": total_texts},
+            {
+                "label": "Processed Accounts in Range",
+                "value": total_processed_range,
+            },
+            {
+                "label": "Failed Accounts in Range",
+                "value": total_failed_range,
+            },
+            {
+                "label": "Sent Recipients in Range",
+                "value": total_sent_recipients_range,
+            },
         ]
         render_stats_cards(cards)
     except Exception as e:
         st.error(f"Error loading Email Sender stats: {e}")
 
     st.divider()
+    st.subheader("Sender Breakdown by Country")
 
-    # Breakdown by Server and Batch
+    try:
+        sender_country = db_group_count(
+            "sender_input_accounts",
+            "country",
+            "country IS NOT NULL AND country <> ''",
+            (),
+            limit=1000,
+        )
+        recipient_country = db_group_count(
+            "sender_recipients",
+            "country",
+            "country IS NOT NULL AND country <> ''",
+            (),
+            limit=1000,
+        )
+        hyperlink_country = db_group_count(
+            "sender_hyperlink_text",
+            "country",
+            "country IS NOT NULL AND country <> ''",
+            (),
+            limit=1000,
+        )
+        link_country = db_group_count(
+            "sender_link",
+            "country",
+            "country IS NOT NULL AND country <> ''",
+            (),
+            limit=1000,
+        )
+        subject_country = db_group_count(
+            "sender_subjects",
+            "country",
+            "country IS NOT NULL AND country <> ''",
+            (),
+            limit=1000,
+        )
+        text_country = db_group_count(
+            "sender_texts",
+            "country",
+            "country IS NOT NULL AND country <> ''",
+            (),
+            limit=1000,
+        )
+        invalid_recipient_country = db_group_count(
+            "sender_invalid_recipients",
+            "country",
+            "country IS NOT NULL AND country <> ''",
+            (),
+            limit=1000,
+        )
+
+        if sender_country:
+            st.markdown("**Sender Accounts by Country**")
+            st.dataframe(
+                pd.DataFrame(sender_country, columns=["Country", "Count"]),
+                width="stretch",
+            )
+
+        if recipient_country:
+            st.markdown("**Recipients by Country**")
+            st.dataframe(
+                pd.DataFrame(recipient_country, columns=["Country", "Count"]),
+                width="stretch",
+            )
+
+        if hyperlink_country:
+            st.markdown("**Available Hyperlinks by Country**")
+            st.dataframe(
+                pd.DataFrame(hyperlink_country, columns=["Country", "Count"]),
+                width="stretch",
+            )
+
+        if link_country:
+            st.markdown("**Links by Country**")
+            st.dataframe(
+                pd.DataFrame(link_country, columns=["Country", "Count"]),
+                width="stretch",
+            )
+
+        if subject_country:
+            st.markdown("**Subjects by Country**")
+            st.dataframe(
+                pd.DataFrame(subject_country, columns=["Country", "Count"]),
+                width="stretch",
+            )
+
+        if text_country:
+            st.markdown("**Text Templates by Country**")
+            st.dataframe(
+                pd.DataFrame(text_country, columns=["Country", "Count"]),
+                width="stretch",
+            )
+
+        if invalid_recipient_country:
+            st.markdown("**Invalid Recipients by Country**")
+            st.dataframe(
+                pd.DataFrame(invalid_recipient_country, columns=["Country", "Count"]),
+                width="stretch",
+            )
+    except Exception as e:
+        st.error(f"Error building email sender country breakdowns: {e}")
+
+    st.divider()
+    st.subheader("Sender Accounts by IP")
+
+    try:
+        server_ip_counts = db_group_count(
+            "sender_input_accounts",
+            "server_ip",
+            "server_ip IS NOT NULL AND server_ip <> ''",
+            (),
+            limit=1000,
+        )
+        if server_ip_counts:
+            st.dataframe(
+                pd.DataFrame(server_ip_counts, columns=["Server IP", "Count"]),
+                width="stretch",
+            )
+        else:
+            st.info("No sender server IP data available.")
+    except Exception as e:
+        st.error(f"Error building sender IP breakdown: {e}")
+
+    st.divider()
     st.subheader("Sender Accounts by Server & Batch")
 
     try:
@@ -1830,7 +2428,6 @@ def stats_page():
         if conn is not None:
             cursor = conn.cursor()
 
-            # Query to get breakdown by server_ip and batch
             cursor.execute("""
                 SELECT
                     COALESCE(server_ip, 'Unassigned') as server,
@@ -1846,21 +2443,17 @@ def stats_page():
             conn.close()
 
             if results:
-                # Group by server for better display
                 server_data = {}
                 for server, batch, count in results:
                     if server not in server_data:
                         server_data[server] = []
                     server_data[server].append((batch, count))
 
-                # Display each server in an expander
                 for server in sorted(server_data.keys()):
                     with st.expander(
                         f"**Server: {server}** (Total: {sum(count for _, count in server_data[server])} accounts)"
                     ):
                         batch_data = server_data[server]
-
-                        # Create a nice table for batches
                         if batch_data:
                             batch_df = pd.DataFrame(
                                 batch_data, columns=["Batch", "Count"]
@@ -1868,7 +2461,6 @@ def stats_page():
                             batch_df = batch_df.sort_values("Batch")
                             st.dataframe(batch_df, width="stretch")
 
-                            # Summary for this server
                             total_accounts = batch_df["Count"].sum()
                             unique_batches = len(batch_df)
                             st.write(
@@ -1885,8 +2477,75 @@ def stats_page():
 
     st.divider()
     st.subheader("Quick Insights")
-    st.write("📊 Monitor your email sender distribution across servers and batches")
-    st.write("🔄 Use this data to balance load and optimize performance")
+    st.write(
+        "Monitor your email sender distribution across servers, countries, and template resources."
+    )
+    st.write(
+        "Use the date filter above to inspect processed, failed, and sent recipient activity in the selected range."
+    )
+
+
+def render_password_changer_stats():
+    st.header("Password Changer Stats")
+
+    try:
+        cards = [
+            {
+                "label": "Total Password Changer Accounts",
+                "value": db_count("password_changer_accounts"),
+            },
+            {
+                "label": "Total Saved Accounts",
+                "value": db_count(
+                    "accounts_details", "bot_type = %s", ("password_changer",)
+                ),
+            },
+            {
+                "label": "Total Failed SMTP Records",
+                "value": db_count(
+                    "failed_smtp", "bot_type = %s", ("password_changer",)
+                ),
+            },
+        ]
+        render_stats_cards(cards)
+    except Exception as e:
+        st.error(f"Error loading Password Changer stats: {e}")
+
+    st.divider()
+    st.subheader("Password Changer Quick Insights")
+    st.write(
+        "🔐 Use these stats to monitor account supply, results, and failures for password changer runs."
+    )
+
+
+def stats_page():
+    stats_area = st.empty()
+
+    with st.spinner("Loading stats..."):
+        with stats_area.container():
+            st.header("Bot Stats")
+
+            selected_tab = st.radio(
+                "Select stats tab",
+                [
+                    "Hotmail Bot",
+                    "Family Bot",
+                    "Email Sender",
+                    "Password Changer",
+                ],
+                index=0,
+                horizontal=True,
+                key="stats_page_selected_tab",
+            )
+
+            if selected_tab == "Hotmail Bot":
+                render_hotmail_stats()
+            elif selected_tab == "Family Bot":
+                render_familybot_stats()
+            elif selected_tab == "Email Sender":
+                render_email_sender_stats()
+            elif selected_tab == "Password Changer":
+                render_password_changer_stats()
 
 
 def render_setting_input(key, value, setting_key):
@@ -1923,7 +2582,7 @@ def render_setting_input(key, value, setting_key):
 
 def database_management():
     """Dedicated page for all database operations"""
-    st.header("🗄️ Database Management")
+    st.header("Database Management")
 
     # Connection status
     col1, col2, col3 = st.columns(3)
@@ -1946,157 +2605,6 @@ def database_management():
 
     # Create tabs for different operations
     tab1, tab2, tab3 = st.tabs(["🆕 Create Database", "📊 Update Schema", "💾 Backup"])
-
-    # with tab1:
-    #     st.subheader("Create Database from Schema")
-    #     st.warning(
-    #         "⚠️ **CRITICAL WARNING**\n\n"
-    #         "This will **DELETE** the existing database and recreate it from `db_schema.sql`. "
-    #         "All data will be lost. This action **CANNOT be undone**."
-    #     )
-
-    #     col1, col2 = st.columns(2)
-    #     with col1:
-    #         if st.button(
-    #             "⚠️ Confirm - Delete & Create",
-    #             key="create_db_confirm",
-    #             width='stretch',
-    #         ):
-    #             with st.spinner("Creating database..."):
-    #                 success, message = create_database()
-    #                 if success:
-    #                     st.success(message)
-    #                     st.balloons()
-    #                 else:
-    #                     st.error(message)
-    #     with col2:
-    #         st.info("Creating from scratch using db_schema.sql")
-
-    # with tab2:
-    #     st.subheader("Update Schema to Match db_schema.sql")
-
-    #     if st.button("🔍 Analyze Schema Differences", width='stretch'):
-    #         with st.spinner("Analyzing schema..."):
-    #             differences, error = get_schema_comparison()
-
-    #         if error:
-    #             st.error(error)
-    #         else:
-    #             has_changes = (
-    #                 differences["new_tables"]
-    #                 or differences["dropped_tables"]
-    #                 or differences["modified_tables"]
-    #             )
-
-    #             if not has_changes:
-    #                 st.success("✅ Database schema is already up to date!")
-    #             else:
-    #                 st.warning(
-    #                     f"🔄 Found {len(differences['new_tables']) + len(differences['dropped_tables']) + len(differences['modified_tables'])} changes"
-    #                 )
-
-    #                 # Display in tabs
-    #                 sub_tab1, sub_tab2, sub_tab3, sub_tab4 = st.tabs(
-    #                     [
-    #                         "📋 Summary",
-    #                         "➕ New Tables",
-    #                         "➖ Dropped Tables",
-    #                         "🔄 Modified Tables",
-    #                     ]
-    #                 )
-
-    #                 with sub_tab1:
-    #                     col1, col2, col3 = st.columns(3)
-    #                     with col1:
-    #                         st.metric("New Tables", len(differences["new_tables"]))
-    #                     with col2:
-    #                         st.metric(
-    #                             "Dropped Tables", len(differences["dropped_tables"])
-    #                         )
-    #                     with col3:
-    #                         st.metric(
-    #                             "Modified Tables", len(differences["modified_tables"])
-    #                         )
-
-    #                 with sub_tab2:
-    #                     if differences["new_tables"]:
-    #                         for table in differences["new_tables"]:
-    #                             st.code(f"CREATE TABLE: {table}", language="sql")
-    #                     else:
-    #                         st.info("No new tables")
-
-    #                 with sub_tab3:
-    #                     if differences["dropped_tables"]:
-    #                         st.warning("⚠️ Tables in database but NOT in schema:")
-    #                         for table in differences["dropped_tables"]:
-    #                             st.code(
-    #                                 f"TABLE (not in schema): {table}", language="sql"
-    #                             )
-    #                     else:
-    #                         st.info("No dropped tables")
-
-    #                 with sub_tab4:
-    #                     if differences["modified_tables"]:
-    #                         for table, changes in differences[
-    #                             "modified_tables"
-    #                         ].items():
-    #                             with st.expander(f"📝 Table: `{table}`", expanded=True):
-    #                                 if changes["new_columns"]:
-    #                                     st.markdown("**➕ New Columns:**")
-    #                                     for col_name, col_def in changes["new_columns"]:
-    #                                         st.code(
-    #                                             f"ADD: {col_name} {col_def}",
-    #                                             language="sql",
-    #                                         )
-
-    #                                 if changes["modified_columns"]:
-    #                                     st.markdown("**🔄 Modified Columns:**")
-    #                                     for change in changes["modified_columns"]:
-    #                                         st.code(
-    #                                             f"MODIFY: {change['column']}\n  FROM: {change['old_type']}\n  TO:   {change['new_type']}",
-    #                                             language="sql",
-    #                                         )
-
-    #                                 if changes["dropped_columns"]:
-    #                                     st.markdown(
-    #                                         "**ℹ️ Columns in database but NOT in schema:**"
-    #                                     )
-    #                                     for col_name, col_def in changes[
-    #                                         "dropped_columns"
-    #                                     ]:
-    #                                         st.code(
-    #                                             f"NOT IN SCHEMA: {col_name} {col_def}",
-    #                                             language="sql",
-    #                                         )
-    #                     else:
-    #                         st.info("No modified tables")
-
-    #                 st.divider()
-    #                 st.info(
-    #                     "✓ **Safe Update**: Only adds new tables and columns, modifies datatypes. Does NOT delete tables or columns."
-    #                 )
-    #                 st.warning(
-    #                     "⚠️ **WARNING**: This action CANNOT be undone! Ensure you have a backup."
-    #                 )
-
-    #                 col1, col2 = st.columns(2)
-    #                 with col1:
-    #                     if st.button(
-    #                         "✅ Apply Schema Update",
-    #                         key="apply_schema",
-    #                         width='stretch',
-    #                     ):
-    #                         with st.spinner("Applying schema changes..."):
-    #                             success, message = apply_schema_changes(
-    #                                 differences, skip_drop_tables=True
-    #                             )
-    #                             if success:
-    #                                 st.success(message)
-    #                                 st.balloons()
-    #                             else:
-    #                                 st.error(message)
-    #                 with col2:
-    #                     st.info("Updates structure without deleting data")
 
     with tab3:
         st.subheader("Backup Database")
@@ -2133,8 +2641,8 @@ def database_management():
 
 def bot_settings():
     """Manage bot settings from settings.json"""
-    st.header("⚙️ Bot Settings Manager")
-    st.markdown("View and manage all bot configuration settings.")
+    # st.header("Bot Settings Manager")
+    # st.markdown("View and manage all bot configuration settings.")
 
     # Load settings
     settings = load_full_settings()
@@ -2146,11 +2654,11 @@ def bot_settings():
     st.subheader("Select Configuration Category")
 
     categories = {
-        "app": "🔧 General App Settings",
-        "email_sender": "📧 Email Sender",
-        "familybot": "👨‍👩‍👧 Family Bot",
-        "hotmailbot": "🔑 Hotmail Bot",
-        "password_changer": "🔄 Password Changer",
+        "app": "General App Settings",
+        "email_sender": "Email Sender",
+        "familybot": "Family Bot",
+        "hotmailbot": "Hotmail Bot",
+        "password_changer": "Password Changer",
     }
 
     # Initialize session state for category selection
@@ -2226,7 +2734,7 @@ def bot_settings():
 
     # Display info section
     st.divider()
-    st.markdown("### ℹ️ Information")
+    st.markdown("### Information")
 
     info_cols = st.columns(3)
     with info_cols[0]:
@@ -2244,7 +2752,7 @@ def bot_settings():
 
 
 def main():
-    st.set_page_config(page_title="FamilyBot Upload", page_icon="🧾", layout="wide")
+    st.set_page_config(page_title="FamilyBot Upload", layout="wide")
     st.markdown(
         """
         <style>
@@ -2291,11 +2799,21 @@ def main():
             .stMarkdown h1,
             .stMarkdown h2,
             .stMarkdown h3,
-            .stMarkdown span {
-                color: #e5e7eb;
+            .stMarkdown h4,
+            .stMarkdown h5,
+            .stMarkdown h6,
+            .stMarkdown span,
+            .stTextInput label,
+            .stTextArea label,
+            .stSelectbox label,
+            .stNumberInput label,
+            .stRadio label,
+            .stCheckbox label,
+            .stMultiselect label {
+                color: #e5e7eb !important;
             }
-            .css-1d391kg .stMarkdown {
-                color: #e5e7eb;
+            .stApp, .stApp * {
+                color: #e5e7eb !important;
             }
             .stTabs [role="tab"] {
                 color: #cbd5e1;
@@ -2308,7 +2826,7 @@ def main():
     if "selected_page" not in st.session_state:
         st.session_state.selected_page = "Bot Settings"
 
-    st.sidebar.markdown("### 📄 Pages")
+    st.sidebar.markdown("### Pages")
     if st.sidebar.button("Bot Settings", width="stretch"):
         st.session_state.selected_page = "Bot Settings"
     if st.sidebar.button("General Upload", width="stretch"):
@@ -2317,7 +2835,7 @@ def main():
         st.session_state.selected_page = "Email Sender Upload"
     if st.sidebar.button("Stats", width="stretch"):
         st.session_state.selected_page = "Stats"
-    if st.sidebar.button("🗄️ Database Management", width="stretch"):
+    if st.sidebar.button("Database Management", width="stretch"):
         st.session_state.selected_page = "Database Management"
 
     st.sidebar.markdown("---")

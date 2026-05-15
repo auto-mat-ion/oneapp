@@ -4573,7 +4573,7 @@ def affirm_card_is_added(driver, cardholder_name):
             'div[id="input_id"]',
         )
 
-        affirm_element = WebDriverWait(driver, wait_time + 10).until(
+        affirm_element = WebDriverWait(driver, wait_time * 5).until(
             EC.visibility_of_element_located(AFFIRM_ELEMENT)
         )
 
@@ -5580,44 +5580,50 @@ def get_microsoft_premium_old_(driver, new_profile_data):
 
 ########### ENTURUUUUUURU ############
 def get_new_profile_data():
-    try:
-        conn = mysql.connector.connect(
-            host=DB_HOST, user=DB_USER, password=DB_PASSWORD, database=DB_NAME
-        )
-        cursor = conn.cursor()
+    retries = 0
+    while retries < 3:
+        try:
+            conn = mysql.connector.connect(
+                host=DB_HOST, user=DB_USER, password=DB_PASSWORD, database=DB_NAME
+            )
+            cursor = conn.cursor()
 
-        # First, check if there's an existing record in processing_emails for this server and bot type
-        cursor.execute(
-            "SELECT email, pass FROM processing_emails WHERE server_ip = %s AND bot_type = %s LIMIT 1",
-            (SERVER_IP, BOT_TYPE),
-        )
-        row = cursor.fetchone()
-        if row:
-            conn.close()
+            # First, check if there's an existing record in processing_emails for this server and bot type
+            cursor.execute(
+                "SELECT email, pass FROM processing_emails WHERE server_ip = %s AND bot_type = %s LIMIT 1",
+                (SERVER_IP, BOT_TYPE),
+            )
+            row = cursor.fetchone()
+            if row:
+                conn.close()
+                email, password = row
+                print(f"Found existing processing email: {email}")
+                return True, {"email": email, "pass": password}
+
+            # If no existing record, get a new one from input_emails
+            cursor.execute("SELECT email, pass FROM input_emails LIMIT 1")
+            row = cursor.fetchone()
+            if not row:
+                conn.close()
+                return False, {}
             email, password = row
-            print(f"Found existing processing email: {email}")
-            return True, {"email": email, "pass": password}
-
-        # If no existing record, get a new one from input_emails
-        cursor.execute("SELECT email, pass FROM input_emails LIMIT 1")
-        row = cursor.fetchone()
-        if not row:
+            cursor.execute(
+                "INSERT INTO processing_emails (email, pass, server_ip, bot_type, date_time) VALUES (%s, %s,%s, %s, %s)",
+                (email, password, SERVER_IP, BOT_TYPE, datetime.now()),
+            )
+            cursor.execute(
+                "DELETE FROM input_emails WHERE email = %s AND pass = %s",
+                (email, password),
+            )
+            conn.commit()
             conn.close()
-            return False, {}
-        email, password = row
-        cursor.execute(
-            "INSERT INTO processing_emails (email, pass, server_ip, bot_type, date_time) VALUES (%s, %s,%s, %s, %s)",
-            (email, password, SERVER_IP, BOT_TYPE, datetime.now()),
-        )
-        cursor.execute(
-            "DELETE FROM input_emails WHERE email = %s AND pass = %s", (email, password)
-        )
-        conn.commit()
-        conn.close()
-        return True, {"email": email, "pass": password}
-    except Exception as e:
-        print(f"Error getting email from db: {e}")
-        return False, {"email": "", "pass": ""}
+            return True, {"email": email, "pass": password}
+        except Exception as e:
+            print(f"Error getting email from db: {e}. retrying...")
+            retries += 1
+
+    print("Unable to get input email after 3 retries. Most likely no emails")
+    return False, {"email": "", "pass": ""}
 
 
 def get_processing_card():
@@ -6019,12 +6025,15 @@ def initialize_new_profile(new_profile_data):
         else:
             print(f"{email_address}: Country changed successfully")
 
-        print(f"{email_address}: Changing account language to english")
-        status = change_account_language(driver, new_profile_data)
-        if not status:
-            print(f"{email_address}: Error changing account language to english")
-        else:
-            print(f"{email_address}: Account language changed to english successfully")
+        if ["United States", "united states"] in PREFERRED_SMS_COUNTRY:
+            print(f"{email_address}: Changing account language to english")
+            status = change_account_language(driver, new_profile_data)
+            if not status:
+                print(f"{email_address}: Error changing account language to english")
+            else:
+                print(
+                    f"{email_address}: Account language changed to english successfully"
+                )
 
         # return driver
 
