@@ -653,7 +653,7 @@ def load_emails_from_cache_bins():
                     {"email": row_email, "pass": password, "recovery": recovery}
                 )
             else:
-                data.append({"email": row_email, "pass": "", "recovery": ""})
+                data.append({"email": email, "pass": "", "recovery": ""})
                 # st.warning(f"Email {email} not found in accounts_details table")
 
         cursor.close()
