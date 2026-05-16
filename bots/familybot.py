@@ -5136,7 +5136,8 @@ def get_microsoft_premium(driver, new_profile_data):
         return False, f"Error occurred: {E} at step: {current_status}"
     finally:
         try:
-            return_card_to_familybot_card_details(card_details_dict)
+            if current_status != "checking if card is declined":
+                return_card_to_familybot_card_details(card_details_dict)
         except Exception as E:
             print(f"Error returning card to familybot_card_details: {E}")
 
@@ -5689,6 +5690,12 @@ def initialize_new_profile(new_profile_data):
     try:
         print("\n--------------------------------------\n")
         try:
+            while True:
+                card_details_dict = get_processing_card()
+                if card_details_dict:
+                    return_card_to_familybot_card_details(card_details_dict)
+                else:
+                    break
             if not get_next_card():
                 print(
                     "No available cards to use for Microsoft Premium. Check logs/card_usage.log and output_data/fully_used_cards.txt for more info."
@@ -6025,7 +6032,7 @@ def initialize_new_profile(new_profile_data):
         else:
             print(f"{email_address}: Country changed successfully")
 
-        if ["United States", "united states"] in PREFERRED_SMS_COUNTRY:
+        if PREFERRED_SMS_COUNTRY in ["United States", "united states"]:
             print(f"{email_address}: Changing account language to english")
             status = change_account_language(driver, new_profile_data)
             if not status:
