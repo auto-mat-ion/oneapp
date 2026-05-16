@@ -653,7 +653,8 @@ def load_emails_from_cache_bins():
                     {"email": row_email, "pass": password, "recovery": recovery}
                 )
             else:
-                st.warning(f"Email {email} not found in accounts_details table")
+                data.append({"email": row_email, "pass": "", "recovery": ""})
+                # st.warning(f"Email {email} not found in accounts_details table")
 
         cursor.close()
         conn.close()
@@ -2802,18 +2803,11 @@ def main():
             .stMarkdown h4,
             .stMarkdown h5,
             .stMarkdown h6,
-            .stMarkdown span,
-            .stTextInput label,
-            .stTextArea label,
-            .stSelectbox label,
-            .stNumberInput label,
-            .stRadio label,
-            .stCheckbox label,
-            .stMultiselect label {
-                color: #e5e7eb !important;
+            .stMarkdown span {
+                color: #e5e7eb;
             }
-            .stApp, .stApp * {
-                color: #e5e7eb !important;
+            .css-1d391kg .stMarkdown {
+                color: #e5e7eb;
             }
             .stTabs [role="tab"] {
                 color: #cbd5e1;
