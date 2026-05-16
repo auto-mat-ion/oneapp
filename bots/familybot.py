@@ -3804,7 +3804,7 @@ def change_account_country(driver, new_profile_data):
             except Exception as E:
                 retries += 1
                 print(
-                    f"{email} : Exception error changing country: {E}. Retrying... ({retries}/{num_of_retries})"
+                    f"{email} : Exception error changing country. Retrying... ({retries}/{num_of_retries})"
                 )
 
         return False
@@ -4573,7 +4573,7 @@ def affirm_card_is_added(driver, cardholder_name):
             'div[id="input_id"]',
         )
 
-        affirm_element = WebDriverWait(driver, wait_time * 5).until(
+        affirm_element = WebDriverWait(driver, wait_time * 6).until(
             EC.visibility_of_element_located(AFFIRM_ELEMENT)
         )
 
