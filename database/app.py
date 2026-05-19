@@ -1,5 +1,6 @@
 import math
 import os
+import random
 
 import streamlit as st
 import pandas as pd
@@ -814,6 +815,79 @@ def parse_fake_json(uploaded_file):
     return pd.DataFrame(data)
 
 
+def enrich_familybot_card_details(df):
+    if (
+        "country" not in df.columns
+        or df["country"].astype(str).str.strip().eq("").all()
+    ):
+        return (
+            False,
+            "familybot_card_details upload requires a country selection to assign fake details.",
+        )
+
+    country_values = df["country"].astype(str).str.strip().str.lower().unique()
+    if len(country_values) != 1:
+        return (
+            False,
+            "All uploaded familybot_card_details rows must use the same country.",
+        )
+
+    country = country_values[0]
+    conn = get_db_connection()
+    if conn is None:
+        return False, "No database connection available for card enrichment."
+
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT firstnames FROM familybot_first_names WHERE LOWER(country) = %s",
+            (country,),
+        )
+        first_names = [row[0].strip() for row in cursor.fetchall() if row[0]]
+
+        cursor.execute(
+            "SELECT surnames FROM familybot_surnames WHERE LOWER(country) = %s",
+            (country,),
+        )
+        surnames = [row[0].strip() for row in cursor.fetchall() if row[0]]
+
+        cursor.execute(
+            "SELECT address_line1, city, state, postal_code FROM familybot_fake_details WHERE LOWER(country) = %s",
+            (country,),
+        )
+        fake_rows = [
+            {
+                "address_line1": row[0] or "",
+                "city": row[1] or "",
+                "state": row[2] or "",
+                "postal_code": row[3] or "",
+            }
+            for row in cursor.fetchall()
+        ]
+        cursor.close()
+
+        if not first_names:
+            return False, f"No first names found for country '{country}'."
+        if not surnames:
+            return False, f"No surnames found for country '{country}'."
+        if not fake_rows:
+            return False, f"No fake details found for country '{country}'."
+
+        df = df.copy()
+        df["name_on_card"] = [
+            f"{random.choice(first_names)} {random.choice(surnames)}"
+            for _ in range(len(df))
+        ]
+        chosen_fake_rows = [random.choice(fake_rows) for _ in range(len(df))]
+        df["address_line1"] = [item["address_line1"] for item in chosen_fake_rows]
+        df["city"] = [item["city"] for item in chosen_fake_rows]
+        df["state"] = [item["state"] for item in chosen_fake_rows]
+        df["postal_code"] = [item["postal_code"] for item in chosen_fake_rows]
+        return True, df
+    except Exception as exc:
+        return False, str(exc)
+
+
 def insert_into_db(
     table_name, df, server_ip=None, bot_type=None, overwrite=False, chunk_size=10000
 ):
@@ -821,6 +895,11 @@ def insert_into_db(
     if conn is None:
         return False, "No database connection"
     try:
+        if table_name == "familybot_card_details":
+            success, enriched = enrich_familybot_card_details(df)
+            if not success:
+                return False, enriched
+            df = enriched
         cursor = conn.cursor()
         if overwrite and table_name == "sender_link":
             cursor.execute("DELETE FROM sender_link")
@@ -1115,8 +1194,22 @@ def general_uploader():
             st.error(message)
             return
 
-        st.success(message)
-        st.write(f"Rows found: {len(df)}")
+        if table_name == "familybot_card_details":
+            with st.spinner("Getting enriched card details..."):
+                success, enriched_df = enrich_familybot_card_details(df)
+            if not success:
+                st.error(enriched_df)
+                return
+            df = enriched_df
+            st.success("Enriched card details are ready.")
+            st.subheader("Preview top 10 enriched card rows")
+            st.dataframe(df.head(10), width="stretch")
+            st.info(
+                "These rows include the assigned name_on_card, state, city, address_line1, and postal_code."
+            )
+        else:
+            st.success(message)
+            st.write(f"Rows found: {len(df)}")
 
         server_ip = None
         bot_type = None
@@ -1238,7 +1331,7 @@ def email_sender_uploader():
         elif table_name == "sender_link":
             df = parse_text_list(uploaded_file, "link")
         elif table_name == "sender_recipients":
-            df = parse_text_list(uploaded_file, "recipient_email")
+            df = parse_text_list(uploaded_file, "recipient_email").drop_duplicates()
         elif table_name == "sender_subjects":
             df = parse_text_list(uploaded_file, "subject")
         elif table_name == "sender_texts":

@@ -30,18 +30,41 @@ THE_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
 def get_db_connection():
-    try:
-        return mysql.connector.connect(
-            host=DB_HOST,
-            user=DB_USER,
-            password=DB_PASSWORD,
-            database=DB_NAME,
-            charset="utf8mb4",
-            use_unicode=True,
-        )
-    except Exception as exc:
-        print(f"Unable to connect to database: {exc}")
-        return None
+    retries = 0
+    while retries <= 5:
+        try:
+            return mysql.connector.connect(
+                host=DB_HOST,
+                user=DB_USER,
+                password=DB_PASSWORD,
+                database=DB_NAME,
+                charset="utf8mb4",
+                use_unicode=True,
+            )
+        except Exception as exc:
+            print(
+                f"Database connection failed (attempt {retries + 1}/5): {exc}. Retrying connection in 5 seconds..."
+            )
+            time.sleep(5)
+        retries += 1
+
+    print(f"Unable to connect to database after {retries} attempts.")
+    return None
+
+
+def execute_db_action(action, retries=3, delay=5):
+    attempt = 1
+    while attempt <= retries:
+        try:
+            return action()
+        except Exception as exc:
+            if attempt == retries:
+                raise
+            print(
+                f"Database write failed (attempt {attempt}/{retries}): {exc}. Retrying in {delay} seconds..."
+            )
+            time.sleep(delay)
+            attempt += 1
 
 
 def load_familybot_settings():
@@ -1503,43 +1526,50 @@ def successfully_worked_links(link):
 
 
 def processed_email(email_data):
-    try:
+    def db_action():
         import mysql.connector
 
-        conn = mysql.connector.connect(
-            host=DB_HOST, user=DB_USER, password=DB_PASSWORD, database=DB_NAME
-        )
-        cursor = conn.cursor()
+        conn = None
+        try:
+            conn = mysql.connector.connect(
+                host=DB_HOST, user=DB_USER, password=DB_PASSWORD, database=DB_NAME
+            )
+            cursor = conn.cursor()
 
-        # Insert into processed_emails
-        insert_query = """
-        INSERT INTO processed_emails (server_ip, bot_type,date_time, email, pass)
-        VALUES (%s, %s, %s, %s, %s)
-        """
-        cursor.execute(
-            insert_query,
-            (
-                SERVER_IP,
-                BOT_TYPE,
-                datetime.now(),
-                email_data.get("email"),
-                email_data.get("pass"),
-            ),
-        )
+            # Insert into processed_emails
+            insert_query = """
+            INSERT INTO processed_emails (server_ip, bot_type,date_time, email, pass)
+            VALUES (%s, %s, %s, %s, %s)
+            """
+            cursor.execute(
+                insert_query,
+                (
+                    SERVER_IP,
+                    BOT_TYPE,
+                    datetime.now(),
+                    email_data.get("email"),
+                    email_data.get("pass"),
+                ),
+            )
 
-        # Delete from processing_emails
-        delete_query = """
-        DELETE FROM processing_emails
-        WHERE server_ip = %s AND bot_type = %s AND email = %s 
-        """
-        cursor.execute(
-            delete_query,
-            (SERVER_IP, BOT_TYPE, email_data.get("email")),
-        )
+            # Delete from processing_emails
+            delete_query = """
+            DELETE FROM processing_emails
+            WHERE server_ip = %s AND bot_type = %s AND email = %s 
+            """
+            cursor.execute(
+                delete_query,
+                (SERVER_IP, BOT_TYPE, email_data.get("email")),
+            )
 
-        conn.commit()
-        cursor.close()
-        conn.close()
+            conn.commit()
+            cursor.close()
+        finally:
+            if conn is not None:
+                conn.close()
+
+    try:
+        execute_db_action(db_action)
     except Exception as e:
         print(f"Error in processed_email: {e}")
         pass
@@ -2727,17 +2757,26 @@ def new_profile_logger_old(email, status, error):
 
 def new_profile_logger(email, status, error):
     with lock:
+
+        def db_action():
+            conn = None
+            try:
+                conn = mysql.connector.connect(
+                    host=DB_HOST, user=DB_USER, password=DB_PASSWORD, database=DB_NAME
+                )
+                cursor = conn.cursor()
+                cursor.execute(
+                    "INSERT INTO signin_log (server_ip, bot_type, email_acc, log_time, status, error) VALUES (%s, %s, %s, %s, %s, %s)",
+                    (SERVER_IP, BOT_TYPE, email, datetime.now(), status, error),
+                )
+                conn.commit()
+                cursor.close()
+            finally:
+                if conn is not None:
+                    conn.close()
+
         try:
-            conn = mysql.connector.connect(
-                host=DB_HOST, user=DB_USER, password=DB_PASSWORD, database=DB_NAME
-            )
-            cursor = conn.cursor()
-            cursor.execute(
-                "INSERT INTO signin_log (server_ip, bot_type, email_acc, log_time, status, error) VALUES (%s, %s, %s, %s, %s, %s)",
-                (SERVER_IP, BOT_TYPE, email, datetime.now(), status, error),
-            )
-            conn.commit()
-            conn.close()
+            execute_db_action(db_action)
             return True
         except:
             return False
@@ -2840,97 +2879,113 @@ def update_accounts_data(
     if not email:
         return False
 
-    try:
-        conn = mysql.connector.connect(
-            host=DB_HOST, user=DB_USER, password=DB_PASSWORD, database=DB_NAME
-        )
-        cursor = conn.cursor()
-
-        # Check if email exists
-        cursor.execute(
-            "SELECT account_id FROM accounts_details WHERE email_acc = %s", (email,)
-        )
-        result = cursor.fetchone()
-
-        if result:
-            # Update existing record
-            update_fields = []
-            update_values = []
-
-            if password is not None:
-                update_fields.append("password = %s")
-                update_values.append(password)
-            if profile_dir is not None:
-                update_fields.append("profile_dir = %s")
-                update_values.append(profile_dir)
-            if join_time_microsoft_premium is not None:
-                update_fields.append("join_time_microsoft_premium = %s")
-                update_values.append(datetime.now())
-            if date_time is not None:
-                update_fields.append("date_time = %s")
-                update_values.append(datetime.now())
-
-            if proxy_used is not None:
-                update_fields.append("proxy_used = %s")
-                update_values.append(proxy_used)
-            if has_recovery_email is not None:
-                update_fields.append("has_recovery_email = %s")
-                update_values.append(str(has_recovery_email))
-            if recovery_email is not None:
-                update_fields.append("recovery_email = %s")
-                update_values.append(recovery_email)
-            if has_recovery_phone is not None:
-                update_fields.append("has_recovery_phone = %s")
-                update_values.append(str(has_recovery_phone))
-            if recovery_phone_number is not None:
-                update_fields.append("recovery_phone_number = %s")
-                update_values.append(recovery_phone_number)
-            if joined_microsoft_premium is not None:
-                update_fields.append("joined_microsoft_premium = %s")
-                update_values.append(str(joined_microsoft_premium))
-            if has_bitly_account is not None:
-                update_fields.append("has_bitly_account = %s")
-                update_values.append(str(has_bitly_account))
-            if bitly_acc_password is not None:
-                update_fields.append("bitly_acc_password = %s")
-                update_values.append(bitly_acc_password)
-            if save_smtp:
-                update_fields.append("save_smtp = %s")
-                update_values.append(save_smtp)
-
-            if update_fields:
-                update_values.append(email)
-                query = f"UPDATE accounts_details SET {', '.join(update_fields)} WHERE email_acc = %s"
-                cursor.execute(query, tuple(update_values))
-        else:
-            # Insert new record
-            cursor.execute(
-                "INSERT INTO accounts_details (server_ip, bot_type, date_time, email_acc, password, profile_dir, proxy_used, country, has_recovery_email, recovery_email, has_recovery_phone, recovery_phone_number, joined_microsoft_premium,join_time_microsoft_premium, has_bitly_account, bitly_acc_password, save_smtp) VALUES (%s, %s, %s, %s, %s,%s,%s, %s, %s, %s, %s, %s, %s,%s, %s, %s, %s)",
-                (
-                    SERVER_IP,
-                    BOT_TYPE,
-                    datetime.now(),
-                    email,
-                    password,
-                    profile_dir,
-                    proxy_used,
-                    PREFERRED_SMS_COUNTRY,
-                    str(has_recovery_email) if has_recovery_email is not None else None,
-                    recovery_email,
-                    str(has_recovery_phone) if has_recovery_phone is not None else None,
-                    recovery_phone_number,
-                    str(joined_microsoft_premium)
-                    if joined_microsoft_premium is not None
-                    else None,
-                    datetime.now() if join_time_microsoft_premium is not None else None,
-                    str(has_bitly_account) if has_bitly_account is not None else None,
-                    bitly_acc_password,
-                    save_smtp,
-                ),
+    def db_action():
+        conn = None
+        try:
+            conn = mysql.connector.connect(
+                host=DB_HOST, user=DB_USER, password=DB_PASSWORD, database=DB_NAME
             )
+            cursor = conn.cursor()
 
-        conn.commit()
-        conn.close()
+            # Check if email exists
+            cursor.execute(
+                "SELECT account_id FROM accounts_details WHERE email_acc = %s", (email,)
+            )
+            result = cursor.fetchone()
+
+            if result:
+                # Update existing record
+                update_fields = []
+                update_values = []
+
+                if password is not None:
+                    update_fields.append("password = %s")
+                    update_values.append(password)
+                if profile_dir is not None:
+                    update_fields.append("profile_dir = %s")
+                    update_values.append(profile_dir)
+                if join_time_microsoft_premium is not None:
+                    update_fields.append("join_time_microsoft_premium = %s")
+                    update_values.append(datetime.now())
+                if date_time is not None:
+                    update_fields.append("date_time = %s")
+                    update_values.append(datetime.now())
+
+                if proxy_used is not None:
+                    update_fields.append("proxy_used = %s")
+                    update_values.append(proxy_used)
+                if has_recovery_email is not None:
+                    update_fields.append("has_recovery_email = %s")
+                    update_values.append(str(has_recovery_email))
+                if recovery_email is not None:
+                    update_fields.append("recovery_email = %s")
+                    update_values.append(recovery_email)
+                if has_recovery_phone is not None:
+                    update_fields.append("has_recovery_phone = %s")
+                    update_values.append(str(has_recovery_phone))
+                if recovery_phone_number is not None:
+                    update_fields.append("recovery_phone_number = %s")
+                    update_values.append(recovery_phone_number)
+                if joined_microsoft_premium is not None:
+                    update_fields.append("joined_microsoft_premium = %s")
+                    update_values.append(str(joined_microsoft_premium))
+                if has_bitly_account is not None:
+                    update_fields.append("has_bitly_account = %s")
+                    update_values.append(str(has_bitly_account))
+                if bitly_acc_password is not None:
+                    update_fields.append("bitly_acc_password = %s")
+                    update_values.append(bitly_acc_password)
+                if save_smtp:
+                    update_fields.append("save_smtp = %s")
+                    update_values.append(save_smtp)
+
+                if update_fields:
+                    update_values.append(email)
+                    query = f"UPDATE accounts_details SET {', '.join(update_fields)} WHERE email_acc = %s"
+                    cursor.execute(query, tuple(update_values))
+            else:
+                # Insert new record
+                cursor.execute(
+                    "INSERT INTO accounts_details (server_ip, bot_type, date_time, email_acc, password, profile_dir, proxy_used, country, has_recovery_email, recovery_email, has_recovery_phone, recovery_phone_number, joined_microsoft_premium,join_time_microsoft_premium, has_bitly_account, bitly_acc_password, save_smtp) VALUES (%s, %s, %s, %s, %s,%s,%s, %s, %s, %s, %s, %s, %s,%s, %s, %s, %s)",
+                    (
+                        SERVER_IP,
+                        BOT_TYPE,
+                        datetime.now(),
+                        email,
+                        password,
+                        profile_dir,
+                        proxy_used,
+                        PREFERRED_SMS_COUNTRY,
+                        str(has_recovery_email)
+                        if has_recovery_email is not None
+                        else None,
+                        recovery_email,
+                        str(has_recovery_phone)
+                        if has_recovery_phone is not None
+                        else None,
+                        recovery_phone_number,
+                        str(joined_microsoft_premium)
+                        if joined_microsoft_premium is not None
+                        else None,
+                        datetime.now()
+                        if join_time_microsoft_premium is not None
+                        else None,
+                        str(has_bitly_account)
+                        if has_bitly_account is not None
+                        else None,
+                        bitly_acc_password,
+                        save_smtp,
+                    ),
+                )
+
+            conn.commit()
+            return True
+        finally:
+            if conn is not None:
+                conn.close()
+
+    try:
+        execute_db_action(db_action)
         return True
     except Exception as e:
         print(f"Error saving to accounts table: {e}")
@@ -3579,7 +3634,7 @@ def change_timezone(driver):
             'div[class="Xut6I"]>button',
         )
 
-        tz_edit_button = WebDriverWait(driver, wait_time * 2).until(
+        tz_edit_button = WebDriverWait(driver, wait_time * 5).until(
             EC.element_to_be_clickable(TZ_EDIT_BUTTON_ELEMENT)
         )
 
@@ -3825,6 +3880,8 @@ def change_account_language(driver, new_profile_data):
                     "https://outlook.live.com/mail/options/general/timeAndLanguage"
                 )
 
+                driver.get(language_url)
+                time.sleep(2)
                 driver.get(language_url)
 
                 # login_on_country_page(driver, new_profile_data)
@@ -4081,74 +4138,81 @@ def get_creditcard_details():
     )
     cards = cursor.fetchall()
 
-    # Get first names for preferred country
-    cursor.execute(
-        "SELECT firstnames FROM familybot_first_names WHERE LOWER(country) = %s",
-        (PREFERRED_SMS_COUNTRY,),
-    )
-    first_names = [row["firstnames"] for row in cursor.fetchall()]
+    # # Get first names for preferred country
+    # cursor.execute(
+    #     "SELECT firstnames FROM familybot_first_names WHERE LOWER(country) = %s",
+    #     (PREFERRED_SMS_COUNTRY,),
+    # )
+    # first_names = [row["firstnames"] for row in cursor.fetchall()]
 
-    # Get surnames for preferred country
-    cursor.execute(
-        "SELECT surnames FROM familybot_surnames WHERE LOWER(country) = %s",
-        (PREFERRED_SMS_COUNTRY,),
-    )
-    surnames = [row["surnames"] for row in cursor.fetchall()]
+    # # Get surnames for preferred country
+    # cursor.execute(
+    #     "SELECT surnames FROM familybot_surnames WHERE LOWER(country) = %s",
+    #     (PREFERRED_SMS_COUNTRY,),
+    # )
+    # surnames = [row["surnames"] for row in cursor.fetchall()]
 
-    # Get fake details for preferred country
-    cursor.execute(
-        "SELECT * FROM familybot_fake_details WHERE LOWER(country) = %s",
-        (PREFERRED_SMS_COUNTRY,),
-    )
-    locations = cursor.fetchall()
+    # # Get fake details for preferred country
+    # cursor.execute(
+    #     "SELECT * FROM familybot_fake_details WHERE LOWER(country) = %s",
+    #     (PREFERRED_SMS_COUNTRY,),
+    # )
+    # locations = cursor.fetchall()
 
     conn.close()
 
     cards_data = []
     for card in cards:
-        random_location = random.choice(locations) if locations else {}
-        random_name = random.choice(first_names) + " " + random.choice(surnames)
+        # random_location = random.choice(locations) if locations else {}
+        # random_name = random.choice(first_names) + " " + random.choice(surnames)
 
         cards_data.append(
             {
-                "name_on_card": random_name,
+                "name_on_card": card["name_on_card"].strip(),
                 "card_number": str(card["card_number"]).replace(" ", ""),
                 "expiry_month": card["expiry_month_year"].strip().split("/")[0].strip(),
                 "expiry_year": "20"
                 + card["expiry_month_year"].strip().split("/")[1].strip(),
                 "cvv": card["cvv"],
-                "address_line1": random_location.get("address_line1", ""),
-                "city": random_location.get("city", ""),
-                "state": random_location.get("state", ""),
-                "postal_code": random_location.get("postal_code", ""),
+                "address_line1": card["address_line1"].strip(),
+                "city": card["city"].strip(),
+                "state": card["state"].strip(),
+                "postal_code": card["postal_code"].strip(),
             }
         )
     return cards_data
 
 
 def log_card_usage(card_details):
-    conn = mysql.connector.connect(
-        host=DB_HOST, user=DB_USER, password=DB_PASSWORD, database=DB_NAME
-    )
-    cursor = conn.cursor()
-    timestamp = datetime.now()
-    card_number = card_details.get("card_number")
-    expiry = f"{card_details.get('expiry_month')}/{card_details.get('expiry_year')[2:]}"  # MM/YY
-    cvv = card_details.get("cvv")
-    cursor.execute(
-        "INSERT INTO familybot_card_usage_log (server_ip, bot_type, use_datetime, card_num, `exp_month/year`, cvv, country) VALUES (%s, %s, %s, %s, %s, %s, %s)",
-        (
-            SERVER_IP,
-            BOT_TYPE,
-            timestamp,
-            card_number,
-            expiry,
-            cvv,
-            PREFERRED_SMS_COUNTRY,
-        ),
-    )
-    conn.commit()
-    conn.close()
+    def db_action():
+        conn = None
+        try:
+            conn = mysql.connector.connect(
+                host=DB_HOST, user=DB_USER, password=DB_PASSWORD, database=DB_NAME
+            )
+            cursor = conn.cursor()
+            timestamp = datetime.now()
+            card_number = card_details.get("card_number")
+            expiry = f"{card_details.get('expiry_month')}/{card_details.get('expiry_year')[2:]}"  # MM/YY
+            cvv = card_details.get("cvv")
+            cursor.execute(
+                "INSERT INTO familybot_card_usage_log (server_ip, bot_type, use_datetime, card_num, `exp_month/year`, cvv, country) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                (
+                    SERVER_IP,
+                    BOT_TYPE,
+                    timestamp,
+                    card_number,
+                    expiry,
+                    cvv,
+                    PREFERRED_SMS_COUNTRY,
+                ),
+            )
+            conn.commit()
+        finally:
+            if conn is not None:
+                conn.close()
+
+    execute_db_action(db_action)
 
 
 def mark_card_failed_old(card_details):
@@ -4238,85 +4302,86 @@ def mark_card_failed_old(card_details):
 
 
 def mark_card_failed(card_details):
-    conn = mysql.connector.connect(
-        host=DB_HOST, user=DB_USER, password=DB_PASSWORD, database=DB_NAME
-    )
-    cursor = conn.cursor(dictionary=True)
+    def db_action():
+        conn = None
+        try:
+            conn = mysql.connector.connect(
+                host=DB_HOST, user=DB_USER, password=DB_PASSWORD, database=DB_NAME
+            )
+            cursor = conn.cursor(dictionary=True)
 
-    failure_reason = "failed"
-    try:
-        card_number = card_details.get("card_number")
-        expiry = (
-            f"{card_details.get('expiry_month')}/{card_details.get('expiry_year')[2:]}"
-        )
-        cvv = card_details.get("cvv")
+            failure_reason = "failed"
+            try:
+                card_number = card_details.get("card_number")
+                expiry = f"{card_details.get('expiry_month')}/{card_details.get('expiry_year')[2:]}"
+                cvv = card_details.get("cvv")
 
-        # Get logs from DB
-        cursor.execute(
-            "SELECT use_datetime FROM familybot_card_usage_log WHERE LOWER(country) = %s AND card_num = %s AND `exp_month/year` = %s AND cvv = %s ORDER BY use_datetime",
-            (PREFERRED_SMS_COUNTRY, card_number, expiry, cvv),
-        )
-        logs = cursor.fetchall()
-        timestamps = [row["use_datetime"] for row in logs]
-
-        uses = len(timestamps)
-        if uses == 0:
-            failure_reason = "failed on first attempt"
-        elif uses == 1:
-            failure_reason = "failed on second attempt"
-        elif uses == 2:
-            if timestamps:
-                elapsed_hrs = (
-                    datetime.now() - max(timestamps)
-                ).total_seconds() / 3600.0
-                failure_reason = (
-                    f"failed on third attempt after waiting {elapsed_hrs:.1f} hrs"
+                # Get logs from DB
+                cursor.execute(
+                    "SELECT use_datetime FROM familybot_card_usage_log WHERE LOWER(country) = %s AND card_num = %s AND `exp_month/year` = %s AND cvv = %s ORDER BY use_datetime",
+                    (PREFERRED_SMS_COUNTRY, card_number, expiry, cvv),
                 )
-            else:
-                failure_reason = "failed on third attempt"
-        elif uses == 3:
-            failure_reason = "failed after 4 times"
-        elif uses == 4:
-            if timestamps:
-                elapsed_hrs = (
-                    datetime.now() - max(timestamps)
-                ).total_seconds() / 3600.0
-                failure_reason = (
-                    f"failed on fifth attempt after waiting {elapsed_hrs:.1f} hrs"
-                )
-            else:
-                failure_reason = "failed after 4 times"
-        else:
-            failure_reason = f"failed after {uses + 1} attempts"
-    except:
-        failure_reason = "failed"
+                logs = cursor.fetchall()
+                timestamps = [row["use_datetime"] for row in logs]
 
-    # Insert into familybot_failed_cards
-    card_number = card_details.get("card_number")
-    expiry = f"{card_details.get('expiry_month')}/{card_details.get('expiry_year')[2:]}"
-    cvv = card_details.get("cvv")
-    cursor.execute(
-        "INSERT INTO familybot_failed_cards (server_ip, bot_type,date_time, card_number, expiry_month_year, cvv, country, reason_for_fail) VALUES (%s, %s,%s, %s, %s, %s, %s, %s)",
-        (
-            SERVER_IP,
-            BOT_TYPE,
-            datetime.now(),
-            card_number,
-            expiry,
-            cvv,
-            PREFERRED_SMS_COUNTRY,
-            failure_reason,
-        ),
-    )
+                uses = len(timestamps)
+                if uses == 0:
+                    failure_reason = "failed on first attempt"
+                elif uses == 1:
+                    failure_reason = "failed on second attempt"
+                elif uses == 2:
+                    if timestamps:
+                        elapsed_hrs = (
+                            datetime.now() - max(timestamps)
+                        ).total_seconds() / 3600.0
+                        failure_reason = f"failed on third attempt after waiting {elapsed_hrs:.1f} hrs"
+                    else:
+                        failure_reason = "failed on third attempt"
+                elif uses == 3:
+                    failure_reason = "failed after 4 times"
+                elif uses == 4:
+                    if timestamps:
+                        elapsed_hrs = (
+                            datetime.now() - max(timestamps)
+                        ).total_seconds() / 3600.0
+                        failure_reason = f"failed on fifth attempt after waiting {elapsed_hrs:.1f} hrs"
+                    else:
+                        failure_reason = "failed after 4 times"
+                else:
+                    failure_reason = f"failed after {uses + 1} attempts"
+            except:
+                failure_reason = "failed"
 
-    # Remove from processing_card_details
-    cursor.execute(
-        "DELETE FROM processing_card_details WHERE card_number = %s AND expiry_month_year = %s AND cvv = %s",
-        (card_number, expiry, cvv),
-    )
+            # Insert into familybot_failed_cards
+            card_number = card_details.get("card_number")
+            expiry = f"{card_details.get('expiry_month')}/{card_details.get('expiry_year')[2:]}"
+            cvv = card_details.get("cvv")
+            cursor.execute(
+                "INSERT INTO familybot_failed_cards (server_ip, bot_type,date_time, card_number, expiry_month_year, cvv, country, reason_for_fail) VALUES (%s, %s,%s, %s, %s, %s, %s, %s)",
+                (
+                    SERVER_IP,
+                    BOT_TYPE,
+                    datetime.now(),
+                    card_number,
+                    expiry,
+                    cvv,
+                    PREFERRED_SMS_COUNTRY,
+                    failure_reason,
+                ),
+            )
 
-    conn.commit()
-    conn.close()
+            # Remove from processing_card_details
+            cursor.execute(
+                "DELETE FROM processing_card_details WHERE card_number = %s AND expiry_month_year = %s AND cvv = %s",
+                (card_number, expiry, cvv),
+            )
+
+            conn.commit()
+        finally:
+            if conn is not None:
+                conn.close()
+
+    execute_db_action(db_action)
 
 
 def get_next_card_old():
@@ -4412,106 +4477,119 @@ def get_next_card_old():
 
 
 def get_next_card():
-    conn = mysql.connector.connect(
-        host=DB_HOST, user=DB_USER, password=DB_PASSWORD, database=DB_NAME
-    )
-    cursor = conn.cursor(dictionary=True)
-
-    all_cards = get_creditcard_details()
-
-    # Load usage log from DB for preferred country only
-    cursor.execute(
-        "SELECT card_num, `exp_month/year`, cvv, use_datetime FROM familybot_card_usage_log WHERE LOWER(country) = %s",
-        (PREFERRED_SMS_COUNTRY,),
-    )
-    usage_rows = cursor.fetchall()
-    usage = {}
-    for row in usage_rows:
-        key = (str(row["card_num"]), row["exp_month/year"], str(row["cvv"]))
-        if key not in usage:
-            usage[key] = []
-        usage[key].append(row["use_datetime"])
-
-    # Now, for each card, check if can use
-    available_cards = []
-    fully_used = []
-
-    for card in all_cards:
-        card_num = card["card_number"]
-        expiry = f"{card['expiry_month']}/{card['expiry_year'][2:]}"  # MM/YY
-        cvv = card["cvv"]
-        key = (card_num, expiry, cvv)
-        timestamps = sorted(usage.get(key, []))
-        uses = len(timestamps)
-        now = datetime.now()
-        can_use = False
-        if uses >= 5:
-            fully_used.append(card)
-            continue
-        elif uses in [0, 1, 3]:
-            can_use = True
-        elif uses == 2:
-            if timestamps and now > timestamps[-1] + timedelta(
-                hours=CREDIT_CARD_INTERVAL_HRS
-            ):
-                can_use = True
-        elif uses == 4:
-            if timestamps and now > timestamps[-1] + timedelta(
-                hours=CREDIT_CARD_INTERVAL_HRS
-            ):
-                can_use = True
-        if can_use:
-            available_cards.append(card)
-
-    # For fully used, insert into familybot_fully_used_cards and delete from familybot_card_details
-    for card in fully_used:
-        expiry = f"{card['expiry_month']}/{card['expiry_year'][2:]}"
-        cursor.execute(
-            "INSERT INTO familybot_fully_used_cards (server_ip, bot_type,date_time, card_number, expiry_month_year, cvv, country) VALUES (%s, %s,%s, %s, %s, %s, %s)",
-            (
-                SERVER_IP,
-                BOT_TYPE,
-                datetime.now(),
-                card["card_number"],
-                expiry,
-                card["cvv"],
-                card.get("country", PREFERRED_SMS_COUNTRY),
-            ),
+    def db_action():
+        conn = mysql.connector.connect(
+            host=DB_HOST, user=DB_USER, password=DB_PASSWORD, database=DB_NAME
         )
-        cursor.execute(
-            "DELETE FROM familybot_card_details WHERE card_number = %s AND expiry_month_year = %s AND cvv = %s",
-            (card["card_number"], expiry, card["cvv"]),
-        )
+        try:
+            cursor = conn.cursor(dictionary=True)
 
-    # Return the first available card, move to processing_card_details
-    if available_cards:
-        card = available_cards[0]
-        expiry = f"{card['expiry_month']}/{card['expiry_year'][2:]}"
-        cursor.execute(
-            "INSERT INTO processing_card_details (server_ip, bot_type,date_time,name_on_card, card_number, expiry_month_year, cvv, address_line1, city, state, postal_code) VALUES (%s, %s, %s,%s, %s,%s, %s, %s, %s, %s, %s)",
-            (
-                SERVER_IP,
-                BOT_TYPE,
-                datetime.now(),
-                card["name_on_card"],
-                card["card_number"],
-                expiry,
-                card["cvv"],
-                card["address_line1"],
-                card["city"],
-                card["state"],
-                card["postal_code"],
-            ),
-        )
-        cursor.execute(
-            "DELETE FROM familybot_card_details WHERE card_number = %s AND expiry_month_year = %s AND cvv = %s",
-            (card["card_number"], expiry, card["cvv"]),
-        )
-        conn.commit()
-        conn.close()
-        return card
-    else:
-        conn.close()
+            all_cards = get_creditcard_details()
+
+            # Load usage log from DB for preferred country only
+            cursor.execute(
+                "SELECT card_num, `exp_month/year`, cvv, use_datetime FROM familybot_card_usage_log WHERE LOWER(country) = %s",
+                (PREFERRED_SMS_COUNTRY,),
+            )
+            usage_rows = cursor.fetchall()
+            usage = {}
+            for row in usage_rows:
+                key = (str(row["card_num"]), row["exp_month/year"], str(row["cvv"]))
+                if key not in usage:
+                    usage[key] = []
+                usage[key].append(row["use_datetime"])
+
+            # Now, for each card, check if can use
+            available_cards = []
+            fully_used = []
+
+            for card in all_cards:
+                card_num = card["card_number"]
+                expiry = f"{card['expiry_month']}/{card['expiry_year'][2:]}"  # MM/YY
+                cvv = card["cvv"]
+                key = (card_num, expiry, cvv)
+                timestamps = sorted(usage.get(key, []))
+                uses = len(timestamps)
+                now = datetime.now()
+                can_use = False
+                if uses >= 5:
+                    fully_used.append(card)
+                    continue
+                elif uses in [0, 1, 3]:
+                    can_use = True
+                elif uses == 2:
+                    if timestamps and now > timestamps[-1] + timedelta(
+                        hours=CREDIT_CARD_INTERVAL_HRS
+                    ):
+                        can_use = True
+                elif uses == 4:
+                    if timestamps and now > timestamps[-1] + timedelta(
+                        hours=CREDIT_CARD_INTERVAL_HRS
+                    ):
+                        can_use = True
+                if can_use:
+                    available_cards.append(card)
+
+            # For fully used, insert into familybot_fully_used_cards and delete from familybot_card_details
+            for card in fully_used:
+                expiry = f"{card['expiry_month']}/{card['expiry_year'][2:]}"
+                cursor.execute(
+                    "INSERT INTO familybot_fully_used_cards (server_ip, bot_type,date_time, card_number, expiry_month_year, cvv, country, name_on_card, address_line1, city, postal_code, state) VALUES (%s, %s,%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                    (
+                        SERVER_IP,
+                        BOT_TYPE,
+                        datetime.now(),
+                        card["card_number"],
+                        expiry,
+                        card["cvv"],
+                        card.get("country", PREFERRED_SMS_COUNTRY),
+                        card["name_on_card"],
+                        card["address_line1"],
+                        card["city"],
+                        card["postal_code"],
+                        card["state"],
+                    ),
+                )
+                cursor.execute(
+                    "DELETE FROM familybot_card_details WHERE card_number = %s AND expiry_month_year = %s AND cvv = %s",
+                    (card["card_number"], expiry, card["cvv"]),
+                )
+
+            # Return the first available card, move to processing_card_details
+            if available_cards:
+                card = available_cards[0]
+                expiry = f"{card['expiry_month']}/{card['expiry_year'][2:]}"
+                cursor.execute(
+                    "INSERT INTO processing_card_details (server_ip, bot_type,date_time,name_on_card, card_number, expiry_month_year, cvv, address_line1, city, state, postal_code) VALUES (%s, %s, %s,%s, %s,%s, %s, %s, %s, %s, %s)",
+                    (
+                        SERVER_IP,
+                        BOT_TYPE,
+                        datetime.now(),
+                        card["name_on_card"],
+                        card["card_number"],
+                        expiry,
+                        card["cvv"],
+                        card["address_line1"],
+                        card["city"],
+                        card["state"],
+                        card["postal_code"],
+                    ),
+                )
+                cursor.execute(
+                    "DELETE FROM familybot_card_details WHERE card_number = %s AND expiry_month_year = %s AND cvv = %s",
+                    (card["card_number"], expiry, card["cvv"]),
+                )
+                conn.commit()
+                return card
+            else:
+                return None
+        finally:
+            conn.close()
+
+    try:
+        return execute_db_action(db_action)
+    except Exception as e:
+        print(f"Error in get_next_card: {e}")
         return None
 
 
@@ -4557,7 +4635,7 @@ def credit_card_is_declined(driver):
             'span[data-automation-id="error-message"]',
         )
 
-        error_element = WebDriverWait(driver, wait_time + 5).until(
+        error_element = WebDriverWait(driver, wait_time * 2).until(
             EC.visibility_of_all_elements_located(SIGNIN_ELEMENT)
         )
 
@@ -4573,7 +4651,7 @@ def affirm_card_is_added(driver, cardholder_name):
             'div[id="input_id"]',
         )
 
-        affirm_element = WebDriverWait(driver, wait_time * 6).until(
+        affirm_element = WebDriverWait(driver, wait_time * 15).until(
             EC.visibility_of_element_located(AFFIRM_ELEMENT)
         )
 
@@ -4626,36 +4704,167 @@ def store_extracted_link(new_profile_data, link):
         # with open("output_data/extracted_family_links_pure.txt", "a") as f:
         #     f.write(f"{link}\n")
 
+        def db_action():
+            conn = None
+            try:
+                conn = mysql.connector.connect(
+                    host=DB_HOST,
+                    user=DB_USER,
+                    password=DB_PASSWORD,
+                    database=DB_NAME,
+                )
+                cursor = conn.cursor()
+                cursor.execute(
+                    "INSERT INTO familybot_extracted_family_links (server_ip, bot_type, date_time, email, pass, recovery, link, country) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+                    (
+                        SERVER_IP,
+                        BOT_TYPE,
+                        datetime.now(),
+                        email,
+                        password,
+                        recovery_email,
+                        link,
+                        PREFERRED_SMS_COUNTRY,
+                    ),
+                )
+                conn.commit()
+            finally:
+                if conn is not None:
+                    conn.close()
+
         try:
-            conn = mysql.connector.connect(
-                host=DB_HOST,
-                user=DB_USER,
-                password=DB_PASSWORD,
-                database=DB_NAME,
-            )
-            cursor = conn.cursor()
-            cursor.execute(
-                "INSERT INTO familybot_extracted_family_links (server_ip, bot_type, date_time, email, pass, recovery, link, country) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
-                (
-                    SERVER_IP,
-                    BOT_TYPE,
-                    datetime.now(),
-                    email,
-                    password,
-                    recovery_email,
-                    link,
-                    PREFERRED_SMS_COUNTRY,
-                ),
-            )
-            conn.commit()
-            cursor.close()
-            conn.close()
+            execute_db_action(db_action)
         except Exception as db_e:
             print(
                 f"Error inserting extracted link into DB for {email}. Link: {link}\nDB Error: {db_e}"
             )
     except Exception as E:
         print(f"Error storing extracted link for {email}. Link: {link}\nError: {E}")
+
+
+def add_billing(driver, new_profile_data, card_details_dict):
+    try:
+        ADDRESS_LINE1_ELEMENT = (
+            By.CSS_SELECTOR,
+            'input[id="address_line1"]',
+        )
+        CITY_ELEMENT = (
+            By.CSS_SELECTOR,
+            'input[id="city"]',
+        )
+        STATE_CLICK_ELEMENT = (
+            By.CSS_SELECTOR,
+            'div[id="input_region"]',
+        )
+
+        STATE_OPTIONS_ELEMENT = (
+            By.CSS_SELECTOR,
+            'button[id*="input_region-list"]',
+        )
+
+        POSTAL_CODE_ELEMENT = (
+            By.CSS_SELECTOR,
+            'input[id="postal_code"]',
+        )
+
+        SAVE_BUTTON_ELEMENT = (
+            By.CSS_SELECTOR,
+            'button[aria-label="Save"]',
+        )
+
+        ADD_BILLING_ADDRESS_BTN = (
+            By.CSS_SELECTOR,
+            'button[aria-label="Add billing address"]',
+        )
+
+        billing_address = WebDriverWait(driver, wait_time).until(
+            EC.visibility_of_element_located(ADD_BILLING_ADDRESS_BTN)
+        )
+
+        if "add billing address" in billing_address.text.lower():
+            print("Billing address Required. Filling details...")
+            billing_address.click()
+            time.sleep(1)
+        else:
+            return True
+
+        email_address = new_profile_data.get("email")
+
+        current_status = "entering address line 1"
+
+        address_line1_element = WebDriverWait(driver, wait_time).until(
+            EC.visibility_of_element_located(ADDRESS_LINE1_ELEMENT)
+        )
+        address_line1_element.clear()
+        time.sleep(0.5)
+        address_line1_element.send_keys(card_details_dict.get("address_line1"))
+        print(
+            f"{email_address} : Entered address line 1: {card_details_dict.get('address_line1')}"
+        )
+        time.sleep(0.5)
+        current_status = "entering city"
+
+        city_element = WebDriverWait(driver, wait_time).until(
+            EC.visibility_of_element_located(CITY_ELEMENT)
+        )
+        city_element.clear()
+        time.sleep(0.5)
+        city_element.send_keys(card_details_dict.get("city"))
+        print(f"{email_address} : Entered city: {card_details_dict.get('city')}")
+        time.sleep(0.5)
+
+        if PREFERRED_SMS_COUNTRY.lower() == "united states":
+            current_status = "entering state"
+
+            state_element = WebDriverWait(driver, wait_time).until(
+                EC.visibility_of_element_located(STATE_CLICK_ELEMENT)
+            )
+
+            time.sleep(3)
+            state_element.click()
+            time.sleep(0.5)
+
+            state_options_element = WebDriverWait(driver, wait_time).until(
+                EC.visibility_of_all_elements_located(STATE_OPTIONS_ELEMENT)
+            )
+
+            city_element = [
+                i
+                for i in state_options_element
+                if i.text.lower() == card_details_dict.get("state", "").lower()
+            ][0]
+
+            # scroll into view
+            driver.execute_script(
+                "arguments[0].scrollIntoView({ behavior: 'smooth', block: 'center' });",
+                city_element,
+            )
+            time.sleep(1)
+            city_element.click()
+
+            print(f"{email_address} : Entered state: {card_details_dict.get('state')}")
+            time.sleep(0.5)
+
+        current_status = "entering postal code"
+        postal_code_element = WebDriverWait(driver, wait_time).until(
+            EC.visibility_of_element_located(POSTAL_CODE_ELEMENT)
+        )
+        postal_code_element.clear()
+        time.sleep(0.5)
+        postal_code_element.send_keys(card_details_dict.get("postal_code"))
+        print(
+            f"{email_address} : Entered postal code: {card_details_dict.get('postal_code')}"
+        )
+        time.sleep(0.5)
+        current_status = "clicking save button"
+        save_button_element = WebDriverWait(driver, wait_time).until(
+            EC.element_to_be_clickable(SAVE_BUTTON_ELEMENT)
+        )
+        save_button_element.click()
+        print(f"{email_address} : Clicked save button")
+        return True
+    except:
+        return True
 
 
 def get_microsoft_premium(driver, new_profile_data):
@@ -5008,12 +5217,16 @@ def get_microsoft_premium(driver, new_profile_data):
             print(f"{email_address} : Card not added to payments.")
             return False, "Card not added to payments"
 
+        current_status = "Add billing address if prompted"
+        add_billing(driver, new_profile_data, card_details_dict)
+
         time.sleep(2)
         try:
             current_status = "clicking scroll down button"
             scroll_button_element = WebDriverWait(driver, wait_time).until(
                 EC.element_to_be_clickable(SCROLL_DOWN_BUTTON_ELEMENT)
             )
+
             scroll_button_element.click()
             print(f"{email_address} : Clicked scroll down button")
         except:
@@ -5123,9 +5336,9 @@ def get_microsoft_premium(driver, new_profile_data):
         )
         # create screenshot directory if not exists
         try:
-            os.makedirs("utils/screenshots", exist_ok=True)
+            os.makedirs("../utils/screenshots", exist_ok=True)
             driver.save_screenshot(
-                f"utils/screenshots/{email_address.split('@')[0]}_{current_status}_error.png".replace(
+                f"../utils/screenshots/{email_address.split('@')[0]}_{current_status}_error.png".replace(
                     " ", "_"
                 )
                 .replace(":", "")
@@ -5620,8 +5833,11 @@ def get_new_profile_data():
             conn.close()
             return True, {"email": email, "pass": password}
         except Exception as e:
+            if conn is not None:
+                conn.close()
             print(f"Error getting email from db: {e}. retrying...")
             retries += 1
+            time.sleep(5)
 
     print("Unable to get input email after 3 retries. Most likely no emails")
     return False, {"email": "", "pass": ""}
@@ -5659,26 +5875,38 @@ def get_processing_card():
 
 
 def return_card_to_familybot_card_details(card_details):
-    conn = mysql.connector.connect(
-        host=DB_HOST, user=DB_USER, password=DB_PASSWORD, database=DB_NAME
-    )
-    cursor = conn.cursor()
-    expiry = f"{card_details['expiry_month']}/{card_details['expiry_year'][2:]}"
-    cursor.execute(
-        "INSERT INTO familybot_card_details (card_number, expiry_month_year, cvv, country) VALUES (%s, %s, %s, %s)",
-        (
-            card_details["card_number"],
-            expiry,
-            card_details["cvv"],
-            card_details.get("country", PREFERRED_SMS_COUNTRY),
-        ),
-    )
-    cursor.execute(
-        "DELETE FROM processing_card_details WHERE card_number = %s AND expiry_month_year = %s AND cvv = %s",
-        (card_details["card_number"], expiry, card_details["cvv"]),
-    )
-    conn.commit()
-    conn.close()
+    def db_action():
+        conn = None
+        try:
+            conn = mysql.connector.connect(
+                host=DB_HOST, user=DB_USER, password=DB_PASSWORD, database=DB_NAME
+            )
+            cursor = conn.cursor()
+            expiry = f"{card_details['expiry_month']}/{card_details['expiry_year'][2:]}"
+            cursor.execute(
+                "INSERT INTO familybot_card_details (card_number, expiry_month_year, cvv, country, name_on_card, address_line1, city, postal_code, state) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                (
+                    card_details["card_number"],
+                    expiry,
+                    card_details["cvv"],
+                    card_details.get("country", PREFERRED_SMS_COUNTRY),
+                    card_details.get("name_on_card"),
+                    card_details.get("address_line1"),
+                    card_details.get("city"),
+                    card_details.get("postal_code"),
+                    card_details.get("state"),
+                ),
+            )
+            cursor.execute(
+                "DELETE FROM processing_card_details WHERE card_number = %s AND expiry_month_year = %s AND cvv = %s",
+                (card_details["card_number"], expiry, card_details["cvv"]),
+            )
+            conn.commit()
+        finally:
+            if conn is not None:
+                conn.close()
+
+    execute_db_action(db_action)
 
 
 def initialize_new_profile(new_profile_data):
@@ -6118,7 +6346,7 @@ def run_familybot():
             break
 
 
-# test = "ghost.proof@outlook.com,I5erp8a361u7"
+# test = "gotvempo@outlook.com,MkBGLU909n2T"
 # new_profile_data = {"email": test.split(",")[0], "pass": test.split(",")[1]}
 
 # driver = initialize_new_profile(new_profile_data)
