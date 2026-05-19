@@ -1426,7 +1426,8 @@ def get_family_link(driver):
                 return False, ""
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT link FROM familybot_extracted_family_links ORDER BY link_id"
+                "SELECT link FROM familybot_extracted_family_links WHERE LOWER(country) = %s ORDER BY link_id",
+                (PREFERRED_SMS_COUNTRY.lower(),),
             )
             links = [row[0] for row in cursor.fetchall()]
             cursor.close()
@@ -1818,7 +1819,7 @@ def use_link_to_join_family_acc(driver, new_profile_data):
             return False
         else:
             if invite_url == "NO_LINK":
-                print("NO family urls.")
+                print(f"NO family urls for preferred country: {PREFERRED_SMS_COUNTRY}")
                 try:
                     driver.quit()
                 except:

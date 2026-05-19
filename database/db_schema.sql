@@ -14,7 +14,11 @@ CREATE TABLE
     card_number BIGINT NULL,
     expiry_month_year VARCHAR(16) NULL,
     cvv VARCHAR(32) NULL,
-    country VARCHAR(255) NULL
+    name_on_card VARCHAR(200) NULL,
+    country VARCHAR(255) NULL,
+    address_line1 VARCHAR(100) NULL,
+    city VARCHAR(100) NULL,
+    postal_code VARCHAR(100) NULL
   ) ENGINE = InnoDB;
 
 CREATE TABLE
@@ -26,7 +30,11 @@ CREATE TABLE
     card_number BIGINT NULL,
     expiry_month_year VARCHAR(16) NULL,
     cvv VARCHAR(32) NULL,
-    country VARCHAR(255) NULL
+    name_on_card VARCHAR(200) NULL,
+    country VARCHAR(255) NULL,
+    address_line1 VARCHAR(100) NULL,
+    city VARCHAR(100) NULL,
+    postal_code VARCHAR(100) NULL
   ) ENGINE = InnoDB;
 
 CREATE TABLE
@@ -105,7 +113,8 @@ CREATE TABLE
     email VARCHAR(255) NULL,
     pass VARCHAR(255) NULL,
     recovery VARCHAR(255) NULL,
-    link TEXT NULL
+    link TEXT NULL,
+    country VARCHAR(255) NULL
   ) ENGINE = InnoDB;
 
 CREATE TABLE
