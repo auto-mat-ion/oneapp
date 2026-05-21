@@ -6,7 +6,7 @@ import json
 
 if (
     json.loads(open("bots/settings.json", "r").read()).get("app").get("SERVER_IP")
-    == "test ip"
+    == "test_ip"
 ):
     print(
         "Please set the SERVER_IP in bots/settings.json before running the application."
@@ -15,7 +15,7 @@ if (
 
 bot = int(
     input(
-        "Oneapp v1.09\nSelect bot to run:\n1. Familybot\n2. Hotmailbot\n3. Password Changer\n4. Email Sender\nEnter choice (1/2/3/4): "
+        "Oneapp v1.10\nSelect bot to run:\n1. Familybot\n2. Hotmailbot\n3. Password Changer\n4. Email Sender\nEnter choice (1/2/3/4): "
     )
 )
 

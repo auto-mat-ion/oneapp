@@ -276,7 +276,7 @@ def connect_new_random_old():
         return False
 
 
-def connect_new_random():
+def connect_new_random__():
     try:
 
         def run_cmd(args):
@@ -337,6 +337,106 @@ def connect_new_random():
 
             rand_locations = df[
                 df.country.apply(lambda x: x.lower().startswith(PREFERRED_SMS_COUNTRY))
+            ].id.to_list()
+
+            random_location = str(random.choice(rand_locations))
+            print(f"Connecting to : {PREFERRED_SMS_COUNTRY}")
+
+        except:
+            try:
+                random_location = str(
+                    random.choice(
+                        pd.read_csv("utils/express_countries.csv").id.to_list()
+                    )
+                )
+                print(
+                    f"No {PREFERRED_SMS_COUNTRY} server found. Connecting to Netherlands server"
+                )
+            except:
+                locations = "93,208,156,209,81,162,219,192,193,194,175,238,160,114,63,152,112,80,57,224,223,133,195,174,111,137,196,197,113,198,164,190,107,154,37,58,199,108,101,128,117,88,115,243,232,91,163,45,79,169,181,245,125,131,100,246,240,144,141,247,241,132,20,142,242,244,140,95,271,19,283,288,270,276,265,273,17,302,299,304,292,306,9,294,18,172,278,284,293,275,165,277,286,290,161,272,6,70,74,71,280,291,54,202,305,285,301,26,155,168,281,75,295,289,297,94,282,296,298,204,1,207,2,300,287,166,303,25,279,274,143,126,184,185,21,307,186,85,147,110,118,124,56,78,130,34,150,153,104,8,103,136,7,92,210,102,99,106,33,129,182,157,29,188,122,119,36,12,134,120,187,189,4,16,212,146,96,32,31,86,145,127,121,211,35,22,23,203,11,201,89,53,178,5,15,263,90,87,139,84,239,105,176,248,249,109,264".split(
+                    ","
+                )
+                random_location = str(random.choice(locations))
+                print("Connecting to Random server")
+
+        connect(random_location)
+        time.sleep(2)
+        return True
+    except:
+        return False
+
+
+THE_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+utils_dir = os.path.normpath(os.path.join(THE_BASE_DIR, "../utils"))
+
+
+def connect_new_random():
+    try:
+
+        def run_cmd(args):
+            result = subprocess.run(
+                [EXPRESSVPN_CMD] + args,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            return result.stdout.strip(), result.stderr.strip()
+
+        def connect(location=None):
+            if location:
+                out, err = run_cmd(["connect", location])
+            else:
+                out, err = run_cmd(["connect"])
+            print(f"Express vpn: {out or err}")
+
+        def disconnect():
+            out, err = run_cmd(["disconnect"])
+            print(f"Express vpn: {out or err}")
+
+        def try_int(x):
+            try:
+                int(x[-1])
+
+                return True
+            except:
+                return False
+
+        def parse_country(x):
+            try:
+                d = x.split(" ")
+                return x.replace(d[-1], ""), d[-1]
+            except:
+                return "DADADADAD", "101"
+
+        def get_locations():
+            try:
+                out, err = run_cmd(["list"])
+                [i.strip() for i in out.split("\n") if try_int(i)]
+
+                return pd.DataFrame(
+                    [parse_country(i.strip()) for i in out.split("\n") if try_int(i)],
+                    columns=["country", "id"],
+                )
+            except:
+                print("Error getting country list")
+                return False
+
+        disconnect()
+        time.sleep(1)
+        try:
+            df = pd.read_csv(os.path.join(utils_dir, "express_countries_all.csv"))
+            df = get_locations()
+
+            # df[df.country.apply(lambda x: x.lower().startswith('indonesia'))]
+
+            rand_locations = df[
+                df.country.apply(
+                    lambda x: x.lower().startswith(
+                        "usa"
+                        if PREFERRED_SMS_COUNTRY.lower() == "united states"
+                        else PREFERRED_SMS_COUNTRY.lower()
+                    )
+                )
             ].id.to_list()
 
             random_location = str(random.choice(rand_locations))
