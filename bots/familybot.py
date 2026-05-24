@@ -4391,6 +4391,7 @@ def get_creditcard_details():
                 "cvv": card["cvv"],
                 "address_line1": card["address_line1"].strip(),
                 "city": card["city"].strip(),
+                "country": card["country"].strip(),
                 "state": card["state"].strip(),
                 "postal_code": card["postal_code"].strip(),
             }
@@ -4775,7 +4776,7 @@ def get_next_card():
                 card = available_cards[0]
                 expiry = f"{card['expiry_month']}/{card['expiry_year'][2:]}"
                 cursor.execute(
-                    "INSERT INTO processing_card_details (server_ip, bot_type,date_time,name_on_card, card_number, expiry_month_year, cvv, address_line1, city, state, postal_code) VALUES (%s, %s, %s,%s, %s,%s, %s, %s, %s, %s, %s)",
+                    "INSERT INTO processing_card_details (server_ip, bot_type,date_time,name_on_card, card_number, expiry_month_year, cvv,country, address_line1, city, state, postal_code) VALUES (%s, %s, %s,%s, %s,%s,%s, %s, %s, %s, %s, %s)",
                     (
                         SERVER_IP,
                         BOT_TYPE,
@@ -4784,6 +4785,7 @@ def get_next_card():
                         card["card_number"],
                         expiry,
                         card["cvv"],
+                        card.get("country", PREFERRED_SMS_COUNTRY),
                         card["address_line1"],
                         card["city"],
                         card["state"],
@@ -4908,7 +4910,7 @@ def affirm_congrats_card_added(driver):
         return False
 
 
-def store_extracted_link(new_profile_data, link):
+def store_extracted_link(new_profile_data, link, card_details_dict):
     try:
         email = new_profile_data.get("email")
         recovery_email = new_profile_data.get("recovery_email")
@@ -4940,13 +4942,25 @@ def store_extracted_link(new_profile_data, link):
                     PREFERRED_SMS_COUNTRY,
                 )
 
+                insert_values_history = (
+                    SERVER_IP,
+                    BOT_TYPE,
+                    datetime.now(),
+                    email,
+                    password,
+                    recovery_email,
+                    link,
+                    PREFERRED_SMS_COUNTRY,
+                    card_details_dict.get("card_number", ""),
+                )
+
                 cursor.execute(
                     "INSERT INTO familybot_extracted_family_links (server_ip, bot_type, date_time, email, pass, recovery, link, country) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
                     insert_values,
                 )
                 cursor.execute(
-                    "INSERT INTO familybot_extracted_family_links_history (server_ip, bot_type, date_time, email, pass, recovery, link, country) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
-                    insert_values,
+                    "INSERT INTO familybot_extracted_family_links_history (server_ip, bot_type, date_time, email, pass, recovery, link, country, card_number) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                    insert_values_history,
                 )
                 conn.commit()
             finally:
@@ -5542,7 +5556,7 @@ def get_microsoft_premium(driver, new_profile_data):
             )
             link = link_input_element.get_attribute("value")
             print(f"{email_address} : Retrieved sharing link: {link}")
-            store_extracted_link(new_profile_data, link)
+            store_extracted_link(new_profile_data, link, card_details_dict)
             time.sleep(4)
 
             print(f"{email_address} : Stored extracted link successfully")
@@ -6691,7 +6705,11 @@ def run_familybot():
     """
     Creates threads and signs in simultaneously
     """
+    # Starting Familybot for country and ip
 
+    print(
+        f"Starting Familybot for country: {PREFERRED_SMS_COUNTRY} and IP: {SERVER_IP}"
+    )
     while True:
         status, new_profile_data = get_new_profile_data()
         if status:
@@ -6715,8 +6733,3 @@ def run_familybot_share():
         else:
             print("No unshared family acc in database...")
             break
-
-
-# x = share_premium(new_profile_data)
-
-# driver = x
