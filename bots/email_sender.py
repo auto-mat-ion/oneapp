@@ -1092,7 +1092,7 @@ def flush_db_operations():
         done_acc_update = False
         done_failed_update = False
         done_recipients_update = False
-        while retries < 5:
+        while retries < 7:
             engine = _create_sqlalchemy_engine()
             if engine is None:
                 log("Warning: unable to start DB operations (SQLAlchemy unavailable)")
@@ -1266,7 +1266,7 @@ def flush_db_operations():
                 return True
 
             retries += 1
-            time.sleep(40)
+            time.sleep(5 * 60)
 
 
 def process_account_wrapper(
