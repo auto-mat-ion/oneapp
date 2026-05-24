@@ -6728,7 +6728,7 @@ def run_familybot_share():
     while True:
         status, new_profile_data = get_new_profile_data_from_history()
         if status:
-            x = share_premium(new_profile_data)
+            share_premium(new_profile_data)
 
         else:
             print("No unshared family acc in database...")
