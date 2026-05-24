@@ -1,4 +1,4 @@
-from bots.familybot import run_familybot
+from bots.familybot import run_familybot, run_familybot_share
 from bots.hotmailbot import run_hotmailbot
 from bots.password_changer import run_password_changerbot
 from bots.email_sender import main
@@ -15,7 +15,7 @@ if (
 
 bot = int(
     input(
-        "Oneapp v1.10\nSelect bot to run:\n1. Familybot\n2. Hotmailbot\n3. Password Changer\n4. Email Sender\nEnter choice (1/2/3/4): "
+        "Oneapp v1.11\nSelect bot to run:\n1. Familybot\n2. Hotmailbot\n3. Password Changer\n4. Email Sender\n5. Familybot Share\nEnter choice (1/2/3/4/5): "
     )
 )
 
@@ -27,5 +27,7 @@ elif bot == 3:
     run_password_changerbot()
 elif bot == 4:
     main()
+elif bot == 5:
+    run_familybot_share()
 else:
-    print("Invalid choice. Please select 1, 2, 3, or 4.")
+    print("Invalid choice. Please select 1, 2, 3, 4, or 5.")
