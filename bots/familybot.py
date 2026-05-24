@@ -4858,7 +4858,20 @@ def credit_card_is_declined(driver):
 
         return True if [i for i in error_element if i.text != ""] else False
     except:
-        return False
+        try:
+            EXPIRY_ELEMENT = (
+                By.CSS_SELECTOR,
+                'div[id*="error-expiryGroup"][aria-hidden="false"]',
+            )
+
+            error_element = WebDriverWait(driver, wait_time / 2).until(
+                EC.visibility_of_all_elements_located(EXPIRY_ELEMENT)
+            )
+
+            return True if [i for i in error_element] else False
+
+        except:
+            return False
 
 
 def affirm_card_is_added(driver, cardholder_name):
