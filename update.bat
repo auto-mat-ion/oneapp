@@ -2,12 +2,12 @@
 setlocal
 
 echo Pulling latest code...
-cp bots/settings.json /tmp/settings.json.bak
+copy bots\settings.json %TEMP%\settings.json.bak /Y
 
 git reset --hard origin/main
 git pull origin main
 
-mv /tmp/settings.json.bak bots/settings.json
+move /Y %TEMP%\settings.json.bak bots\settings.json
 
 REM 1. Check if Python 3.11 is installed
 py -3.11 --version >nul 2>&1
