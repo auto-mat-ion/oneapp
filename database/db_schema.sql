@@ -18,7 +18,8 @@ CREATE TABLE
     country VARCHAR(255) NULL,
     address_line1 VARCHAR(100) NULL,
     city VARCHAR(100) NULL,
-    postal_code VARCHAR(100) NULL
+    postal_code VARCHAR(100) NULL,
+    state VARCHAR(100) NULL
   ) ENGINE = InnoDB;
 
 CREATE TABLE
@@ -34,7 +35,8 @@ CREATE TABLE
     country VARCHAR(255) NULL,
     address_line1 VARCHAR(100) NULL,
     city VARCHAR(100) NULL,
-    postal_code VARCHAR(100) NULL
+    postal_code VARCHAR(100) NULL,
+    state VARCHAR(100) NULL
   ) ENGINE = InnoDB;
 
 CREATE TABLE
@@ -115,6 +117,22 @@ CREATE TABLE
     recovery VARCHAR(255) NULL,
     link TEXT NULL,
     country VARCHAR(255) NULL
+  ) ENGINE = InnoDB;
+
+CREATE TABLE
+  IF NOT EXISTS familybot_extracted_family_links_history (
+    link_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    server_ip VARCHAR(45) NULL,
+    bot_type VARCHAR(50) NULL,
+    date_time DATETIME NULL,
+    email VARCHAR(255) NULL,
+    pass VARCHAR(255) NULL,
+    recovery VARCHAR(255) NULL,
+    link TEXT NULL,
+    country VARCHAR(255) NULL,
+    status VARCHAR(50) NULL,
+    processing_server_ip VARCHAR(45) NULL,
+    processing_date_time DATETIME NULL
   ) ENGINE = InnoDB;
 
 CREATE TABLE
