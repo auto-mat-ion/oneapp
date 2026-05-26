@@ -89,9 +89,9 @@ def get_new_profile_data_from_history(retries=3, delay=5):
                 cursor.execute(
                     "SELECT link_id, email, pass, recovery, link "
                     "FROM familybot_extracted_family_links_history "
-                    "WHERE processing_server_ip = %s AND status = 'processing' "
+                    "WHERE processing_server_ip = %s AND status = 'processing'  AND LOWER(country) = %s "
                     "ORDER BY processing_date_time DESC LIMIT 1",
-                    (SERVER_IP,),
+                    (SERVER_IP, PREFERRED_SMS_COUNTRY.lower()),
                 )
                 row = cursor.fetchone()
 
@@ -6122,6 +6122,42 @@ def get_processing_card():
     return None
 
 
+def get_all_processing_cards(country=None):
+    conn = mysql.connector.connect(
+        host=DB_HOST, user=DB_USER, password=DB_PASSWORD, database=DB_NAME
+    )
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute(
+        "SELECT * FROM processing_card_details WHERE LOWER(country) = %s",
+        (country.lower() if country else None,),
+    )
+    rows = cursor.fetchall()
+    conn.close()
+    cards = []
+
+    for row in rows:
+        expiry = row["expiry_month_year"]
+        expiry_month = expiry.split("/")[0]
+        expiry_year = "20" + expiry.split("/")[1]
+
+        cards.append(
+            {
+                "name_on_card": row.get("name_on_card"),
+                "card_number": str(row["card_number"]),
+                "expiry_month": str(expiry_month),
+                "expiry_year": expiry_year,
+                "cvv": str(row["cvv"]),
+                "address_line1": row.get("address_line1"),
+                "city": row.get("city"),
+                "state": row.get("state"),
+                "postal_code": row.get("postal_code"),
+                "country": row.get("country", PREFERRED_SMS_COUNTRY),
+            }
+        )
+
+    return cards
+
+
 def return_card_to_familybot_card_details(card_details):
     def db_action():
         conn = None
@@ -6269,6 +6305,7 @@ def share_premium(new_profile_data):
 
         driver.get(MICROSOFT_PREMIUM_URL)
         time.sleep(1)
+        # return driver
         if click_share_dropdown_button(driver):
             print(f"{email_address} : Clicked share dropdown button")
 
@@ -6286,7 +6323,8 @@ def share_premium(new_profile_data):
         return False, f"Error occurred: {E}"
     finally:
         try:
-            driver.quit()
+            # driver.quit()
+            pass
             # processed_email(new_profile_data)
         except:
             pass
@@ -6746,3 +6784,14 @@ def run_familybot_share():
         else:
             print("No unshared family acc in database...")
             break
+
+
+# dta = "socialtilt_sad@outlook.com	058cLIdc4XIb.!Ze8	dociqng181@mailfrid.com"
+# new_profile_data = {
+#     "email": dta.split("\t")[0],
+#     "pass": dta.split("\t")[1],
+#     "recovery": dta.split("\t")[2],
+# }
+
+
+# driver = share_premium(new_profile_data)
