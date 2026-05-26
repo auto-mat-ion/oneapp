@@ -1,7 +1,7 @@
 import math
 import os
 import random
-
+import csv
 import streamlit as st
 import pandas as pd
 import json
@@ -82,6 +82,23 @@ def get_db_connection():
     except Exception as exc:
         st.error(f"Unable to connect to database: {exc}")
         return None
+
+
+def get_db_tables():
+    conn = get_db_connection()
+    if conn is None:
+        return []
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SHOW TABLES")
+        tables = [row[0] for row in cursor.fetchall()]
+        return tables
+    except Exception as exc:
+        st.error(f"Unable to load tables: {exc}")
+        return []
+    finally:
+        cursor.close()
+        conn.close()
 
 
 def test_db_connection():
@@ -450,7 +467,7 @@ def sql_literal(value):
     return "'" + str(value).replace("\\", "\\\\").replace("'", "''") + "'"
 
 
-def backup_database():
+def backup_database(selected_tables=None):
     """Create a database backup using Python instead of external mysqldump."""
     config = get_db_config()
     if mysql is None:
@@ -473,11 +490,17 @@ def backup_database():
         cursor.execute("SHOW TABLES")
         tables = [row[0] for row in cursor.fetchall()]
 
+        if selected_tables is None:
+            selected_tables = tables
+        selected_tables = [table for table in selected_tables if table in tables]
+        if not selected_tables:
+            return False, "No tables selected for backup."
+
         with open(backup_file, "w", encoding="utf-8") as f:
             f.write(f"CREATE DATABASE IF NOT EXISTS `{config['database']}`;\n")
             f.write(f"USE `{config['database']}`;\n\n")
 
-            for table in tables:
+            for table in selected_tables:
                 cursor.execute(f"SHOW CREATE TABLE `{table}`")
                 create_stmt = cursor.fetchone()[1]
                 f.write(f"DROP TABLE IF EXISTS `{table}`;\n")
@@ -574,10 +597,10 @@ def parse_email_sender_input_accounts(uploaded_file):
     return pd.DataFrame(data)
 
 
-def load_emails_from_cache_bins():
+def load_emails_from_cache_bins(selected_country=None):
     """
-    Load emails from cache_bins table, parse them, and get password/recovery from database.
-    Returns a DataFrame with email, pass, and recovery columns.
+    Load emails from cache_bins table, parse them, and get password/recovery/country from accounts_details.
+    Returns a DataFrame with email, pass, recovery, and country columns.
     """
     if msal is None:
         st.error("msal is not installed. Cannot load from cache bins.")
@@ -628,40 +651,73 @@ def load_emails_from_cache_bins():
             st.warning("No emails found in cache bins")
             return None
 
+        cursor.execute("SELECT LOWER(email) FROM sender_input_accounts")
+        assigned_emails = {row[0] for row in cursor.fetchall() if row and row[0]}
+        cursor.execute("SELECT LOWER(email) FROM sender_failed_accounts")
+        failed_emails = {row[0] for row in cursor.fetchall() if row and row[0]}
+
+        available_emails = [
+            email
+            for email in emails
+            if email not in assigned_emails and email not in failed_emails
+        ]
+        if not available_emails:
+            st.warning(
+                "No available emails left after removing assigned and failed sender accounts."
+            )
+            cursor.close()
+            conn.close()
+            return None
+
+        selected_country = selected_country.lower() if selected_country else None
         st.info(
-            f"Found {len(emails)} sender emails from cache bins in db. Getting Full info. Please wait..."
+            f"Found {len(available_emails)} available sender emails from cache bins. Getting full info for country '{selected_country}'..."
         )
 
-        # Get password and recovery for these emails from accounts_details table in one batch
-        placeholders = ",".join(["%s"] * len(emails))
+        placeholders = ",".join(["%s"] * len(available_emails))
         query = (
-            "SELECT email_acc, password, recovery_email "
+            "SELECT email_acc, password, recovery_email, country "
             "FROM accounts_details "
             "WHERE LOWER(email_acc) IN (" + placeholders + ")"
         )
-        cursor.execute(query, tuple(emails))
+        params = tuple(available_emails)
+        if selected_country:
+            query += " AND LOWER(country) = %s"
+            params = params + (selected_country,)
+
+        cursor.execute(query, params)
         rows = cursor.fetchall()
 
         lookup = {
-            row[0].lower(): (row[0], row[1], row[2] if row[2] else "") for row in rows
+            row[0].lower(): (
+                row[0],
+                row[1],
+                row[2] if row[2] else "",
+                row[3] if row[3] else "",
+            )
+            for row in rows
         }
 
         data = []
-        for email in sorted(emails):
+        for email in sorted(available_emails):
             if email in lookup:
-                row_email, password, recovery = lookup[email]
+                row_email, password, recovery, country = lookup[email]
                 data.append(
-                    {"email": row_email, "pass": password, "recovery": recovery}
+                    {
+                        "email": row_email,
+                        "pass": password,
+                        "recovery": recovery,
+                        "country": country,
+                    }
                 )
-            else:
-                data.append({"email": email, "pass": "", "recovery": ""})
-                # st.warning(f"Email {email} not found in accounts_details table")
 
         cursor.close()
         conn.close()
 
         if not data:
-            st.warning("No matching accounts found in database for emails from cache")
+            st.warning(
+                "No matching sender accounts found in accounts_details for the selected country."
+            )
             return None
 
         return pd.DataFrame(data)
@@ -736,8 +792,10 @@ def count_unassigned_sender_accounts():
         cursor = conn.cursor()
         cursor.execute("SELECT LOWER(email) FROM sender_input_accounts")
         assigned_emails = {row[0] for row in cursor.fetchall() if row and row[0]}
+        cursor.execute("SELECT LOWER(email) FROM sender_failed_accounts")
+        failed_emails = {row[0] for row in cursor.fetchall() if row and row[0]}
         cursor.close()
-        return len(cached_emails - assigned_emails)
+        return len(cached_emails - assigned_emails - failed_emails)
     except Exception:
         return 0
     finally:
@@ -766,18 +824,33 @@ def parse_family_links_file(uploaded_file):
     content = uploaded_file.read().decode("utf-8", errors="replace")
     rows = [row.strip() for row in content.splitlines() if row.strip()]
     data = []
+    if rows and all(
+        field in rows[0].lower() for field in ["email", "pass", "recovery", "link"]
+    ):
+        rows = rows[1:]
+
     for line in rows:
-        # parts = [part.strip() for part in line.split(":")]
-        # if len(parts) >= 4:
-        # email, password, recovery, link = parts[0], parts[1], parts[2], parts[3]
-        data.append(
-            {
-                "email": "manual_upload",
-                "password": "manual_upload",
-                "recovery": "manual_upload",
-                "link": line.strip(),
-            }
-        )
+        if "," in line:
+            reader = csv.reader([line])
+            parts = next(reader, [])
+        elif ":" in line:
+            parts = [part.strip() for part in line.split(":")]
+        else:
+            parts = [part.strip() for part in line.split()]
+
+        parts = [part.strip() for part in parts if part is not None]
+        if len(parts) >= 4:
+            email, password, recovery, link = parts[0], parts[1], parts[2], parts[3]
+            country = parts[4] if len(parts) >= 5 else ""
+            data.append(
+                {
+                    "email": email,
+                    "password": password,
+                    "recovery": recovery,
+                    "link": link,
+                    "country": country,
+                }
+            )
     return pd.DataFrame(data)
 
 
@@ -919,8 +992,12 @@ def insert_into_db(
                 for row in df.itertuples(index=False)
             ]
         elif table_name == "familybot_extracted_family_links":
-            columns = "server_ip, bot_type, date_time, email, pass, recovery, link"
-            placeholders = "%s, %s, %s, %s, %s, %s, %s"
+            server_ip = "manual"
+            bot_type = "manual"
+            columns = (
+                "server_ip, bot_type, date_time, email, pass, recovery, link, country"
+            )
+            placeholders = "%s, %s, %s, %s, %s, %s, %s, %s"
             values = [
                 (
                     server_ip,
@@ -930,9 +1007,13 @@ def insert_into_db(
                     row.password,
                     row.recovery,
                     row.link,
+                    getattr(row, "country", ""),
                 )
                 for row in df.itertuples(index=False)
             ]
+            history_columns = columns
+            history_placeholders = placeholders
+            history_query = f"INSERT INTO familybot_extracted_family_links_history ({history_columns}) VALUES ({history_placeholders})"
         elif table_name == "password_changer_accounts":
             columns = "email, pass, recovery"
             placeholders = "%s, %s, %s"
@@ -953,18 +1034,6 @@ def insert_into_db(
 
         if total_rows > chunk_size:
             if table_name == "sender_recipients":
-                # df = pd.read_csv(
-                #     r"C:\Users\USER\Desktop\serious\freelance\oneapp\bots\total andrew_8.1mln_bounces_cleaned.txt",
-                #     sep="[[[]]]",
-                #     names=["recipient_email"],
-                #     header=None,
-                # )
-
-                # df["country"] = "test"
-                # df["server_ip"] = "testy"
-
-                # df = df.head(1000000)
-
                 db_configs = get_db_config()
                 engine = create_engine(
                     f"mysql+pymysql://{db_configs['user']}:{db_configs['password']}@{db_configs['host']}/{db_configs['database']}"
@@ -1019,6 +1088,8 @@ def insert_into_db(
                 for start in range(0, total_rows, chunk_size):
                     chunk_values = values[start : start + chunk_size]
                     cursor.executemany(query, chunk_values)
+                    if table_name == "familybot_extracted_family_links":
+                        cursor.executemany(history_query, chunk_values)
                     conn.commit()
                     inserted += len(chunk_values)
                     progress_bar.progress(min(inserted / total_rows, 1.0))
@@ -1030,6 +1101,8 @@ def insert_into_db(
                 )
         else:
             cursor.executemany(query, values)
+            if table_name == "familybot_extracted_family_links":
+                cursor.executemany(history_query, values)
             conn.commit()
             inserted = cursor.rowcount if cursor.rowcount != -1 else total_rows
         cursor.close()
@@ -1119,7 +1192,7 @@ def general_uploader():
         "familybot_surnames": "Surnames",
         "familybot_card_details": "Card Details",
         "familybot_fake_details": "Fake Details",
-        "family_link": "Family Links",
+        # "family_link": "Family Links",
         "familybot_extracted_family_links": "Extracted Family Links",
         "password_changer_accounts": "Password Changer Accounts",
         "cache_bins": "Cache Bin Files",
@@ -1145,6 +1218,7 @@ def general_uploader():
         "familybot_first_names",
         "familybot_surnames",
         "familybot_card_details",
+        "familybot_extracted_family_links",
     ]:
         selected_country = st.selectbox(
             "Select country for uploaded rows",
@@ -1184,7 +1258,18 @@ def general_uploader():
             df = parse_fake_json(uploaded_file)
 
         if selected_country:
-            df["country"] = selected_country
+            if table_name == "familybot_extracted_family_links":
+                if "country" in df.columns:
+                    df["country"] = (
+                        df["country"]
+                        .fillna("")
+                        .astype(str)
+                        .replace("", selected_country)
+                    )
+                else:
+                    df["country"] = selected_country
+            else:
+                df["country"] = selected_country
 
         st.subheader("Preview top 10 files")
         st.dataframe(df.head(10), width="stretch")
@@ -1213,10 +1298,7 @@ def general_uploader():
 
         server_ip = None
         bot_type = None
-        if table_name in [
-            "cache_bins",
-            "familybot_extracted_family_links",
-        ]:
+        if table_name == "cache_bins":
             server_ip = st.text_input(
                 "Server IP", value="", key=f"general_server_ip_{table_name}"
             )
@@ -1314,7 +1396,7 @@ def email_sender_uploader():
         )
         if st.button("Load emails from cache bins", key=f"load_cache_{table_name}"):
             with st.spinner("Loading emails from cache bins..."):
-                df = load_emails_from_cache_bins()
+                df = load_emails_from_cache_bins(selected_country)
             if df is not None:
                 st.session_state.sender_df = df
                 st.rerun()
@@ -2156,6 +2238,13 @@ def render_familybot_stats():
             (),
             limit=1000,
         )
+        extracted_links_by_country = db_group_count(
+            "familybot_extracted_family_links",
+            "country",
+            "country IS NOT NULL AND country <> ''",
+            (),
+            limit=1000,
+        )
         failed_by_country = db_group_count(
             "familybot_failed_cards",
             "country",
@@ -2196,6 +2285,13 @@ def render_familybot_stats():
             st.subheader("Total Cards by Country")
             st.dataframe(
                 pd.DataFrame(card_by_country, columns=["Country", "Count"]),
+                width="stretch",
+            )
+
+        if extracted_links_by_country:
+            st.subheader("Extracted Family Links by Country")
+            st.dataframe(
+                pd.DataFrame(extracted_links_by_country, columns=["Country", "Count"]),
                 width="stretch",
             )
 
@@ -2703,17 +2799,36 @@ def database_management():
     with tab3:
         st.subheader("Backup Database")
         st.info(
-            "Creates a timestamped backup in `database/backup_YYYY-MM-DD_HH-MM-SS/backup.sql`"
+            "Creates a timestamped backup in `database/backup_YYYY-MM-DD_HH-MM-SS/backup.sql`."
         )
 
+        tables = get_db_tables()
+        selected_tables = []
+
+        if tables:
+            st.write(
+                "Select the tables to include in the backup. All tables are selected by default."
+            )
+            for table in tables:
+                if st.checkbox(table, value=True, key=f"backup_table_{table}"):
+                    selected_tables.append(table)
+
+            if not selected_tables:
+                st.warning("Select one or more tables before creating a backup.")
+        else:
+            st.warning("Unable to load tables. Check database connection settings.")
+
         if st.button("💾 Create Backup", width="stretch"):
-            with st.spinner("Backing up database..."):
-                success, message = backup_database()
-                if success:
-                    st.success(message)
-                    st.balloons()
-                else:
-                    st.error(message)
+            if not selected_tables:
+                st.error("Please select at least one table to back up.")
+            else:
+                with st.spinner("Backing up selected tables..."):
+                    success, message = backup_database(selected_tables=selected_tables)
+                    if success:
+                        st.success(message)
+                        st.balloons()
+                    else:
+                        st.error(message)
 
         # List recent backups
         try:
