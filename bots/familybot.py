@@ -112,7 +112,7 @@ def get_new_profile_data_from_history(retries=3, delay=5):
 
                 cursor.execute(
                     "SELECT link_id FROM familybot_extracted_family_links_history "
-                    "WHERE status IS NULL OR status NOT IN ('processing', 'processed') AND LOWER(country) = %s"
+                    "WHERE status IS NULL AND LOWER(country) = %s"
                     "ORDER BY date_time ASC LIMIT 1",
                     (PREFERRED_SMS_COUNTRY.lower(),),
                 )
