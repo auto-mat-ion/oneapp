@@ -1009,14 +1009,14 @@ def get_undistributed_sender_accounts():
             pass
 
 
-def count_unassigned_sender_accounts():
+def count_unassigned_sender_accounts(return_country_distribution=False):
     cached_emails = get_cached_sender_emails()
     if not cached_emails:
-        return 0
+        return (0, []) if return_country_distribution else 0
 
     conn = get_db_connection()
     if conn is None:
-        return 0
+        return (0, []) if return_country_distribution else 0
 
     try:
         cursor = conn.cursor()
@@ -1024,10 +1024,57 @@ def count_unassigned_sender_accounts():
         assigned_emails = {row[0] for row in cursor.fetchall() if row and row[0]}
         cursor.execute("SELECT LOWER(email) FROM sender_failed_accounts")
         failed_emails = {row[0] for row in cursor.fetchall() if row and row[0]}
-        cursor.close()
-        return len(cached_emails - assigned_emails - failed_emails)
+
+        available_emails = [
+            email
+            for email in cached_emails
+            if email
+            and email.lower() not in assigned_emails
+            and email.lower() not in failed_emails
+        ]
+        unassigned_count = len(available_emails)
+
+        if return_country_distribution:
+            distribution = {}
+            if available_emails:
+                placeholders = ",".join(["%s"] * len(available_emails))
+                query = (
+                    "SELECT LOWER(email_acc), country FROM accounts_details "
+                    f"WHERE LOWER(email_acc) IN ({placeholders})"
+                )
+                cursor.execute(
+                    query, tuple(email.lower() for email in available_emails)
+                )
+                rows = cursor.fetchall()
+
+                matched_emails = set()
+                for email_acc_lower, country in rows:
+                    matched_emails.add(email_acc_lower)
+                    country_key = (country or "Unknown").strip() or "Unknown"
+                    distribution[country_key] = distribution.get(country_key, 0) + 1
+
+                missing_count = sum(
+                    1
+                    for email in available_emails
+                    if email.lower() not in matched_emails
+                )
+                if missing_count:
+                    distribution["Unknown"] = (
+                        distribution.get("Unknown", 0) + missing_count
+                    )
+
+            distribution_rows = sorted(
+                [
+                    {"country": country, "unassigned_count": count}
+                    for country, count in distribution.items()
+                ],
+                key=lambda item: (-item["unassigned_count"], item["country"]),
+            )
+            return unassigned_count, distribution_rows
+
+        return unassigned_count
     except Exception:
-        return 0
+        return (0, []) if return_country_distribution else 0
     finally:
         try:
             conn.close()
@@ -2782,8 +2829,18 @@ def render_email_sender_stats():
 
     # Unassigned sender accounts insight from cache bins
     try:
-        unassigned_count = count_unassigned_sender_accounts()
+        unassigned_count, unassigned_country_distribution = (
+            count_unassigned_sender_accounts(return_country_distribution=True)
+        )
         st.info(f"Total unassigned sender accounts in cache bins: {unassigned_count}")
+
+        if unassigned_country_distribution:
+            st.subheader("Unassigned Sender Accounts by Country")
+            st.table(pd.DataFrame(unassigned_country_distribution))
+        else:
+            st.info(
+                "No unassigned sender account country distribution was found in accounts_details."
+            )
     except Exception as e:
         st.warning(f"Unable to compute unassigned sender accounts: {e}")
 
