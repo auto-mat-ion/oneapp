@@ -779,6 +779,236 @@ def get_cached_sender_emails():
     return emails
 
 
+def _get_db_connection():
+    return get_db_connection()
+
+
+def log(message):
+    try:
+        st.write(message)
+    except Exception:
+        print(message)
+
+
+def load_cache():
+    try:
+        conn = _get_db_connection()
+        if conn is None:
+            log("Warning: unable to connect to database for cache")
+            return None
+
+        cursor = conn.cursor()
+        cursor.execute("SELECT cache_bin_file FROM cache_bins")
+        results = cursor.fetchall()
+        cursor.close()
+        conn.close()
+
+        combined_data = {
+            "Account": {},
+            "IdToken": {},
+            "AccessToken": {},
+            "RefreshToken": {},
+            "AppMetadata": {},
+        }
+
+        for result in results:
+            if result and result[0]:
+                temp_cache = msal.SerializableTokenCache()
+                cache_blob = result[0]
+                cache_text = (
+                    cache_blob.decode("utf-8")
+                    if isinstance(cache_blob, (bytes, bytearray))
+                    else str(cache_blob)
+                )
+                temp_cache.deserialize(cache_text)
+                raw_data = json.loads(temp_cache.serialize())
+                for category in combined_data.keys():
+                    if category in raw_data:
+                        combined_data[category].update(raw_data[category])
+
+        num_accounts = len(combined_data.get("Account", {}))
+        cache_data = json.dumps(combined_data).encode("utf-8")
+        try:
+            _shared_cache.deserialize(json.dumps(combined_data))
+        except Exception:
+            pass
+
+        log(
+            f"Cache loaded from database: {len(results)} servers caches, {num_accounts} accounts"
+        )
+        return cache_data
+    except Exception as e:
+        log(f"Cache load error: {e}")
+        return None
+
+
+def get_cache_bin_emails():
+    """Return a sorted list of sender emails and a unified cache file from cache_bins."""
+    if msal is None:
+        return [], None
+
+    conn = get_db_connection()
+    if conn is None:
+        return [], None
+
+    emails = set()
+    cache_bin_data = None
+    combined_data = {
+        "Account": {},
+        "IdToken": {},
+        "AccessToken": {},
+        "RefreshToken": {},
+        "AppMetadata": {},
+    }
+
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT cache_bin_file FROM cache_bins")
+        rows = cursor.fetchall()
+        cursor.close()
+
+        for row in rows:
+            cache_bin = row[0]
+            if not cache_bin:
+                continue
+
+            try:
+                content = (
+                    cache_bin.decode("utf-8")
+                    if isinstance(cache_bin, (bytes, bytearray))
+                    else str(cache_bin)
+                )
+                token_cache = msal.SerializableTokenCache()
+                token_cache.deserialize(content)
+                raw_data = json.loads(token_cache.serialize())
+                account_data = raw_data.get("Account", {})
+                for account_info in account_data.values():
+                    if isinstance(account_info, dict):
+                        username = account_info.get("username", "")
+                        if username:
+                            emails.add(username.strip())
+                for category in combined_data.keys():
+                    if category in raw_data:
+                        combined_data[category].update(raw_data[category])
+            except Exception:
+                continue
+
+        cache_bin_data = json.dumps(combined_data).encode("utf-8")
+    except Exception:
+        pass
+    finally:
+        try:
+            conn.close()
+        except:
+            pass
+
+    return sorted(emails), cache_bin_data
+
+
+def get_undistributed_sender_accounts():
+    """Return a DataFrame of undistributed sender accounts enriched from accounts_details."""
+    cache_emails, _cache_bin = get_cache_bin_emails()
+    if not cache_emails:
+        return pd.DataFrame(
+            columns=[
+                "email_acc",
+                "password",
+                "recovery_email",
+                "country",
+                "date_time",
+            ]
+        )
+
+    conn = get_db_connection()
+    if conn is None:
+        return pd.DataFrame(
+            columns=[
+                "email_acc",
+                "password",
+                "recovery_email",
+                "country",
+                "date_time",
+            ]
+        )
+
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT LOWER(email) FROM sender_input_accounts")
+        assigned_emails = {row[0] for row in cursor.fetchall() if row and row[0]}
+        cursor.execute("SELECT LOWER(email) FROM sender_failed_accounts")
+        failed_emails = {row[0] for row in cursor.fetchall() if row and row[0]}
+
+        remaining_emails = [
+            email
+            for email in cache_emails
+            if email.lower() not in assigned_emails
+            and email.lower() not in failed_emails
+        ]
+
+        if not remaining_emails:
+            cursor.close()
+            conn.close()
+            return pd.DataFrame(
+                columns=[
+                    "email_acc",
+                    "password",
+                    "recovery_email",
+                    "country",
+                    "date_time",
+                ]
+            )
+
+        placeholders = ",".join(["%s"] * len(remaining_emails))
+        query = (
+            "SELECT LOWER(email_acc), email_acc, password, recovery_email, country, date_time "
+            "FROM accounts_details "
+            "WHERE LOWER(email_acc) IN (" + placeholders + ")"
+        )
+        cursor.execute(query, tuple(email.lower() for email in remaining_emails))
+        details = {row[0]: row[1:] for row in cursor.fetchall()}
+        cursor.close()
+
+        data = []
+        for email in remaining_emails:
+            lookup_key = email.lower()
+            if lookup_key in details:
+                email_acc, password, recovery_email, country, date_time = details[
+                    lookup_key
+                ]
+            else:
+                email_acc = email
+                password = ""
+                recovery_email = ""
+                country = ""
+                date_time = ""
+            data.append(
+                {
+                    "email_acc": email_acc,
+                    "password": password,
+                    "recovery_email": recovery_email,
+                    "country": country,
+                    "date_time": date_time,
+                }
+            )
+
+        return pd.DataFrame(data)
+    except Exception:
+        return pd.DataFrame(
+            columns=[
+                "email_acc",
+                "password",
+                "recovery_email",
+                "country",
+                "date_time",
+            ]
+        )
+    finally:
+        try:
+            conn.close()
+        except:
+            pass
+
+
 def count_unassigned_sender_accounts():
     cached_emails = get_cached_sender_emails()
     if not cached_emails:
@@ -2335,6 +2565,129 @@ def render_familybot_stats():
         st.error(f"Error building Family Bot breakdowns: {e}")
 
     st.divider()
+    st.subheader("All Available Links")
+    try:
+        conn = get_db_connection()
+        if conn is None:
+            st.error("Unable to connect to database")
+        else:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT date_time, email, pass, recovery, link, country "
+                "FROM familybot_extracted_family_links "
+                "ORDER BY country"
+            )
+            rows = cursor.fetchall()
+            cursor.close()
+            conn.close()
+
+            available_links_df = pd.DataFrame(
+                rows,
+                columns=[
+                    "date_time",
+                    "email",
+                    "pass",
+                    "recovery",
+                    "link",
+                    "country",
+                ],
+            )
+            st.dataframe(available_links_df, width="stretch")
+    except Exception as e:
+        st.error(f"Error loading available links: {e}")
+
+    st.divider()
+    st.subheader("Failed Links")
+    try:
+        conn = get_db_connection()
+        if conn is None:
+            st.error("Unable to connect to database")
+        else:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT date_time, link "
+                "FROM expired_family_links "
+                "ORDER BY date_time DESC"
+            )
+            rows = cursor.fetchall()
+            cursor.close()
+            conn.close()
+
+            failed_links_df = pd.DataFrame(
+                rows,
+                columns=["datetime", "link"],
+            )
+            st.dataframe(failed_links_df, width="stretch")
+    except Exception as e:
+        st.error(f"Error loading failed links: {e}")
+
+    st.divider()
+    st.subheader("Assigned Mother Accounts to Link")
+    try:
+        conn = get_db_connection()
+        if conn is None:
+            st.error("Unable to connect to database")
+        else:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT date_time, email, pass, recovery, country, link "
+                "FROM familybot_extracted_family_links_history "
+                "ORDER BY date_time desc"
+            )
+            rows = cursor.fetchall()
+            cursor.close()
+            conn.close()
+
+            assigned_mother_df = pd.DataFrame(
+                rows,
+                columns=[
+                    "date_time",
+                    "email",
+                    "pass",
+                    "recovery",
+                    "country",
+                    "link",
+                ],
+            )
+            st.dataframe(assigned_mother_df, width="stretch")
+    except Exception as e:
+        st.error(f"Error loading assigned mother accounts: {e}")
+
+    st.divider()
+    st.subheader("Card Usage")
+    try:
+        conn = get_db_connection()
+        if conn is None:
+            st.error("Unable to connect to database")
+        else:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT u.card_num AS card_num, u.`exp_month/year` AS exp_month_year, u.cvv, d.country, COUNT(*) AS times_used "
+                "FROM familybot_card_usage_log u "
+                "INNER JOIN familybot_card_details d ON u.card_num = d.card_number "
+                "GROUP BY u.card_num, u.`exp_month/year`, u.cvv, d.country "
+                "HAVING COUNT(*) < 5 "
+                "ORDER BY COUNT(*) DESC"
+            )
+            rows = cursor.fetchall()
+            cursor.close()
+            conn.close()
+
+            card_usage_df = pd.DataFrame(
+                rows,
+                columns=[
+                    "card_num",
+                    "exp_month/year",
+                    "cvv",
+                    "country",
+                    "times used",
+                ],
+            )
+            st.dataframe(card_usage_df, width="stretch")
+    except Exception as e:
+        st.error(f"Error loading card usage: {e}")
+
+    st.divider()
     st.subheader("Failed Cards")
 
     failed_countries = get_table_distinct_values("familybot_failed_cards", "country")
@@ -2794,7 +3147,9 @@ def database_management():
     st.divider()
 
     # Create tabs for different operations
-    tab1, tab2, tab3 = st.tabs(["🆕 Create Database", "📊 Update Schema", "💾 Backup"])
+    tab1, tab2, tab3, tab4 = st.tabs(
+        ["🆕 Create Database", "📊 Update Schema", "💾 Backup", "⬇️ Download CSVs"]
+    )
 
     with tab3:
         st.subheader("Backup Database")
@@ -2846,6 +3201,164 @@ def database_management():
                         st.write(f"📦 {backup_dir} ({file_size:.1f} KB)")
         except Exception:
             pass
+
+    with tab4:
+        st.subheader("Download CSVs")
+
+        if "download_data_loaded" not in st.session_state:
+            st.session_state.download_data_loaded = False
+
+        if st.button("Load CSV download data", key="load_csv_download_data"):
+            st.session_state.download_data_loaded = True
+
+        if not st.session_state.download_data_loaded:
+            st.info(
+                "Click the button above to load downloadable CSV exports from the database."
+            )
+            sender_df = pd.DataFrame()
+            failed_df = pd.DataFrame()
+            mother_df = pd.DataFrame()
+            undistributed_df = pd.DataFrame()
+            cache_emails = []
+            cache_bin_data = None
+            now = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        else:
+            now = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+
+            sender_df = pd.DataFrame()
+            failed_df = pd.DataFrame()
+            mother_df = pd.DataFrame()
+            undistributed_df = pd.DataFrame()
+
+            with st.spinner("Loading CSV download data from the database..."):
+                conn = get_db_connection()
+                if conn is not None:
+                    try:
+                        cursor = conn.cursor()
+                        cursor.execute(
+                            "SELECT country, email, pass, recovery, batch, last_used FROM sender_input_accounts"
+                        )
+                        sender_df = pd.DataFrame(
+                            cursor.fetchall(),
+                            columns=[
+                                "country",
+                                "email",
+                                "pass",
+                                "recovery",
+                                "batch",
+                                "last_used",
+                            ],
+                        )
+
+                        cursor.execute(
+                            "SELECT email, pass, recovery, country, fail_reason, date_time FROM sender_failed_accounts"
+                        )
+                        failed_df = pd.DataFrame(
+                            cursor.fetchall(),
+                            columns=[
+                                "email",
+                                "pass",
+                                "recovery",
+                                "country",
+                                "fail_reason",
+                                "date_time",
+                            ],
+                        )
+
+                        cursor.execute(
+                            "SELECT email, pass, recovery, link, country, card_number, date_time FROM familybot_extracted_family_links_history"
+                        )
+                        mother_df = pd.DataFrame(
+                            cursor.fetchall(),
+                            columns=[
+                                "email",
+                                "pass",
+                                "recovery",
+                                "link",
+                                "country",
+                                "card_number",
+                                "date_time",
+                            ],
+                        )
+                        cursor.close()
+                    except Exception as exc:
+                        st.error(f"Unable to load download data: {exc}")
+                    finally:
+                        try:
+                            conn.close()
+                        except:
+                            pass
+
+                undistributed_df = get_undistributed_sender_accounts()
+
+        if st.session_state.download_data_loaded:
+            if not sender_df.empty:
+                sender_csv = sender_df.to_csv(index=False).encode("utf-8")
+                st.download_button(
+                    label="Download sender emails",
+                    data=sender_csv,
+                    file_name=f"sender_emails_{now}.csv",
+                    mime="text/csv",
+                )
+                st.write(f"Found {len(sender_df)} sender email records.")
+            else:
+                st.warning("No sender email records found in sender_input_accounts.")
+
+            if not failed_df.empty:
+                failed_csv = failed_df.to_csv(index=False).encode("utf-8")
+                st.download_button(
+                    label="Download suspended accounts",
+                    data=failed_csv,
+                    file_name=f"suspended_accounts_{now}.csv",
+                    mime="text/csv",
+                )
+                st.write(f"Found {len(failed_df)} suspended accounts.")
+            else:
+                st.warning(
+                    "No suspended account records found in sender_failed_accounts."
+                )
+
+            if not mother_df.empty:
+                mother_csv = mother_df.to_csv(index=False).encode("utf-8")
+                st.download_button(
+                    label="Download mother accounts",
+                    data=mother_csv,
+                    file_name=f"mother_accounts_{now}.csv",
+                    mime="text/csv",
+                )
+                st.write(f"Found {len(mother_df)} mother account records.")
+            else:
+                st.warning(
+                    "No mother account records found in familybot_extracted_family_links_history."
+                )
+
+            cache_emails, cache_bin_data = get_cache_bin_emails()
+            if cache_bin_data:
+                st.download_button(
+                    label="Download cache_bin file",
+                    data=cache_bin_data,
+                    file_name=f"cache_bin_{now}.txt",
+                    mime="application/json",
+                )
+                st.write(f"Found {len(cache_emails)} emails in cache bins.")
+            else:
+                st.warning("No cache bin data found or unable to parse cache_bins.")
+
+            if not undistributed_df.empty:
+                undistributed_csv = undistributed_df.to_csv(index=False).encode("utf-8")
+                st.download_button(
+                    label="Download undistributed accounts",
+                    data=undistributed_csv,
+                    file_name=f"undistributed_accounts_{now}.csv",
+                    mime="text/csv",
+                )
+                st.write(
+                    f"Found {len(undistributed_df)} undistributed sender accounts."
+                )
+            else:
+                st.warning(
+                    "No undistributed sender accounts found after filtering assigned and failed accounts."
+                )
 
 
 def bot_settings():
