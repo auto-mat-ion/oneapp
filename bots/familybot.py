@@ -6323,7 +6323,7 @@ def share_premium(new_profile_data):
         return False, f"Error occurred: {E}"
     finally:
         try:
-            # driver.quit()
+            driver.quit()
             pass
             # processed_email(new_profile_data)
         except:
