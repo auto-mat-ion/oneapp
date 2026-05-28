@@ -872,8 +872,19 @@ def click_start_sharing_button(driver):
             #     f"Found {len(total_start_sharing_buttons)} members that need start sharing"
             # )
         except:
-            print("No members found that need start sharing")
-            return True
+            try:
+                START_SHARING_BTN_ELEMENT = (
+                    By.CSS_SELECTOR,
+                    'button[aria-label="Start sharing Microsoft 365 Premium"]',
+                )
+
+                total_start_sharing_buttons = WebDriverWait(driver, wait_time).until(
+                    EC.visibility_of_all_elements_located(START_SHARING_BTN_ELEMENT)
+                )
+
+            except:
+                print("No members found that need start sharing")
+                return True
 
         for i in range(len(total_start_sharing_buttons)):
             try:
