@@ -4915,7 +4915,7 @@ def affirm_card_is_added(driver, cardholder_name):
 
 def affirm_congrats_card_added(driver):
     try:
-        time_in_sec = 160
+        time_in_sec = 160 * 2
         while time_in_sec > 0:
             try:
                 AFFIRM_CONGRATS_ELEMENT = (
