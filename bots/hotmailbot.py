@@ -1816,6 +1816,24 @@ def link_is_invalid(driver):
         return False
 
 
+def link_is_full(driver):
+    try:
+        INVALID_ELEMENT = (By.TAG_NAME, "h1")
+
+        invalid = WebDriverWait(driver, 1).until(
+            EC.visibility_of_element_located(INVALID_ELEMENT)
+        )
+
+        if invalid.text.lower() in [
+            "hmm... it looks like the family group is full",
+        ]:
+            return True
+
+        return False
+    except:
+        return False
+
+
 def sucessfully_joined_microsoft_premium(driver):
     try:
         CONGRATULATIONS_ELEMENT = (By.CSS_SELECTOR, "h1")
@@ -1913,6 +1931,10 @@ def use_link_to_join_family_acc(driver, new_profile_data):
                 elif link_is_invalid(driver):
                     print("Link is invalid.")
                     not_working_links(invite_url)
+                    return False
+                elif link_is_full(driver):
+                    print("Family group is full.")
+                    successfully_worked_links(invite_url)
                     return False
 
                 success_message_retries += 1
