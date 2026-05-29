@@ -1183,6 +1183,7 @@ def enrich_familybot_card_details(df):
         )
 
     country = country_values[0]
+    details_country = "poland" if country == "poland2" else country
     conn = get_db_connection()
     if conn is None:
         return False, "No database connection available for card enrichment."
@@ -1191,19 +1192,19 @@ def enrich_familybot_card_details(df):
         cursor = conn.cursor()
         cursor.execute(
             "SELECT firstnames FROM familybot_first_names WHERE LOWER(country) = %s",
-            (country,),
+            (details_country,),
         )
         first_names = [row[0].strip() for row in cursor.fetchall() if row[0]]
 
         cursor.execute(
             "SELECT surnames FROM familybot_surnames WHERE LOWER(country) = %s",
-            (country,),
+            (details_country,),
         )
         surnames = [row[0].strip() for row in cursor.fetchall() if row[0]]
 
         cursor.execute(
             "SELECT address_line1, city, state, postal_code FROM familybot_fake_details WHERE LOWER(country) = %s",
-            (country,),
+            (details_country,),
         )
         fake_rows = [
             {
@@ -1489,6 +1490,14 @@ def general_uploader():
         "Sweden",
         "United Kingdom",
     ]
+    if table_name == "familybot_card_details":
+        country_options = [
+            "United States",
+            "Poland",
+            "Poland2",
+            "Sweden",
+            "United Kingdom",
+        ]
 
     selected_country = None
     if table_name in [
