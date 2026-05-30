@@ -6,3 +6,4 @@
 *.lock
 .sender_logs/
 bots/settings.json
+database/backup*
