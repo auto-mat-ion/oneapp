@@ -89,7 +89,8 @@ def get_new_profile_data_from_history(retries=3, delay=5):
                 cursor.execute(
                     "SELECT link_id, email, pass, recovery, link "
                     "FROM familybot_extracted_family_links_history "
-                    "WHERE processing_server_ip = %s AND status = 'processing'  AND LOWER(country) = %s "
+                    "WHERE processing_server_ip = %s AND status = 'processing' AND LOWER(country) = %s "
+                    "AND link IN (SELECT link FROM link_stats WHERE times_used >= 5) "
                     "ORDER BY processing_date_time DESC LIMIT 1",
                     (SERVER_IP, PREFERRED_SMS_COUNTRY.lower()),
                 )
@@ -112,7 +113,8 @@ def get_new_profile_data_from_history(retries=3, delay=5):
 
                 cursor.execute(
                     "SELECT link_id FROM familybot_extracted_family_links_history "
-                    "WHERE status IS NULL AND LOWER(country) = %s"
+                    "WHERE status IS NULL AND LOWER(country) = %s "
+                    "AND link IN (SELECT link FROM link_stats WHERE times_used >= 5) "
                     "ORDER BY date_time ASC LIMIT 1",
                     (PREFERRED_SMS_COUNTRY.lower(),),
                 )
@@ -892,6 +894,9 @@ def click_start_sharing_button(driver):
             except:
                 print("No members found that need start sharing")
                 return True
+        total_start_sharing_buttons = (
+            5 if total_start_sharing_buttons > 5 else total_start_sharing_buttons
+        )
         print(
             f"Found {len(total_start_sharing_buttons)} members that need start sharing"
         )
@@ -4915,7 +4920,7 @@ def affirm_card_is_added(driver, cardholder_name):
 
 def affirm_congrats_card_added(driver):
     try:
-        time_in_sec = 160 * 2
+        time_in_sec = 200 * 2
         while time_in_sec > 0:
             try:
                 AFFIRM_CONGRATS_ELEMENT = (

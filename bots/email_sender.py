@@ -1185,65 +1185,66 @@ def flush_db_operations():
                         print("Failed accounts update complete.")
                         done_failed_update = True
 
-                    if _deferred_sent_recipients and not done_recipients_update:
-                        unique_recipients = list(
-                            dict.fromkeys(_deferred_sent_recipients)
-                        )
-                        total_sent_recipients = len(unique_recipients)
-                        print(
-                            f"Updating sent recipients list ({total_sent_recipients} unique rows)"
-                        )
-                        delete_sql = (
-                            "DELETE FROM sender_recipients "
-                            "WHERE recipient_email = %s AND server_ip = %s "
-                            "AND COALESCE(country, '') = %s"
-                        )
-                        insert_sql = (
-                            "INSERT INTO sender_sent_recipients "
-                            "(recipient_email, date_time, country, server_ip) "
-                            "VALUES (%s, %s, %s, %s)"
-                        )
-                        mysql_conn = _get_db_connection()
-                        if mysql_conn is None:
-                            log(
-                                "Warning: unable to flush sent recipients (DB connection failed)"
-                            )
-                        else:
-                            try:
-                                cursor = mysql_conn.cursor()
-                                for batch_idx in range(
-                                    0, total_sent_recipients, batch_size
-                                ):
-                                    batch = unique_recipients[
-                                        batch_idx : batch_idx + batch_size
-                                    ]
-                                    delete_params = [
-                                        (r, SERVER_IP, COUNTRY) for r in batch
-                                    ]
-                                    insert_params = [
-                                        (r, datetime.now(), COUNTRY, SERVER_IP)
-                                        for r in batch
-                                    ]
-                                    # cursor.executemany(delete_sql, delete_params)
-                                    cursor.executemany(insert_sql, insert_params)
-                                    mysql_conn.commit()
-                                    print(
-                                        f"  Processed sent recipients batch {batch_idx // batch_size + 1} "
-                                        f"of {(total_sent_recipients - 1) // batch_size + 1}"
-                                    )
-                                done_recipients_update = True
-                                time.sleep(2)
-                            except Exception as exc:
-                                log(f"Error flushing sent recipients: {exc}")
-                            finally:
-                                try:
-                                    cursor.close()
-                                except Exception:
-                                    pass
-                                try:
-                                    mysql_conn.close()
-                                except Exception:
-                                    pass
+                    done_recipients_update = True
+                    # if _deferred_sent_recipients and not done_recipients_update:
+                    #     unique_recipients = list(
+                    #         dict.fromkeys(_deferred_sent_recipients)
+                    #     )
+                    #     total_sent_recipients = len(unique_recipients)
+                    #     print(
+                    #         f"Updating sent recipients list ({total_sent_recipients} unique rows)"
+                    #     )
+                    #     delete_sql = (
+                    #         "DELETE FROM sender_recipients "
+                    #         "WHERE recipient_email = %s AND server_ip = %s "
+                    #         "AND COALESCE(country, '') = %s"
+                    #     )
+                    #     insert_sql = (
+                    #         "INSERT INTO sender_sent_recipients "
+                    #         "(recipient_email, date_time, country, server_ip) "
+                    #         "VALUES (%s, %s, %s, %s)"
+                    #     )
+                    #     mysql_conn = _get_db_connection()
+                    #     if mysql_conn is None:
+                    #         log(
+                    #             "Warning: unable to flush sent recipients (DB connection failed)"
+                    #         )
+                    #     else:
+                    #         try:
+                    #             cursor = mysql_conn.cursor()
+                    #             for batch_idx in range(
+                    #                 0, total_sent_recipients, batch_size
+                    #             ):
+                    #                 batch = unique_recipients[
+                    #                     batch_idx : batch_idx + batch_size
+                    #                 ]
+                    #                 delete_params = [
+                    #                     (r, SERVER_IP, COUNTRY) for r in batch
+                    #                 ]
+                    #                 insert_params = [
+                    #                     (r, datetime.now(), COUNTRY, SERVER_IP)
+                    #                     for r in batch
+                    #                 ]
+                    #                 # cursor.executemany(delete_sql, delete_params)
+                    #                 cursor.executemany(insert_sql, insert_params)
+                    #                 mysql_conn.commit()
+                    #                 print(
+                    #                     f"  Processed sent recipients batch {batch_idx // batch_size + 1} "
+                    #                     f"of {(total_sent_recipients - 1) // batch_size + 1}"
+                    #                 )
+                    #             done_recipients_update = True
+                    #             time.sleep(2)
+                    #         except Exception as exc:
+                    #             log(f"Error flushing sent recipients: {exc}")
+                    #         finally:
+                    #             try:
+                    #                 cursor.close()
+                    #             except Exception:
+                    #                 pass
+                    #             try:
+                    #                 mysql_conn.close()
+                    #             except Exception:
+                    #                 pass
 
                 print("Deferred DB flush complete.")
                 log(
@@ -1252,21 +1253,21 @@ def flush_db_operations():
                 )
 
             except Exception as exc:
-                log("Error flushing deferred DB ops. Retrying in 40 seconds...")
+                log("Error flushing deferred DB ops. Retrying in 60 seconds...")
             finally:
                 try:
                     engine.dispose()
                 except Exception:
                     pass
 
-            if done_acc_update and done_failed_update and done_recipients_update:
+            if done_acc_update and done_failed_update:
                 _deferred_account_updates.clear()
                 _deferred_failed_accounts.clear()
                 _deferred_sent_recipients.clear()
                 return True
 
             retries += 1
-            time.sleep(5 * 60)
+            time.sleep(random.randint(55, 75))
 
 
 def process_account_wrapper(
