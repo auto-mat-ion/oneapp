@@ -1521,7 +1521,7 @@ def sync_family_links_to_json():
     return data
 
 
-def get_family_link(driver):
+def get_family_link():
     with lock:
         try:
             conn = get_db_connection()
@@ -1529,17 +1529,17 @@ def get_family_link(driver):
                 return False, ""
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT link FROM familybot_extracted_family_links WHERE LOWER(country) = %s ORDER BY link_id",
+                "SELECT link, country FROM familybot_extracted_family_links WHERE LOWER(country) = %s ORDER BY link_id",
                 (PREFERRED_SMS_COUNTRY.lower(),),
             )
-            links = [row[0] for row in cursor.fetchall()]
+            links = cursor.fetchall()
             cursor.close()
             conn.close()
 
             if not links:
                 return False, "NO_LINK"
 
-            for link in links:
+            for link, country in links:
                 # print(f"Checking link usage for: {link}")
                 conn = get_db_connection()
                 if conn is None:
@@ -1558,14 +1558,71 @@ def get_family_link(driver):
                 if times_used >= 5:
                     successfully_worked_links(link)
                 else:
-                    # print(f"Link {link} has not been used enough times.")
-                    # break
-                    return True, link
+                    if move_family_link_to_processing(link, country):
+                        return True, link
+                    else:
+                        continue
 
             return False, "NO_LINK"
         except Exception as e:
             print(f"Error in get_family_link: {e}")
             return False, ""
+
+
+def move_family_link_to_processing(link, country):
+    try:
+        conn = get_db_connection()
+        if conn is None:
+            return False
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO familybot_processing_family_links (server_ip, bot_type, date_time, link, country) VALUES (%s, %s, %s, %s, %s)",
+            (SERVER_IP, BOT_TYPE, datetime.now(), link, country),
+        )
+        cursor.execute(
+            "DELETE FROM familybot_extracted_family_links WHERE link = %s",
+            (link,),
+        )
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return True
+    except Exception as e:
+        print(f"Error in move_family_link_to_processing: {e}")
+        return False
+
+
+def return_link_to_extracted_family_links_table(link):
+    try:
+        conn = get_db_connection()
+        if conn is None:
+            return False
+        cursor = conn.cursor()
+
+        cursor.execute(
+            "INSERT INTO familybot_extracted_family_links (server_ip, bot_type, date_time, email, `pass`, recovery, link, country) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+            (
+                SERVER_IP,
+                BOT_TYPE,
+                datetime.now(),
+                "processing",
+                "processing",
+                "processing",
+                link,
+                PREFERRED_SMS_COUNTRY.lower(),
+            ),
+        )
+        cursor.execute(
+            "DELETE FROM familybot_processing_family_links WHERE link = %s",
+            (link,),
+        )
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return True
+    except Exception as e:
+        print(f"Error in return_link_to_extracted_family_links_table: {e}")
+        return False
 
 
 def get_family_link_old(driver):
@@ -1637,7 +1694,7 @@ def not_working_links(link):
             (SERVER_IP, BOT_TYPE, datetime.now(), link),
         )
         cursor.execute(
-            "DELETE FROM familybot_extracted_family_links WHERE link = %s", (link,)
+            "DELETE FROM familybot_processing_family_links WHERE link = %s", (link,)
         )
         conn.commit()
         cursor.close()
@@ -1885,7 +1942,8 @@ def looks_like_there_arent_microsoft_premium(driver):
 
 def use_link_to_join_family_acc(driver, new_profile_data):
     try:
-        status, invite_url = get_family_link(driver)
+        status, invite_url = get_family_link()
+
         if status:
             print("Using family url to join.")
             driver.get(invite_url)
@@ -1915,8 +1973,10 @@ def use_link_to_join_family_acc(driver, new_profile_data):
                 return False
 
             success_message_retries = 0
-            while success_message_retries < 10:
+            while success_message_retries < 20:
                 if sucessfully_joined_microsoft_premium(driver):
+                    if return_link_to_extracted_family_links_table(invite_url):
+                        print("Returned link to extracted_family_links table")
                     update_link_usage_times(invite_url)
                     print("Successfully joined premium using family link")
                     return True
