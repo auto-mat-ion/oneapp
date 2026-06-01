@@ -52,7 +52,7 @@ def get_db_connection():
     return None
 
 
-def execute_db_action(action, retries=3, delay=5):
+def execute_db_action(action, retries=5, delay=5):
     attempt = 1
     while attempt <= retries:
         try:
@@ -875,6 +875,7 @@ def click_start_sharing_button(driver):
         )
 
         GOT_IT_BTN = (By.CSS_SELECTOR, 'button[aria-label="Got it"]')
+        CANCEL_BTN = (By.CSS_SELECTOR, 'button[aria-label="Close"]')
         try:
             total_start_sharing_buttons = WebDriverWait(driver, wait_time).until(
                 EC.visibility_of_all_elements_located(START_SHARING_BTN_ELEMENT)
@@ -902,15 +903,12 @@ def click_start_sharing_button(driver):
         )
         for i in range(len(total_start_sharing_buttons)):
             try:
-                # print(
-                #     f"Processing member {i + 1} of {len(total_start_sharing_buttons)}"
-                # )
                 start_sharing_buttons = WebDriverWait(driver, wait_time * 2).until(
                     EC.visibility_of_all_elements_located(START_SHARING_BTN_ELEMENT)
                 )
                 time.sleep(1)
                 element = start_sharing_buttons[0]
-                # scroll to view
+
                 driver.execute_script(
                     "arguments[0].scrollIntoView({block:'center'});", element
                 )
@@ -919,20 +917,46 @@ def click_start_sharing_button(driver):
 
                 element.click()
                 time.sleep(1)
-                got_it_button = WebDriverWait(driver, wait_time * 2).until(
-                    EC.element_to_be_clickable(GOT_IT_BTN)
-                )
-                time.sleep(2)
-                got_it_button.click()
-                time.sleep(3)
+                try:
+                    got_it_button = WebDriverWait(driver, wait_time * 2).until(
+                        EC.element_to_be_clickable(GOT_IT_BTN)
+                    )
+                    time.sleep(2)
+                    got_it_button.click()
+                    time.sleep(3)
+                except:
+                    cancel_button = WebDriverWait(driver, wait_time * 2).until(
+                        EC.element_to_be_clickable(CANCEL_BTN)
+                    )
+                    time.sleep(2)
+                    cancel_button.click()
+                    time.sleep(2)
+                    driver.refresh()
+                    time.sleep(2)
 
-                # print(
-                #     f"Processed  member {i + 1} of {len(total_start_sharing_buttons)}"
-                # )
+                    start_sharing_buttons = WebDriverWait(driver, wait_time * 2).until(
+                        EC.visibility_of_all_elements_located(START_SHARING_BTN_ELEMENT)
+                    )
+                    time.sleep(1)
+                    element = start_sharing_buttons[0]
+
+                    driver.execute_script(
+                        "arguments[0].scrollIntoView({block:'center'});", element
+                    )
+
+                    time.sleep(1.5)
+
+                    element.click()
+                    time.sleep(1)
+
+                    got_it_button = WebDriverWait(driver, wait_time * 2).until(
+                        EC.element_to_be_clickable(GOT_IT_BTN)
+                    )
+                    time.sleep(2)
+                    got_it_button.click()
+                    time.sleep(3)
+
             except:
-                # print(
-                #     f"Error processing member {i + 1} of {len(total_start_sharing_buttons)}. Skipping."
-                # )
                 pass
 
         return True
@@ -4374,30 +4398,9 @@ def get_creditcard_details():
     # Get all card details for preferred country
     cursor.execute(
         "SELECT * FROM familybot_card_details WHERE LOWER(country) = %s",
-        (PREFERRED_SMS_COUNTRY,),
+        (PREFERRED_SMS_COUNTRY.lower(),),
     )
     cards = cursor.fetchall()
-
-    # # Get first names for preferred country
-    # cursor.execute(
-    #     "SELECT firstnames FROM familybot_first_names WHERE LOWER(country) = %s",
-    #     (PREFERRED_SMS_COUNTRY,),
-    # )
-    # first_names = [row["firstnames"] for row in cursor.fetchall()]
-
-    # # Get surnames for preferred country
-    # cursor.execute(
-    #     "SELECT surnames FROM familybot_surnames WHERE LOWER(country) = %s",
-    #     (PREFERRED_SMS_COUNTRY,),
-    # )
-    # surnames = [row["surnames"] for row in cursor.fetchall()]
-
-    # # Get fake details for preferred country
-    # cursor.execute(
-    #     "SELECT * FROM familybot_fake_details WHERE LOWER(country) = %s",
-    #     (PREFERRED_SMS_COUNTRY,),
-    # )
-    # locations = cursor.fetchall()
 
     conn.close()
 
@@ -4730,7 +4733,7 @@ def get_next_card():
             # Load usage log from DB for preferred country only
             cursor.execute(
                 "SELECT card_num, `exp_month/year`, cvv, use_datetime FROM familybot_card_usage_log WHERE LOWER(country) = %s",
-                (PREFERRED_SMS_COUNTRY,),
+                (PREFERRED_SMS_COUNTRY.lower(),),
             )
             usage_rows = cursor.fetchall()
             usage = {}
@@ -4824,7 +4827,7 @@ def get_next_card():
                 conn.commit()
                 return card
             else:
-                return None
+                raise Exception("No available cards. retrying...")
         finally:
             conn.close()
 
@@ -4833,6 +4836,119 @@ def get_next_card():
     except Exception as e:
         print(f"Error in get_next_card: {e}")
         return None
+
+
+def num_available_cards():
+    conn = mysql.connector.connect(
+        host=DB_HOST, user=DB_USER, password=DB_PASSWORD, database=DB_NAME
+    )
+    try:
+        cursor = conn.cursor(dictionary=True)
+
+        all_cards = get_creditcard_details()
+
+        # Load usage log from DB for preferred country only
+        cursor.execute(
+            "SELECT card_num, `exp_month/year`, cvv, use_datetime FROM familybot_card_usage_log WHERE LOWER(country) = %s",
+            (PREFERRED_SMS_COUNTRY,),
+        )
+        usage_rows = cursor.fetchall()
+        usage = {}
+        for row in usage_rows:
+            key = (str(row["card_num"]), row["exp_month/year"], str(row["cvv"]))
+            if key not in usage:
+                usage[key] = []
+            usage[key].append(row["use_datetime"])
+
+        # Now, for each card, check if can use
+        available_cards = []
+        fully_used = []
+
+        for card in all_cards:
+            card_num = card["card_number"]
+            expiry = f"{card['expiry_month']}/{card['expiry_year'][2:]}"  # MM/YY
+            cvv = card["cvv"]
+            key = (card_num, expiry, cvv)
+            timestamps = sorted(usage.get(key, []))
+            uses = len(timestamps)
+            now = datetime.now()
+            can_use = False
+            if uses >= 5:
+                fully_used.append(card)
+                continue
+            elif uses in [0, 1, 3]:
+                can_use = True
+            elif uses == 2:
+                if timestamps and now > timestamps[-1] + timedelta(
+                    hours=CREDIT_CARD_INTERVAL_HRS
+                ):
+                    can_use = True
+            elif uses == 4:
+                if timestamps and now > timestamps[-1] + timedelta(
+                    hours=CREDIT_CARD_INTERVAL_HRS
+                ):
+                    can_use = True
+            if can_use:
+                available_cards.append(card)
+
+        return len(available_cards), available_cards
+
+        # For fully used, insert into familybot_fully_used_cards and delete from familybot_card_details
+        for card in fully_used:
+            expiry = f"{card['expiry_month']}/{card['expiry_year'][2:]}"
+            cursor.execute(
+                "INSERT INTO familybot_fully_used_cards (server_ip, bot_type,date_time, card_number, expiry_month_year, cvv, country, name_on_card, address_line1, city, postal_code, state) VALUES (%s, %s,%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                (
+                    SERVER_IP,
+                    BOT_TYPE,
+                    datetime.now(),
+                    card["card_number"],
+                    expiry,
+                    card["cvv"],
+                    card.get("country", PREFERRED_SMS_COUNTRY),
+                    card["name_on_card"],
+                    card["address_line1"],
+                    card["city"],
+                    card["postal_code"],
+                    card["state"],
+                ),
+            )
+            cursor.execute(
+                "DELETE FROM familybot_card_details WHERE card_number = %s AND expiry_month_year = %s AND cvv = %s",
+                (card["card_number"], expiry, card["cvv"]),
+            )
+
+        # Return the first available card, move to processing_card_details
+        if available_cards:
+            card = available_cards[0]
+            expiry = f"{card['expiry_month']}/{card['expiry_year'][2:]}"
+            cursor.execute(
+                "INSERT INTO processing_card_details (server_ip, bot_type,date_time,name_on_card, card_number, expiry_month_year, cvv,country, address_line1, city, state, postal_code) VALUES (%s, %s, %s,%s, %s,%s,%s, %s, %s, %s, %s, %s)",
+                (
+                    SERVER_IP,
+                    BOT_TYPE,
+                    datetime.now(),
+                    card["name_on_card"],
+                    card["card_number"],
+                    expiry,
+                    card["cvv"],
+                    card.get("country", PREFERRED_SMS_COUNTRY),
+                    card["address_line1"],
+                    card["city"],
+                    card["state"],
+                    card["postal_code"],
+                ),
+            )
+            cursor.execute(
+                "DELETE FROM familybot_card_details WHERE card_number = %s AND expiry_month_year = %s AND cvv = %s",
+                (card["card_number"], expiry, card["cvv"]),
+            )
+            conn.commit()
+            return card
+        else:
+            return None
+    finally:
+        conn.close()
 
 
 def click_signin_on_adding_card(driver):
@@ -6823,3 +6939,5 @@ def run_familybot_share():
 
 
 # driver = share_premium(new_profile_data)
+
+# num_available_cards()

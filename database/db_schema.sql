@@ -136,6 +136,16 @@ CREATE TABLE
   ) ENGINE = InnoDB;
 
 CREATE TABLE
+  IF NOT EXISTS familybot_processing_family_links (
+    link_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    server_ip VARCHAR(45) NULL,
+    bot_type VARCHAR(50) NULL,
+    date_time DATETIME NULL,
+    link TEXT NULL,
+    country VARCHAR(255) NULL
+  ) ENGINE = InnoDB;
+
+CREATE TABLE
   IF NOT EXISTS familybot_failed_cards (
     card_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
     server_ip VARCHAR(45) NULL,
