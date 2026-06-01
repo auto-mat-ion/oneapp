@@ -1529,6 +1529,22 @@ def get_family_link():
                 return False, ""
             cursor = conn.cursor()
             cursor.execute(
+                "SELECT link FROM familybot_processing_family_links WHERE server_ip = %s AND LOWER(country) = %s",
+                (SERVER_IP, PREFERRED_SMS_COUNTRY.lower()),
+            )
+            processing_links = [row[0] for row in cursor.fetchall()]
+            cursor.close()
+            conn.close()
+
+            if processing_links:
+                for processing_link in processing_links:
+                    return_link_to_extracted_family_links_table(processing_link)
+
+            conn = get_db_connection()
+            if conn is None:
+                return False, ""
+            cursor = conn.cursor()
+            cursor.execute(
                 "SELECT link, country FROM familybot_extracted_family_links WHERE LOWER(country) = %s ORDER BY link_id desc",
                 (PREFERRED_SMS_COUNTRY.lower(),),
             )
