@@ -6919,7 +6919,7 @@ def run_familybot_share():
     """
     Creates threads and signs in simultaneously
     """
-
+    print(f"Starting Sharebot for country: {PREFERRED_SMS_COUNTRY} and IP: {SERVER_IP}")
     while True:
         status, new_profile_data = get_new_profile_data_from_history()
         if status:
