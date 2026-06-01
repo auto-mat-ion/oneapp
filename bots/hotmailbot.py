@@ -171,6 +171,21 @@ def get_db_connection():
         return None
 
 
+def execute_db_action(action, retries=5, delay=2):
+    attempt = 1
+    while attempt <= retries:
+        try:
+            return action()
+        except Exception as exc:
+            if attempt == retries:
+                raise
+            print(
+                f"Database action failed (attempt {attempt}/{retries}): {exc}. Retrying in {delay} seconds..."
+            )
+            time.sleep(delay)
+            attempt += 1
+
+
 CLIENT_ID = get_setting("CLIENT_ID")
 AUTHORITY = "https://login.microsoftonline.com/common"
 SCOPES = ["https://graph.microsoft.com/.default"]
@@ -1524,53 +1539,65 @@ def sync_family_links_to_json():
 def get_family_link():
     with lock:
         try:
-            conn = get_db_connection()
-            if conn is None:
-                return False, ""
-            cursor = conn.cursor()
-            cursor.execute(
-                "SELECT link FROM familybot_processing_family_links WHERE server_ip = %s AND LOWER(country) = %s",
-                (SERVER_IP, PREFERRED_SMS_COUNTRY.lower()),
-            )
-            processing_links = [row[0] for row in cursor.fetchall()]
-            cursor.close()
-            conn.close()
 
+            def fetch_processing_links():
+                conn = get_db_connection()
+                if conn is None:
+                    raise Exception("Unable to connect to database.")
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT link FROM familybot_processing_family_links WHERE server_ip = %s AND LOWER(country) = %s",
+                    (SERVER_IP, PREFERRED_SMS_COUNTRY.lower()),
+                )
+                links = [row[0] for row in cursor.fetchall()]
+                cursor.close()
+                conn.close()
+                return links
+
+            processing_links = execute_db_action(fetch_processing_links)
             if processing_links:
                 for processing_link in processing_links:
-                    return_link_to_extracted_family_links_table(processing_link)
+                    execute_db_action(
+                        lambda processing_link=processing_link: (
+                            return_link_to_extracted_family_links_table(processing_link)
+                        )
+                    )
 
-            conn = get_db_connection()
-            if conn is None:
-                return False, ""
-            cursor = conn.cursor()
-            cursor.execute(
-                "SELECT link, country FROM familybot_extracted_family_links WHERE LOWER(country) = %s ORDER BY link_id desc",
-                (PREFERRED_SMS_COUNTRY.lower(),),
-            )
-            links = cursor.fetchall()
-            cursor.close()
-            conn.close()
+            def fetch_extracted_links():
+                conn = get_db_connection()
+                if conn is None:
+                    raise Exception("Unable to connect to database.")
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT link, country FROM familybot_extracted_family_links WHERE LOWER(country) = %s ORDER BY link_id desc",
+                    (PREFERRED_SMS_COUNTRY.lower(),),
+                )
+                result = cursor.fetchall()
+                cursor.close()
+                conn.close()
+                return result
 
+            links = execute_db_action(fetch_extracted_links)
             if not links:
                 return False, "NO_LINK"
 
             for link, country in links:
-                # print(f"Checking link usage for: {link}")
-                conn = get_db_connection()
-                if conn is None:
-                    continue
-                cursor = conn.cursor()
-                cursor.execute(
-                    "SELECT times_used FROM link_stats WHERE link = %s  LIMIT 1",
-                    (link,),
-                )
-                result = cursor.fetchone()
-                times_used = result[0] if result else 0
-                cursor.close()
-                conn.close()
-                # print(f"Link {link} has been used {times_used} times.")
 
+                def fetch_times_used():
+                    conn = get_db_connection()
+                    if conn is None:
+                        raise Exception("Unable to connect to database.")
+                    cursor = conn.cursor()
+                    cursor.execute(
+                        "SELECT times_used FROM link_stats WHERE link = %s  LIMIT 1",
+                        (link,),
+                    )
+                    row = cursor.fetchone()
+                    cursor.close()
+                    conn.close()
+                    return row[0] if row else 0
+
+                times_used = execute_db_action(fetch_times_used)
                 if times_used >= 5:
                     successfully_worked_links(link)
                 else:
@@ -1586,10 +1613,10 @@ def get_family_link():
 
 
 def move_family_link_to_processing(link, country):
-    try:
+    def action():
         conn = get_db_connection()
         if conn is None:
-            return False
+            raise Exception("Unable to connect to database.")
         cursor = conn.cursor()
         cursor.execute(
             "INSERT INTO familybot_processing_family_links (server_ip, bot_type, date_time, link, country) VALUES (%s, %s, %s, %s, %s)",
@@ -1603,16 +1630,19 @@ def move_family_link_to_processing(link, country):
         cursor.close()
         conn.close()
         return True
+
+    try:
+        return execute_db_action(action)
     except Exception as e:
         print(f"Error in move_family_link_to_processing: {e}")
         return False
 
 
 def return_link_to_extracted_family_links_table(link):
-    try:
+    def action():
         conn = get_db_connection()
         if conn is None:
-            return False
+            raise Exception("Unable to connect to database.")
         cursor = conn.cursor()
 
         cursor.execute(
@@ -1636,6 +1666,9 @@ def return_link_to_extracted_family_links_table(link):
         cursor.close()
         conn.close()
         return True
+
+    try:
+        return execute_db_action(action)
     except Exception as e:
         print(f"Error in return_link_to_extracted_family_links_table: {e}")
         return False
@@ -4274,7 +4307,9 @@ def run_hotmailbot():
     """
     Creates threads and signs in simultaneously
     """
-
+    print(
+        f"Starting Hotmailbot for country: {PREFERRED_SMS_COUNTRY} and IP: {SERVER_IP}"
+    )
     while True:
         status, new_profile_data = get_new_profile_data()
         if status:
