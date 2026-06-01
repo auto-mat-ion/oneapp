@@ -895,7 +895,7 @@ def click_start_sharing_button(driver):
                 print("No members found that need start sharing")
                 return True
         total_start_sharing_buttons = (
-            5 if total_start_sharing_buttons > 5 else total_start_sharing_buttons
+            5 if len(total_start_sharing_buttons) > 5 else total_start_sharing_buttons
         )
         print(
             f"Found {len(total_start_sharing_buttons)} members that need start sharing"
