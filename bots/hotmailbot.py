@@ -3566,23 +3566,31 @@ def smtp_accept_access(driver):
 
 def load_cache():
     try:
-        conn = get_db_connection()
-        if conn is None:
-            return msal.SerializableTokenCache()
-        cursor = conn.cursor()
-        cursor.execute(
-            "SELECT cache_bin_file FROM cache_bins WHERE server_ip = %s AND bot_type = %s ORDER BY date_time DESC LIMIT 1",
-            (SERVER_IP, BOT_TYPE),
-        )
-        result = cursor.fetchone()
-        cursor.close()
-        conn.close()
-        if result and result[0]:
-            cache = msal.SerializableTokenCache()
-            cache.deserialize(result[0].decode("utf-8"))
+        cache = msal.SerializableTokenCache()
+
+        def load_action():
+            conn = get_db_connection()
+            if conn is None:
+                raise RuntimeError("Unable to connect to database")
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT cache_bin_file FROM cache_bins WHERE server_ip = %s AND bot_type = %s ORDER BY date_time DESC LIMIT 1",
+                (SERVER_IP, BOT_TYPE),
+            )
+            result = cursor.fetchone()
+            cursor.close()
+            conn.close()
+            return result
+
+        try:
+            result = execute_db_action(load_action, retries=3, delay=1)
+        except Exception as e:
+            print(f"Error loading cache after retries: {e}")
             return cache
-        else:
-            return msal.SerializableTokenCache()
+
+        if result and result[0]:
+            cache.deserialize(result[0].decode("utf-8"))
+        return cache
     except Exception as e:
         print(f"Error loading cache: {e}")
         return msal.SerializableTokenCache()
@@ -3590,13 +3598,16 @@ def load_cache():
 
 def save_cache(cache):
     try:
-        if cache.has_state_changed:
-            serialized_cache = cache.serialize()
+        if not cache.has_state_changed:
+            return
+
+        serialized_cache = cache.serialize()
+
+        def save_action():
             conn = get_db_connection()
             if conn is None:
-                return
+                raise RuntimeError("Unable to connect to database")
             cursor = conn.cursor()
-            # Check if row exists
             cursor.execute(
                 "SELECT cache_id FROM cache_bins WHERE server_ip = %s AND bot_type = %s",
                 (SERVER_IP, BOT_TYPE),
@@ -3625,10 +3636,23 @@ def save_cache(cache):
             conn.commit()
             cursor.close()
             conn.close()
-            # Save copy to file
 
-            with open(CACHE_PATH, "w") as f:
-                f.write(serialized_cache)
+        try:
+            execute_db_action(save_action, retries=3, delay=1)
+        except Exception as e:
+            print(f"Error saving cache after retries: {e}")
+
+        file_retries = 3
+        for attempt in range(1, file_retries + 1):
+            try:
+                with open(CACHE_PATH, "w", encoding="utf-8") as f:
+                    f.write(serialized_cache)
+                break
+            except Exception as file_exc:
+                if attempt == file_retries:
+                    print(f"Error saving cache file after retries: {file_exc}")
+                else:
+                    time.sleep(1)
     except Exception as e:
         print(f"Error saving cache: {e}")
 
@@ -4277,7 +4301,7 @@ def signin_multithread():
 
 
 def get_new_profile_data():
-    try:
+    def db_action():
         conn = mysql.connector.connect(
             host=DB_HOST, user=DB_USER, password=DB_PASSWORD, database=DB_NAME
         )
@@ -4285,21 +4309,27 @@ def get_new_profile_data():
         cursor.execute("SELECT email, pass FROM input_emails LIMIT 1")
         row = cursor.fetchone()
         if not row:
+            cursor.close()
             conn.close()
-            return {}
+            return False, {"email": "", "pass": ""}
+
         email, password = row
         cursor.execute(
-            "INSERT INTO processing_emails (email, pass, server_ip, bot_type, date_time) VALUES (%s, %s,%s, %s, %s)",
+            "INSERT INTO processing_emails (email, pass, server_ip, bot_type, date_time) VALUES (%s, %s, %s, %s, %s)",
             (email, password, SERVER_IP, BOT_TYPE, datetime.now()),
         )
         cursor.execute(
             "DELETE FROM input_emails WHERE email = %s AND pass = %s", (email, password)
         )
         conn.commit()
+        cursor.close()
         conn.close()
         return True, {"email": email, "pass": password}
+
+    try:
+        return execute_db_action(db_action, retries=3, delay=1)
     except Exception as e:
-        print(f"Error getting email from db: {e}")
+        print(f"Error getting email from db after retries: {e}")
         return False, {"email": "", "pass": ""}
 
 
