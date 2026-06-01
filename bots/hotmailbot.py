@@ -1529,7 +1529,7 @@ def get_family_link():
                 return False, ""
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT link, country FROM familybot_extracted_family_links WHERE LOWER(country) = %s ORDER BY link_id",
+                "SELECT link, country FROM familybot_extracted_family_links WHERE LOWER(country) = %s ORDER BY link_id desc",
                 (PREFERRED_SMS_COUNTRY.lower(),),
             )
             links = cursor.fetchall()
