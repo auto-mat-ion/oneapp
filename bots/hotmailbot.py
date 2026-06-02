@@ -3342,7 +3342,7 @@ def update_accounts_data(
     if not email:
         return False
 
-    try:
+    def db_action():
         conn = mysql.connector.connect(
             host=DB_HOST, user=DB_USER, password=DB_PASSWORD, database=DB_NAME
         )
@@ -3434,8 +3434,11 @@ def update_accounts_data(
         conn.commit()
         conn.close()
         return True
+
+    try:
+        return execute_db_action(db_action, retries=3, delay=1)
     except Exception as e:
-        print(f"Error saving to accounts table: {e}")
+        print(f"Error saving to accounts table after retries: {e}")
         return False
 
 
