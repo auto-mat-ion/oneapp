@@ -875,7 +875,7 @@ def click_start_sharing_button(driver):
         )
 
         GOT_IT_BTN = (By.CSS_SELECTOR, 'button[aria-label="Got it"]')
-        CANCEL_BTN = (By.CSS_SELECTOR, 'button[data-bi-id*="get-invite-error"]')
+        CANCEL_BTN = (By.CSS_SELECTOR, 'button[data-bi-id*="error"]')
         try:
             total_start_sharing_buttons = WebDriverWait(driver, wait_time).until(
                 EC.visibility_of_all_elements_located(START_SHARING_BTN_ELEMENT)
@@ -933,7 +933,8 @@ def click_start_sharing_button(driver):
                     time.sleep(2)
                     cancel_button.click()
                     time.sleep(2)
-                    driver.refresh()
+                    # driver.refresh()
+                    click_share_dropdown_button(driver)
                     time.sleep(2)
 
                     start_sharing_buttons = WebDriverWait(driver, wait_time * 2).until(
