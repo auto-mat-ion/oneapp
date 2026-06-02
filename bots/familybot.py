@@ -6454,20 +6454,20 @@ def share_premium(new_profile_data):
             print(f"{email_address} : Clicked share dropdown button")
 
         if not click_start_sharing_button(driver):
-            return False, "Error clicking start sharing button"
+            return False, "Error clicking start sharing button", driver
 
         print(f"{email_address} : Clicked start sharing button for all members")
 
         if not mark_share_as_done(email_address):
-            return False, "Error updating share status in database"
+            return False, "Error updating share status in database", driver
 
         return True
     except Exception as E:
         print(f"{email_address} : Exception error occurred: {E}")
-        return False, f"Error occurred: {E}"
+        return False, f"Error occurred: {E}", driver
     finally:
         try:
-            driver.quit()
+            # driver.quit()
             pass
             # processed_email(new_profile_data)
         except:
@@ -6923,8 +6923,8 @@ def run_familybot_share():
     while True:
         status, new_profile_data = get_new_profile_data_from_history()
         if status:
-            share_premium(new_profile_data)
-
+            d = share_premium(new_profile_data)
+            time.sleep(30)
         else:
             print("No unshared family acc in database...")
             break
