@@ -959,6 +959,12 @@ def click_start_sharing_button(driver):
                     time.sleep(3)
 
             except:
+                print(
+                    "Error clicking close button, refreshing instead and trying again"
+                )
+                driver.refresh()
+                time.sleep(3)
+                click_share_dropdown_button(driver)
                 pass
 
         return True
