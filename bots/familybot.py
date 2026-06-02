@@ -896,7 +896,9 @@ def click_start_sharing_button(driver):
                 print("No members found that need start sharing")
                 return True
         total_start_sharing_buttons = (
-            5 if len(total_start_sharing_buttons) > 5 else total_start_sharing_buttons
+            [i for i in total_start_sharing_buttons[:5]]
+            if len(total_start_sharing_buttons) > 5
+            else total_start_sharing_buttons
         )
         print(
             f"Found {len(total_start_sharing_buttons)} members that need start sharing"
@@ -6467,7 +6469,7 @@ def share_premium(new_profile_data):
         return False, f"Error occurred: {E}", driver
     finally:
         try:
-            # driver.quit()
+            driver.quit()
             pass
             # processed_email(new_profile_data)
         except:
@@ -6924,7 +6926,7 @@ def run_familybot_share():
         status, new_profile_data = get_new_profile_data_from_history()
         if status:
             d = share_premium(new_profile_data)
-            time.sleep(30)
+            # time.sleep(30)
         else:
             print("No unshared family acc in database...")
             break
