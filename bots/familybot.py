@@ -857,10 +857,29 @@ def click_share_dropdown_button(driver):
             next_button.click()
 
         return True
-    except Exception as E:
-        # print("Share dropdown button not found")
-        # print(f"Error: {E}")
-        return False
+    except:
+        try:
+            NEXT_BUTTON_ELEMENT = (
+                By.CSS_SELECTOR,
+                'div[id="microsoft365-sharing-drawer"] span[class="ChevronDownMed"]',
+            )
+
+            next_button = WebDriverWait(driver, wait_time / 2).until(
+                EC.visibility_of_element_located(NEXT_BUTTON_ELEMENT)
+            )
+
+            # scroll to view
+            driver.execute_script(
+                "arguments[0].scrollIntoView({block:'center'});", next_button
+            )
+
+            if next_button.get_attribute("aria-expanded") != "true":
+                # print("Clicking share dropdown button")
+                next_button.click()
+
+            return True
+        except Exception as E:
+            return False
 
 
 def click_start_sharing_button(driver):
