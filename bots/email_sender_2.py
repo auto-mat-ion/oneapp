@@ -1328,8 +1328,8 @@ def main2():
         print("No batch selected. Exiting.")
         return
 
-    connect_random_random()
-    connect_new_random()
+    # connect_random_random()
+    # connect_new_random()
 
     time.sleep(5)
     print("Connected VPN...")
