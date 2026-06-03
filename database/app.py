@@ -1314,50 +1314,52 @@ def insert_into_db(
             if table_name == "sender_recipients":
                 db_configs = get_db_config()
                 engine = create_engine(
-                    f"mysql+pymysql://{db_configs['user']}:{db_configs['password']}@{db_configs['host']}/{db_configs['database']}"
+                    f"mysql+pymysql://{db_configs['user']}:{db_configs['password']}@{db_configs['host']}/{db_configs['database']}",
+                    pool_pre_ping=True,
                 )
                 total_rows = len(df)
                 # Lowering chunk_size to 10,000 prevents MySQL server thread-RAM exhaustion
                 chunk_size = 10000
 
-                if total_rows > 0:
-                    # Initialize Streamlit UI components
-                    progress_bar = st.progress(0.0)
-                    status_text = st.empty()
+                try:
+                    if total_rows > 0:
+                        # Initialize Streamlit UI components
+                        progress_bar = st.progress(0.0)
+                        status_text = st.empty()
 
-                    inserted = 0
-                    total_chunks = math.ceil(total_rows / chunk_size)
+                        inserted = 0
+                        total_chunks = math.ceil(total_rows / chunk_size)
 
-                    # 3. Explicitly loop through the DataFrame in chunks
-                    for i in range(total_chunks):
-                        start_idx = i * chunk_size
-                        end_idx = min(start_idx + chunk_size, total_rows)
+                        # 3. Explicitly loop through the DataFrame in chunks
+                        with engine.begin() as sql_conn:
+                            for i in range(total_chunks):
+                                start_idx = i * chunk_size
+                                end_idx = min(start_idx + chunk_size, total_rows)
 
-                        # Slice the DataFrame (pandas uses memory views, so it does not duplicate data)
-                        chunk_df = df.iloc[start_idx:end_idx]
+                                # Slice the DataFrame (pandas uses memory views, so it does not duplicate data)
+                                chunk_df = df.iloc[start_idx:end_idx]
 
-                        # Upload this specific chunk using optimized multi-row inserts
-                        chunk_df.to_sql(
-                            name=table_name,
-                            con=engine,
-                            if_exists="append",
-                            index=False,
-                            method="multi",
-                        )
+                                chunk_df.to_sql(
+                                    name=table_name,
+                                    con=sql_conn,
+                                    if_exists="append",
+                                    index=False,
+                                    method="multi",
+                                )
 
-                        # 4. Update progress metrics immediately after the chunk completes
-                        inserted += len(chunk_df)
-                        progress_percentage = min(inserted / total_rows, 1.0)
+                                inserted += len(chunk_df)
+                                progress_percentage = min(inserted / total_rows, 1.0)
 
-                        progress_bar.progress(progress_percentage)
+                                progress_bar.progress(progress_percentage)
+                                status_text.text(
+                                    f"Uploading {inserted:,} / {total_rows:,} rows into {table_name}..."
+                                )
+
                         status_text.text(
-                            f"Uploading {inserted:,} / {total_rows:,} rows into {table_name}..."
+                            f"Finished uploading all {inserted:,} rows into {table_name}."
                         )
-
-                    # 5. Clean up UI states upon successful completion
-                    status_text.text(
-                        f"Finished uploading all {inserted:,} rows into {table_name}."
-                    )
+                finally:
+                    engine.dispose()
 
             else:
                 progress_bar = st.progress(0)
