@@ -33,7 +33,9 @@ PROCESSED_FILE = SENDER_LOG_DIR / "processed_accounts.txt"
 FAILED_FILE = SENDER_LOG_DIR / "failed_accounts.txt"
 SENT_RECIPIENTS_FILE = SENDER_LOG_DIR / "sent_recipients.txt"
 
-TEST_RECIPIENT_MAIL = "a.bc@g.ef"
+TEST_RECIPIENT_MAIL = input(
+    "Enter a test recipient email address that you control (will receive test emails): "
+).strip()
 _deferred_sent_recipients: List[str] = []
 _deferred_account_updates: List[Tuple[str, datetime, str, str]] = []
 _deferred_failed_accounts: List[Tuple[str, str, str, str, str, str, datetime]] = []
@@ -1315,8 +1317,14 @@ def process_account_wrapper(
     return {"account": account, "success": success, "sent": sent, "error": error}
 
 
-def main():
+def main2():
     print("Starting...")
+    global BATCH_NUMBER
+    BATCH_NUMBER = prompt_for_batch_selection()
+    if not BATCH_NUMBER:
+        print("No batch selected. Exiting.")
+        return
+
     connect_random_random()
     connect_new_random()
 
@@ -1334,12 +1342,6 @@ def main():
     print(f"  STAGGER: {STAGGER_MIN}-{STAGGER_MAX}s")
     print(f"  SAVE_TO_SENT: {SAVE_TO_SENT}")
     print("")
-
-    global BATCH_NUMBER
-    BATCH_NUMBER = prompt_for_batch_selection()
-    if not BATCH_NUMBER:
-        print("No batch selected. Exiting.")
-        return
 
     log("=" * 55)
     log("EMAIL SENDER | Graph API")

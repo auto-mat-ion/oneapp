@@ -1317,6 +1317,11 @@ def process_account_wrapper(
 
 def main():
     print("Starting...")
+    global BATCH_NUMBER
+    BATCH_NUMBER = prompt_for_batch_selection()
+    if not BATCH_NUMBER:
+        print("No batch selected. Exiting.")
+        return
     connect_random_random()
     connect_new_random()
 
@@ -1334,12 +1339,6 @@ def main():
     print(f"  STAGGER: {STAGGER_MIN}-{STAGGER_MAX}s")
     print(f"  SAVE_TO_SENT: {SAVE_TO_SENT}")
     print("")
-
-    global BATCH_NUMBER
-    BATCH_NUMBER = prompt_for_batch_selection()
-    if not BATCH_NUMBER:
-        print("No batch selected. Exiting.")
-        return
 
     log("=" * 55)
     log("EMAIL SENDER | Graph API")
