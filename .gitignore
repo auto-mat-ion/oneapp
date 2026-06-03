@@ -7,3 +7,5 @@
 .sender_logs/
 bots/settings.json
 database/backup*
+undistributed_accounts_2026-06-03_18-44-34.csv
+sender_logs/

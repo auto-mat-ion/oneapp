@@ -1732,6 +1732,48 @@ def update_link_usage_times(link):
         print(f"Error in update_link_usage_times: {e}")
 
 
+def update_link_mother_details(new_profile_data, invite_url):
+    try:
+
+        def action():
+            conn = get_db_connection()
+            if conn is None:
+                raise Exception("Unable to connect to database.")
+            cursor = conn.cursor(dictionary=True)
+            cursor.execute(
+                "SELECT email, `pass`, recovery FROM familybot_extracted_family_links_history WHERE link = %s ORDER BY link_id DESC LIMIT 1",
+                (invite_url,),
+            )
+            result = cursor.fetchone()
+            cursor.close()
+            conn.close()
+            return result
+
+        result = execute_db_action(action)
+        if not result:
+            return False
+
+        mother_email = result.get("email")
+        mother_password = result.get("pass")
+        mother_recovery = result.get("recovery")
+
+        account_email = new_profile_data.get("email_acc") or new_profile_data.get(
+            "email"
+        )
+        if not account_email:
+            return False
+
+        return update_accounts_data(
+            email=account_email,
+            premium_mother_email=mother_email,
+            premium_mother_password=mother_password,
+            premium_mother_recovery=mother_recovery,
+        )
+    except Exception as e:
+        print(f"Error in update_link_mother_details: {e}")
+        return False
+
+
 def not_working_links(link):
     try:
         conn = get_db_connection()
@@ -1992,6 +2034,7 @@ def looks_like_there_arent_microsoft_premium(driver):
 def use_link_to_join_family_acc(driver, new_profile_data):
     try:
         status, invite_url = get_family_link()
+        email_address = new_profile_data.get("email")
 
         if status:
             print("Using family url to join.")
@@ -2001,13 +2044,15 @@ def use_link_to_join_family_acc(driver, new_profile_data):
             while (check_btn_retries < 15) and (not proceed):
                 if click_join_family_link_btn(driver, new_profile_data):
                     # update_link_usage_times(invite_url)
-                    print("Clicked join now button. Waiting for success message")
+                    print(
+                        f"{email_address}: Clicked join now button. Waiting for success message"
+                    )
                     proceed = True
                 elif sucessfully_joined_microsoft_premium(driver):
-                    print("Successfully joined Microsoft Premium.")
+                    print(f"{email_address}: Successfully joined Microsoft Premium.")
                     proceed = True
                 elif link_is_invalid(driver):
-                    print("Link is invalid.")
+                    print(f"{email_address}: Link is invalid.")
                     not_working_links(invite_url)
                     return False
 
@@ -2016,7 +2061,7 @@ def use_link_to_join_family_acc(driver, new_profile_data):
 
             if not proceed:
                 print(
-                    "Loading timeout. Join now button not present. Link is invalid label not present"
+                    f"{email_address}: Loading timeout. Join now button not present. Link is invalid label not present"
                 )
                 # not_working_links(invite_url)
                 return False
@@ -2024,32 +2069,43 @@ def use_link_to_join_family_acc(driver, new_profile_data):
             success_message_retries = 0
             while success_message_retries < 20:
                 if sucessfully_joined_microsoft_premium(driver):
+                    # Update mother details here
+                    if update_link_mother_details(new_profile_data, invite_url):
+                        print(f"{email_address}: Saved premium mother details")
+                    else:
+                        print(f"{email_address}: Could not save premium mother details")
                     if return_link_to_extracted_family_links_table(invite_url):
-                        print("Returned link to extracted_family_links table")
+                        print(
+                            f"{email_address}: Returned link to extracted_family_links table"
+                        )
                     update_link_usage_times(invite_url)
-                    print("Successfully joined premium using family link")
+                    print(
+                        f"{email_address}: Successfully joined premium using family link"
+                    )
                     return True
                 elif looks_like_there_arent_microsoft_premium(driver):
                     print(
-                        "'Looks like there aren’t any subscriptions available' displayed. "
+                        f"{email_address}: 'Looks like there aren’t any subscriptions available' displayed. "
                     )
                     not_working_links(invite_url)
 
                     return False
 
                 elif link_is_invalid(driver):
-                    print("Link is invalid.")
+                    print(f"{email_address}: Link is invalid.")
                     not_working_links(invite_url)
                     return False
                 elif link_is_full(driver):
-                    print("Family group is full.")
+                    print(f"{email_address}: Family group is full.")
                     successfully_worked_links(invite_url)
                     return False
 
                 success_message_retries += 1
                 time.sleep(1.5)
 
-            print("Waited for congratulations message and timed out after a minute")
+            print(
+                f"{email_address}: Waited for congratulations message and timed out after a minute"
+            )
             return False
         else:
             if invite_url == "NO_LINK":
@@ -3338,6 +3394,9 @@ def update_accounts_data(
     has_bitly_account=None,
     bitly_acc_password=None,
     save_smtp="NO",
+    premium_mother_email=None,
+    premium_mother_password=None,
+    premium_mother_recovery=None,
 ):
     if not email:
         return False
@@ -3396,6 +3455,15 @@ def update_accounts_data(
             if bitly_acc_password is not None:
                 update_fields.append("bitly_acc_password = %s")
                 update_values.append(bitly_acc_password)
+            if premium_mother_email is not None:
+                update_fields.append("premium_mother_email = %s")
+                update_values.append(premium_mother_email)
+            if premium_mother_password is not None:
+                update_fields.append("premium_mother_password = %s")
+                update_values.append(premium_mother_password)
+            if premium_mother_recovery is not None:
+                update_fields.append("premium_mother_recovery = %s")
+                update_values.append(premium_mother_recovery)
             if save_smtp:
                 update_fields.append("save_smtp = %s")
                 update_values.append(save_smtp)
@@ -3405,31 +3473,60 @@ def update_accounts_data(
                 query = f"UPDATE accounts_details SET {', '.join(update_fields)} WHERE email_acc = %s"
                 cursor.execute(query, tuple(update_values))
         else:
-            # Insert new record
-            cursor.execute(
-                "INSERT INTO accounts_details (server_ip, bot_type, date_time, email_acc, password, profile_dir, proxy_used, country, has_recovery_email, recovery_email, has_recovery_phone, recovery_phone_number, joined_microsoft_premium,join_time_microsoft_premium, has_bitly_account, bitly_acc_password, save_smtp) VALUES (%s, %s, %s, %s, %s,%s,%s, %s, %s, %s, %s, %s, %s,%s, %s, %s, %s)",
-                (
-                    SERVER_IP,
-                    BOT_TYPE,
-                    datetime.now(),
-                    email,
-                    password,
-                    profile_dir,
-                    proxy_used,
-                    PREFERRED_SMS_COUNTRY,
-                    str(has_recovery_email) if has_recovery_email is not None else None,
-                    recovery_email,
-                    str(has_recovery_phone) if has_recovery_phone is not None else None,
-                    recovery_phone_number,
-                    str(joined_microsoft_premium)
-                    if joined_microsoft_premium is not None
-                    else None,
-                    datetime.now() if join_time_microsoft_premium is not None else None,
-                    str(has_bitly_account) if has_bitly_account is not None else None,
-                    bitly_acc_password,
-                    save_smtp,
-                ),
-            )
+            insert_fields = [
+                "server_ip",
+                "bot_type",
+                "date_time",
+                "email_acc",
+                "password",
+                "profile_dir",
+                "proxy_used",
+                "country",
+                "has_recovery_email",
+                "recovery_email",
+                "has_recovery_phone",
+                "recovery_phone_number",
+                "joined_microsoft_premium",
+                "join_time_microsoft_premium",
+                "has_bitly_account",
+                "bitly_acc_password",
+                "save_smtp",
+            ]
+            insert_values = [
+                SERVER_IP,
+                BOT_TYPE,
+                datetime.now(),
+                email,
+                password,
+                profile_dir,
+                proxy_used,
+                PREFERRED_SMS_COUNTRY,
+                str(has_recovery_email) if has_recovery_email is not None else None,
+                recovery_email,
+                str(has_recovery_phone) if has_recovery_phone is not None else None,
+                recovery_phone_number,
+                str(joined_microsoft_premium)
+                if joined_microsoft_premium is not None
+                else None,
+                datetime.now() if join_time_microsoft_premium is not None else None,
+                str(has_bitly_account) if has_bitly_account is not None else None,
+                bitly_acc_password,
+                save_smtp,
+            ]
+
+            if premium_mother_email is not None:
+                insert_fields.append("premium_mother_email")
+                insert_values.append(premium_mother_email)
+            if premium_mother_password is not None:
+                insert_fields.append("premium_mother_password")
+                insert_values.append(premium_mother_password)
+            if premium_mother_recovery is not None:
+                insert_fields.append("premium_mother_recovery")
+                insert_values.append(premium_mother_recovery)
+
+            placeholders = ", ".join(["%s"] * len(insert_values))
+            query = f"INSERT INTO accounts_details ({', '.join(insert_fields)}) VALUES ({placeholders})"
+            cursor.execute(query, tuple(insert_values))
 
         conn.commit()
         conn.close()
@@ -4070,8 +4167,8 @@ def initialize_new_profile(new_profile_data):
                     update_accounts_data(
                         date_time=datetime.now(),
                         email=email_address,
-                        profile_dir=user_path,
-                        proxy_used=proxy,
+                        profile_dir="NONE",
+                        proxy_used="NONE",
                         password=password,
                         has_recovery_email=recovery_email_page_popped_up,
                         recovery_email=temp_email,

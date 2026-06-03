@@ -198,6 +198,9 @@ CREATE TABLE
     recovery_phone_number VARCHAR(50) NULL,
     joined_microsoft_premium VARCHAR(10) NULL,
     join_time_microsoft_premium DATETIME NULL,
+    premium_mother_email VARCHAR(255) NULL,
+    premium_mother_password VARCHAR(255) NULL,
+    premium_mother_recovery VARCHAR(255) NULL,
     has_bitly_account VARCHAR(10) NULL,
     bitly_acc_password VARCHAR(255) NULL,
     save_smtp VARCHAR(10) NULL
