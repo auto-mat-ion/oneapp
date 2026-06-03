@@ -22,7 +22,7 @@ if (
 
 bot = int(
     input(
-        "Oneapp v1.2\nSelect bot to run:\n1. Familybot\n2. Hotmailbot\n3. Password Changer\n4. Email Sender\n5. Familybot Share\n6. Email Sender 2\nEnter choice (1/2/3/4/5/6): "
+        "Oneapp v1.2\nSelect bot to run:\n1. Familybot\n2. Hotmailbot\n3. Password Changer\n4. Email Sender\n5. Familybot Share\nEnter choice (1/2/3/4/5/6): "
     )
 )
 

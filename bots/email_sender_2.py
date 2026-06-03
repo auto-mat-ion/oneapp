@@ -33,9 +33,7 @@ PROCESSED_FILE = SENDER_LOG_DIR / "processed_accounts.txt"
 FAILED_FILE = SENDER_LOG_DIR / "failed_accounts.txt"
 SENT_RECIPIENTS_FILE = SENDER_LOG_DIR / "sent_recipients.txt"
 
-TEST_RECIPIENT_MAIL = input(
-    "Enter a test recipient email address that you control (will receive test emails): "
-).strip()
+TEST_RECIPIENT_MAIL = ""
 _deferred_sent_recipients: List[str] = []
 _deferred_account_updates: List[Tuple[str, datetime, str, str]] = []
 _deferred_failed_accounts: List[Tuple[str, str, str, str, str, str, datetime]] = []
@@ -1319,6 +1317,11 @@ def process_account_wrapper(
 
 def main2():
     print("Starting...")
+    global TEST_RECIPIENT_MAIL
+    TEST_RECIPIENT_MAIL = input(
+        "Enter a test recipient email address that you control (will receive test emails): "
+    ).strip()
+
     global BATCH_NUMBER
     BATCH_NUMBER = prompt_for_batch_selection()
     if not BATCH_NUMBER:
