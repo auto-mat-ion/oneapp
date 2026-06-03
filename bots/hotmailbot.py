@@ -4310,8 +4310,8 @@ def initialize_new_profile(new_profile_data):
 
         update_accounts_data(
             email=email_address,
-            profile_dir=user_path,
-            proxy_used=proxy,
+            profile_dir="NONE",
+            proxy_used="NONE",
             password=password,
             has_recovery_email=recovery_email_page_popped_up,
             recovery_email=temp_email,
