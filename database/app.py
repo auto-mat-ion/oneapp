@@ -597,6 +597,35 @@ def parse_email_sender_input_accounts(uploaded_file):
     return pd.DataFrame(data)
 
 
+def parse_second_app_input_accounts(uploaded_file):
+    content = uploaded_file.read().decode("utf-8", errors="replace")
+    rows = [row.strip() for row in content.splitlines() if row.strip()]
+    if rows and all(
+        field in rows[0].lower() for field in ["email", "pass", "recovery", "country"]
+    ):
+        rows = rows[1:]
+    data = []
+    for line in rows:
+        if "," in line:
+            parts = [part.strip() for part in line.split(",")]
+        elif ":" in line:
+            parts = [part.strip() for part in line.split(":")]
+        else:
+            continue
+        if len(parts) >= 3:
+            email, password, recovery = parts[0], parts[1], parts[2]
+            country = parts[3] if len(parts) >= 4 else ""
+            data.append(
+                {
+                    "email": email,
+                    "pass": password,
+                    "recovery": recovery,
+                    "country": country,
+                }
+            )
+    return pd.DataFrame(data)
+
+
 def load_emails_from_cache_bins(selected_country=None):
     """
     Load emails from cache_bins table, parse them, and get password/recovery/country from accounts_details.
@@ -1402,6 +1431,14 @@ def validate_dataframe(table_name, df):
                 False,
                 "Table sender_input_accounts requires columns: email, pass, recovery",
             )
+    if table_name == "second_app_input_accounts":
+        if not all(
+            col in df.columns for col in ["email", "pass", "recovery", "country"]
+        ):
+            return (
+                False,
+                "Table second_app_input_accounts requires columns: email, pass, recovery, country",
+            )
     if table_name == "sender_hyperlink_text":
         if "hyperlink_text" not in df.columns:
             return False, "Table sender_hyperlink_text requires column: hyperlink_text"
@@ -1474,6 +1511,7 @@ def general_uploader():
         "familybot_extracted_family_links": "Extracted Family Links",
         "password_changer_accounts": "Password Changer Accounts",
         "cache_bins": "Cache Bin Files",
+        "second_app_input_accounts": "Second App Input Accounts",
     }
 
     table_name = st.selectbox(
@@ -1501,6 +1539,7 @@ def general_uploader():
 
     selected_country = None
     if table_name in [
+        # "second_app_input_accounts",
         "familybot_first_names",
         "familybot_surnames",
         "familybot_card_details",
@@ -1532,6 +1571,8 @@ def general_uploader():
             df = parse_text_list(uploaded_file, "surnames")
         elif table_name == "familybot_card_details":
             df = parse_card_file(uploaded_file)
+        elif table_name == "second_app_input_accounts":
+            df = parse_second_app_input_accounts(uploaded_file)
         elif table_name == "family_link":
             df = parse_text_list(uploaded_file, "link")
         elif table_name == "familybot_extracted_family_links":
@@ -2710,7 +2751,49 @@ def render_familybot_stats():
         st.error(f"Error loading assigned mother accounts: {e}")
 
     st.divider()
-    st.subheader("Card Usage")
+    st.subheader("Available cards usage")
+    try:
+        conn = get_db_connection()
+        if conn is None:
+            st.error("Unable to connect to database")
+        else:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT d.card_number AS card_num, d.expiry_month_year AS exp_month_year, d.cvv, d.country, "
+                "COUNT(u.card_num) AS times_used "
+                "FROM familybot_card_details d "
+                "LEFT JOIN familybot_card_usage_log u "
+                "ON u.card_num = d.card_number "
+                "AND u.`exp_month/year` = d.expiry_month_year "
+                "AND u.cvv = d.cvv "
+                "GROUP BY d.card_number, d.expiry_month_year, d.cvv, d.country "
+                "ORDER BY times_used DESC, d.country, d.card_number"
+            )
+
+            rows = cursor.fetchall()
+            cursor.close()
+            conn.close()
+
+            available_cards_usage_df = pd.DataFrame(
+                rows,
+                columns=[
+                    "card_num",
+                    "exp_month/year",
+                    "cvv",
+                    "country",
+                    "times used",
+                ],
+            )
+
+            available_cards_usage_df["times used"] = available_cards_usage_df[
+                "times used"
+            ].apply(lambda x: 5 if x >= 5 else x)  # Cap times used at 5 for display
+            st.dataframe(available_cards_usage_df, width="stretch")
+    except Exception as e:
+        st.error(f"Error loading available cards usage: {e}")
+
+    st.divider()
+    st.subheader("All cards used in history stats")
     try:
         conn = get_db_connection()
         if conn is None:

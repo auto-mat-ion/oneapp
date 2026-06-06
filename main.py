@@ -3,6 +3,7 @@ from bots.hotmailbot import run_hotmailbot
 from bots.password_changer import run_password_changerbot
 from bots.email_sender import main
 from bots.email_sender_2 import main2
+from bots.new_app_hotmail import run_second_app_hotmails
 import json
 
 if (
@@ -14,15 +15,10 @@ if (
     )
     exit(1)
 
-# bot = int(
-#     input(
-#         "Oneapp v1.15\nSelect bot to run:\n1. Familybot\n2. Hotmailbot\n3. Password Changer\n4. Email Sender\n5. Familybot Share\n6. Email Sender 2\nEnter choice (1/2/3/4/5/6): "
-#     )
-# )
 
 bot = int(
     input(
-        "Oneapp v1.2\nSelect bot to run:\n1. Familybot\n2. Hotmailbot\n3. Password Changer\n4. Email Sender\n5. Familybot Share\nEnter choice (1/2/3/4/5/6): "
+        "Oneapp v1.3\nSelect bot to run:\n1. Familybot\n2. Hotmailbot\n3. Password Changer\n4. Email Sender\n5. Familybot Share\n6. New app Hotmailbot \nEnter choice (1/2/3/4/5/6): "
     )
 )
 
@@ -37,6 +33,6 @@ elif bot == 4:
 elif bot == 5:
     run_familybot_share()
 elif bot == 6:
-    main2()
+    run_second_app_hotmails()
 else:
     print("Invalid choice. Please select 1, 2, 3, 4, or 5.")
