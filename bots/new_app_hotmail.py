@@ -1337,11 +1337,11 @@ def click_next_if_a_quick_note_page(driver):
     try:
         HEADER_ELEMENT = (By.CSS_SELECTOR, 'span[role="heading"]')
 
-        header_element = WebDriverWait(driver, wait_time).until(
+        header_element = WebDriverWait(driver, wait_time / 2).until(
             EC.visibility_of_element_located(HEADER_ELEMENT)
         )
         time.sleep(3)
-        header_element = WebDriverWait(driver, wait_time).until(
+        header_element = WebDriverWait(driver, wait_time / 2).until(
             EC.visibility_of_element_located(HEADER_ELEMENT)
         )
 
@@ -3416,6 +3416,7 @@ def initialize_new_profile(new_profile_data):
         print(f"{email_address} : Finalizing signin")
         close_other_tabs(driver)
         time.sleep(2)
+        click_next_if_a_quick_note_page(driver)
         click_stay_signed_in_button(driver)
         time.sleep(4)
 
