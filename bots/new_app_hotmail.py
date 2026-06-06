@@ -3413,7 +3413,7 @@ def initialize_new_profile(new_profile_data):
             )
             return False, "Error entering email verification code"
 
-        print(f"{email_address} :Finalizing signin")
+        print(f"{email_address} : Finalizing signin")
         close_other_tabs(driver)
         time.sleep(2)
         click_stay_signed_in_button(driver)
@@ -3534,12 +3534,12 @@ def run_second_app_hotmails():
     """
     Creates threads and signs in simultaneously
     """
+    print("=" * 55)
+    print(f" {' ' * 15} RUNNING NEW APP HOTMAILBOT")
+    print("=" * 55)
 
     while True:
         try:
-            print("=" * 55)
-            print(f" {' ' * 15} RUNNING NEW APP HOTMAILBOT")
-            print("=" * 55)
             status, new_profile_data = get_new_profile_data()
             if status:
                 d = initialize_new_profile(new_profile_data)
