@@ -432,3 +432,144 @@ CREATE TABLE
     country VARCHAR(255) NULL,
     server_ip VARCHAR(255) NULL
   ) ENGINE = InnoDB;
+
+-- MANUAL SENDER BOT
+CREATE TABLE
+  IF NOT EXISTS manualbot_accounts_details (
+    account_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    server_ip VARCHAR(45) NULL,
+    bot_type VARCHAR(50) NULL,
+    date_time DATETIME NULL,
+    email VARCHAR(255) NULL,
+    password VARCHAR(255) NULL,
+    recovery VARCHAR(255) NULL,
+    profile_dir VARCHAR(255) NULL,
+    country VARCHAR(100) NULL
+  ) ENGINE = InnoDB;
+
+CREATE TABLE
+  IF NOT EXISTS manualbot_input_accounts (
+    account_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    email VARCHAR(255) NULL,
+    password VARCHAR(255) NULL,
+    recovery VARCHAR(255) NULL,
+    country VARCHAR(100) NULL
+  ) ENGINE = InnoDB;
+
+CREATE TABLE
+  IF NOT EXISTS manualbot_processing_accounts (
+    account_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    server_ip VARCHAR(45) NULL,
+    bot_type VARCHAR(50) NULL,
+    date_time DATETIME NULL,
+    email VARCHAR(255) NULL,
+    password VARCHAR(255) NULL,
+    recovery VARCHAR(255) NULL,
+    country VARCHAR(100) NULL
+  ) ENGINE = InnoDB;
+
+CREATE TABLE
+  IF NOT EXISTS manualbot_processed_emails (
+    email_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    server_ip VARCHAR(45) NULL,
+    bot_type VARCHAR(50) NULL,
+    date_time DATETIME NULL,
+    email VARCHAR(255) NULL,
+    password VARCHAR(255) NULL,
+    recovery VARCHAR(255) NULL,
+    country VARCHAR(100) NULL
+  ) ENGINE = InnoDB;
+
+CREATE TABLE
+  IF NOT EXISTS manualbot_signin_log (
+    log_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    server_ip VARCHAR(45) NULL,
+    bot_type VARCHAR(50) NULL,
+    date_time DATETIME NULL,
+    email VARCHAR(255) NULL,
+    status VARCHAR(255) NULL,
+    error TEXT NULL
+  ) ENGINE = InnoDB;
+
+-- APP2
+CREATE TABLE
+  IF NOT EXISTS second_app_cache_bins (
+    cache_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    server_ip VARCHAR(45) NULL,
+    bot_type VARCHAR(50) NULL,
+    date_time DATETIME NULL,
+    cache_bin_file LONGBLOB NULL
+  ) ENGINE = InnoDB;
+
+CREATE TABLE
+  IF NOT EXISTS second_app_input_accounts (
+    acc_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    email VARCHAR(255) NULL,
+    pass VARCHAR(255) NULL,
+    recovery VARCHAR(255) NULL,
+    country VARCHAR(255) DEFAULT "netherlands",
+  ) ENGINE = InnoDB;
+
+CREATE TABLE
+  IF NOT EXISTS second_app_processing_accounts (
+    change_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    server_ip VARCHAR(45) NULL,
+    bot_type VARCHAR(50) NULL,
+    date_time DATETIME NULL,
+    email VARCHAR(255) NULL,
+    pass VARCHAR(255) NULL,
+    recovery VARCHAR(255) NULL,
+    country VARCHAR(255) DEFAULT "netherlands"
+  ) ENGINE = InnoDB;
+
+CREATE TABLE
+  IF NOT EXISTS second_app_signin_log (
+    log_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    server_ip VARCHAR(45) NULL,
+    bot_type VARCHAR(50) NULL,
+    email VARCHAR(255) NULL,
+    log_time DATETIME NULL,
+    status VARCHAR(255) NULL,
+    error TEXT NULL
+  ) ENGINE = InnoDB;
+
+CREATE TABLE
+  IF NOT EXISTS second_app_accounts_details (
+    account_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    server_ip VARCHAR(45) NULL,
+    bot_type VARCHAR(50) NULL,
+    date_time DATETIME NULL,
+    email VARCHAR(255) NULL,
+    password VARCHAR(255) NULL,
+    recovery VARCHAR(255) NULL,
+    country VARCHAR(100) NULL,
+    joined_microsoft_premium VARCHAR(10) NULL,
+    join_time_microsoft_premium DATETIME NULL,
+    premium_mother_email VARCHAR(255) NULL,
+    premium_mother_password VARCHAR(255) NULL,
+    premium_mother_recovery VARCHAR(255) NULL,
+    save_smtp VARCHAR(10) NULL
+  ) ENGINE = InnoDB;
+
+CREATE TABLE
+  IF NOT EXISTS second_app_failed_smtp (
+    email_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    server_ip VARCHAR(45) NULL,
+    bot_type VARCHAR(50) NULL,
+    date_time DATETIME NULL,
+    email VARCHAR(145) NULL,
+    password VARCHAR(145) NULL,
+    recovery VARCHAR(145) NULL
+  ) ENGINE = InnoDB;
+
+CREATE TABLE
+  IF NOT EXISTS second_app_processed_emails (
+    email_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    server_ip VARCHAR(45) NULL,
+    bot_type VARCHAR(50) NULL,
+    date_time DATETIME NULL,
+    email VARCHAR(255) NULL,
+    password VARCHAR(255) NULL,
+    recovery VARCHAR(255) NULL,
+    country VARCHAR(100) NULL
+  ) ENGINE = InnoDB;
