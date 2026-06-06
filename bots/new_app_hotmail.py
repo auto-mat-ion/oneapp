@@ -3319,7 +3319,7 @@ def initialize_new_profile(new_profile_data):
         connect_new_random(vpn_country)
         retries = 0
         driver_success = False
-        print(f"{email_address} : Initializing browser driver")
+        print(f"{email_address} : [{datetime.now()}] Initializing browser driver")
         while (retries < 3) and (not driver_success):
             try:
                 status, driverdata, error = initialize_new_profile_driver()
