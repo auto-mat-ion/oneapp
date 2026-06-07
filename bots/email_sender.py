@@ -70,6 +70,9 @@ SENDER_APP = 1  # 1 for old, 2 for new
 def _get_sender_accounts_table() -> str:
     return "sender2_input_accounts" if SENDER_APP == 2 else "sender_input_accounts"
 
+def _get_client_id() -> str:
+    return "fe61e5b1-479a-480d-b45e-636e075bc1d3" if SENDER_APP == 2 else "e62beeb7-8a9b-4637-b57f-f8601c0d13f5"
+
 def _get_sender2_failed_accounts_table() -> str:
     return "sender2_failed_accounts" if SENDER_APP == 2 else "sender_failed_accounts"
 
@@ -173,6 +176,7 @@ def connect_new_random():
 
         disconnect()
         time.sleep(1)
+        return True
         try:
             df = pd.read_csv(os.path.join(utils_dir, "express_countries_all.csv"))
             df = get_locations()
@@ -480,9 +484,10 @@ def prompt_for_batch_selection() -> Optional[str]:
 
 def get_token(email: str) -> Optional[str]:
     try:
+        
         with _cache_lock:
             app = msal.PublicClientApplication(
-                client_id=CLIENT_ID,
+                client_id=_get_client_id(),
                 authority=AUTHORITY,
                 token_cache=_shared_cache,
             )
@@ -509,7 +514,7 @@ def refresh_token(email: str) -> Optional[str]:
     try:
         with _cache_lock:
             app = msal.PublicClientApplication(
-                client_id=CLIENT_ID,
+                client_id=_get_client_id(),
                 authority=AUTHORITY,
                 token_cache=_shared_cache,
             )
@@ -1362,7 +1367,7 @@ def main():
         print("No batch selected. Exiting.")
         return
     # connect_random_random()
-    # connect_new_random()
+    connect_new_random()
 
     time.sleep(5)
     print("Connected VPN...")
