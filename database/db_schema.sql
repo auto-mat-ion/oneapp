@@ -573,3 +573,29 @@ CREATE TABLE
     recovery VARCHAR(255) NULL,
     country VARCHAR(100) NULL
   ) ENGINE = InnoDB;
+
+-- SENDER2 -> NEW APP
+CREATE TABLE
+  IF NOT EXISTS sender2_input_accounts (
+    acc_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    email VARCHAR(255) NULL,
+    pass VARCHAR(255) NULL,
+    recovery VARCHAR(255) NULL,
+    country VARCHAR(255) NULL,
+    last_used DATETIME NULL,
+    times_used INT NULL,
+    server_ip VARCHAR(255) NULL,
+    batch VARCHAR(255) NULL
+  ) ENGINE = InnoDB;
+
+CREATE TABLE
+  IF NOT EXISTS sender2_failed_accounts (
+    acc_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    email VARCHAR(255) NULL,
+    pass VARCHAR(255) NULL,
+    recovery VARCHAR(255) NULL,
+    country VARCHAR(255) NULL,
+    server_ip VARCHAR(255) NULL,
+    fail_reason TEXT NULL,
+    date_time DATETIME NULL
+  ) ENGINE = InnoDB;
