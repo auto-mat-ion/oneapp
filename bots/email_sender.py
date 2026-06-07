@@ -64,6 +64,19 @@ SERVER_IP = (
 )
 BOT_TYPE = "email_sender"
 BATCH_NUMBER: Optional[str] = None
+SENDER_APP = 1  # 1 for old, 2 for new
+
+
+def _get_sender_accounts_table() -> str:
+    return "sender2_input_accounts" if SENDER_APP == 2 else "sender_input_accounts"
+
+def _get_sender2_failed_accounts_table() -> str:
+    return "sender2_failed_accounts" if SENDER_APP == 2 else "sender_failed_accounts"
+
+
+def _get_cache_bins_table() -> str:
+    return "second_app_cache_bins" if SENDER_APP == 2 else "cache_bins"
+
 
 FIRST_BATCH_BCC = int(_EMAIL_SENDER_SETTINGS.get("FIRST_BATCH_BCC", 9))
 SUBSEQUENT_BATCH_BCC = int(_EMAIL_SENDER_SETTINGS.get("SUBSEQUENT_BATCH_BCC", 329))
@@ -339,7 +352,7 @@ def load_cache():
             log("Warning: unable to connect to database for cache")
             return
         cursor = conn.cursor()
-        cursor.execute("SELECT cache_bin_file FROM cache_bins")
+        cursor.execute(f"SELECT cache_bin_file FROM {_get_cache_bins_table()}")
         results = cursor.fetchall()
         cursor.close()
         conn.close()
@@ -412,7 +425,7 @@ def available_batches_for_server() -> List[str]:
     try:
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT DISTINCT batch FROM sender_input_accounts "
+            f"SELECT DISTINCT batch FROM {_get_sender_accounts_table()} "
             "WHERE server_ip = %s AND COALESCE(batch, '') != '' ",
             (SERVER_IP,),
         )
@@ -437,8 +450,8 @@ def prompt_for_batch_selection() -> Optional[str]:
     batches = available_batches_for_server()
     if not batches:
         print(
-            "No available sender batches found for this server. "
-            "Please configure batch values in sender_input_accounts and sender_recipients."
+            "No available sender batches found for this server and app."
+            f"Please configure batch values in {_get_sender_accounts_table()} and sender_recipients."
         )
         return None
 
@@ -700,7 +713,7 @@ class AccountManager:
         try:
             cursor = conn.cursor()
             query = (
-                "SELECT email, pass, recovery FROM sender_input_accounts "
+                f"SELECT email, pass, recovery FROM {_get_sender_accounts_table()} "
                 "WHERE server_ip = %s AND COALESCE(country, '') = %s "
             )
             params = [SERVER_IP, COUNTRY]
@@ -712,7 +725,7 @@ class AccountManager:
             cursor.close()
 
             for row in rows:
-                if not row or row[0] is None or row[1] is None:
+                if not row or row[0] is None:
                     continue
                 email = str(row[0]).strip()
                 password = str(row[1]).strip()
@@ -1109,8 +1122,9 @@ def flush_db_operations():
                         print(
                             f"Updating sender accounts ({total_account_updates} rows)"
                         )
+                        account_table = _get_sender_accounts_table()
                         update_sql = text(
-                            "UPDATE sender_input_accounts "
+                            f"UPDATE {account_table} "
                             "SET times_used = COALESCE(times_used, 0) + 1, last_used = :last_used "
                             "WHERE email = :email AND server_ip = :server_ip "
                             "AND COALESCE(country, '') = :country"
@@ -1138,16 +1152,18 @@ def flush_db_operations():
                         done_acc_update = True
 
                     if _deferred_failed_accounts and not done_failed_update:
+                        account_table = _get_sender_accounts_table()
+                        failed_accounts_table=_get_sender2_failed_accounts_table() 
                         print(
-                            f"Inserting failed accounts and removing them from sender_input_accounts ({total_failed} rows)"
+                            f"Inserting failed accounts and removing them from {account_table} ({total_failed} rows)"
                         )
                         insert_sql = text(
-                            "INSERT INTO sender_failed_accounts "
+                            f"INSERT INTO {failed_accounts_table()} "
                             "(email, pass, recovery, country, server_ip, fail_reason, date_time) "
                             "VALUES (:email, :password, :recovery, :country, :server_ip, :reason, :date_time)"
                         )
                         delete_sql = text(
-                            "DELETE FROM sender_input_accounts "
+                            f"DELETE FROM {account_table} "
                             "WHERE email = :email AND server_ip = :server_ip "
                             "AND COALESCE(country, '') = :country"
                         )
@@ -1315,9 +1331,32 @@ def process_account_wrapper(
     return {"account": account, "success": success, "sent": sent, "error": error}
 
 
+def prompt_for_sender_app_selection() -> Optional[int]:
+    while True:
+        choice = input(
+            "Select email sender app:\n"
+            "1. Old app\n"
+            "2. New app\n"
+            "Enter choice (1 or 2), or type 'exit' to cancel: "
+        ).strip()
+        if not choice:
+            continue
+        if choice.lower() in {"exit", "quit", "q"}:
+            return None
+        if choice in {"1", "2"}:
+            return int(choice)
+        print("Invalid choice. Please enter 1 for old app or 2 for new app.")
+
+
 def main():
     print("Starting...")
-    global BATCH_NUMBER
+    global BATCH_NUMBER, SENDER_APP
+    app_choice = prompt_for_sender_app_selection()
+    if app_choice is None:
+        print("No app selection made. Exiting.")
+        return
+    SENDER_APP = app_choice
+    print(f"Selected {'New' if SENDER_APP == 2 else 'Old'} app.")
     BATCH_NUMBER = prompt_for_batch_selection()
     if not BATCH_NUMBER:
         print("No batch selected. Exiting.")

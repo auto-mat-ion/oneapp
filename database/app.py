@@ -626,9 +626,14 @@ def parse_second_app_input_accounts(uploaded_file):
     return pd.DataFrame(data)
 
 
-def load_emails_from_cache_bins(selected_country=None):
+def load_emails_from_cache_bins(
+    selected_country=None,
+    accounts_table="sender_input_accounts",
+    cache_table="cache_bins",
+    sender_failed_accounts_table ="sender_failed_accounts"
+):
     """
-    Load emails from cache_bins table, parse them, and get password/recovery/country from accounts_details.
+    Load emails from cache table, parse them, and get password/recovery/country from accounts_details.
     Returns a DataFrame with email, pass, recovery, and country columns.
     """
     if msal is None:
@@ -642,7 +647,7 @@ def load_emails_from_cache_bins(selected_country=None):
 
     try:
         cursor = conn.cursor()
-        cursor.execute("SELECT cache_bin_file FROM cache_bins")
+        cursor.execute(f"SELECT cache_bin_file FROM {cache_table}")
         results = cursor.fetchall()
 
         # Parse all cache bins to extract emails
@@ -680,9 +685,9 @@ def load_emails_from_cache_bins(selected_country=None):
             st.warning("No emails found in cache bins")
             return None
 
-        cursor.execute("SELECT LOWER(email) FROM sender_input_accounts")
+        cursor.execute(f"SELECT LOWER(email) FROM {accounts_table}")
         assigned_emails = {row[0] for row in cursor.fetchall() if row and row[0]}
-        cursor.execute("SELECT LOWER(email) FROM sender_failed_accounts")
+        cursor.execute(f"SELECT LOWER(email) FROM {sender_failed_accounts_table}")
         failed_emails = {row[0] for row in cursor.fetchall() if row and row[0]}
 
         available_emails = [
@@ -1658,6 +1663,7 @@ def email_sender_uploader():
     }
 
     country_options = [
+        "All",
         "United States",
         "Poland",
         "Sweden",
@@ -1674,6 +1680,8 @@ def email_sender_uploader():
         st.session_state.sender_country = None
     if "sender_data_source" not in st.session_state:
         st.session_state.sender_data_source = None
+    if "sender_use_country" not in st.session_state:
+        st.session_state.sender_use_country = ""
 
     table_name = st.selectbox(
         "Select destination table",
@@ -1681,8 +1689,22 @@ def email_sender_uploader():
         format_func=lambda x: table_options[x],
         key="sender_table",
     )
+
+    target_table = table_name
+    is_new_app_sender = False
+    if table_name == "sender_input_accounts":
+        selected_app = st.radio(
+            "Select app",
+            ["Old app", "New app"],
+            index=0,
+            key=f"sender_input_app_{table_name}",
+            horizontal=True,
+        )
+        is_new_app_sender = selected_app == "New app"
+        target_table = "sender2_input_accounts" if is_new_app_sender else table_name
+
     st.session_state.sender_table_selected = table_name
-    st.markdown(f"**Target table:** `{table_name}`")
+    st.markdown(f"**Target table:** `{target_table}`")
 
     selected_country = st.selectbox(
         "Select country for uploaded rows",
@@ -1690,6 +1712,15 @@ def email_sender_uploader():
         key=f"sender_country_{table_name}",
     )
     st.session_state.sender_country = selected_country
+
+    use_country = ""
+    if table_name == "sender_input_accounts":
+        use_country = st.text_input(
+            "Use country for all senders (optional)",
+            value=st.session_state.sender_use_country,
+            key=f"sender_use_country_{table_name}",
+        )
+        st.session_state.sender_use_country = use_country
 
     upload_method = None
     if table_name == "sender_link":
@@ -1718,12 +1749,19 @@ def email_sender_uploader():
         table_name == "sender_input_accounts"
         and data_source == "Get from Database (Cache Bins)"
     ):
+        cache_table = "second_app_cache_bins" if is_new_app_sender else "cache_bins"
+        sender_failed_accounts_table = "sender2_failed_accounts" if is_new_app_sender else "sender_failed_accounts"
         st.info(
-            "This will load emails from cache_bins, parse them, and get password/recovery from the database."
+            f"This will load emails from {cache_table}, parse them, and get password/recovery from the database."
         )
         if st.button("Load emails from cache bins", key=f"load_cache_{table_name}"):
             with st.spinner("Loading emails from cache bins..."):
-                df = load_emails_from_cache_bins(selected_country)
+                df = load_emails_from_cache_bins(
+                    None if selected_country == "All" else selected_country,
+                    accounts_table=target_table,
+                    cache_table=cache_table,
+                    sender_failed_accounts_table=sender_failed_accounts_table
+                )
             if df is not None:
                 st.session_state.sender_df = df
                 st.rerun()
@@ -1734,7 +1772,10 @@ def email_sender_uploader():
 
     if uploaded_file is not None:
         if table_name == "sender_input_accounts":
-            df = parse_email_sender_input_accounts(uploaded_file)
+            if is_new_app_sender:
+                df = parse_second_app_input_accounts(uploaded_file)
+            else:
+                df = parse_email_sender_input_accounts(uploaded_file)
         elif table_name == "sender_hyperlink_text":
             df = parse_text_list(uploaded_file, "hyperlink_text")
         elif table_name == "sender_link":
@@ -1754,13 +1795,16 @@ def email_sender_uploader():
         df = st.session_state.sender_df
 
     if df is not None:
-        if selected_country and "country" not in df.columns:
-            df["country"] = selected_country
+        if table_name == "sender_input_accounts":
+            if use_country:
+                df["country"] = use_country
+            elif selected_country != "All" and "country" not in df.columns:
+                df["country"] = selected_country
 
         st.subheader("Preview top 10 files")
         st.dataframe(df.head(10), width="stretch")
 
-        valid, message = validate_dataframe(table_name, df)
+        valid, message = validate_dataframe(target_table, df)
         if not valid:
             st.error(message)
             return
@@ -2264,7 +2308,7 @@ def email_sender_uploader():
         if st.button("Upload to database", key=f"sender_upload_{table_name}"):
             with st.spinner("Uploading..."):
                 success, result_message = insert_into_db(
-                    table_name,
+                    target_table,
                     df,
                     overwrite=overwrite,
                     chunk_size=50000 if table_name == "sender_recipients" else 50000,
@@ -2390,10 +2434,10 @@ def get_familybot_card_interval_hours():
     return interval
 
 
-def get_familybot_available_cards_count():
+def get_familybot_available_cards():
     conn = get_db_connection()
     if conn is None:
-        return 0
+        return 0, []
 
     try:
         cursor = conn.cursor(dictionary=True)
@@ -2418,7 +2462,7 @@ def get_familybot_available_cards_count():
 
         interval_hours = get_familybot_card_interval_hours()
         now = datetime.now()
-        available_cards = 0
+        available_cards = []
 
         for card in cards:
             card_num = str(card.get("card_number", ""))
@@ -2427,23 +2471,29 @@ def get_familybot_available_cards_count():
             key = (card_num, expiry, cvv)
             timestamps = sorted(usage.get(key, []))
             uses = len(timestamps)
+            can_use = False
             if uses >= 5:
                 continue
             if uses in [0, 1, 3]:
-                available_cards += 1
-                continue
-            if uses in [2, 4] and timestamps:
+                can_use = True
+            elif uses in [2, 4] and timestamps:
                 if now > timestamps[-1] + timedelta(hours=interval_hours):
-                    available_cards += 1
+                    can_use = True
+            if can_use:
+                available_cards.append(card)
 
-        return available_cards
+        return len(available_cards), available_cards
     except Exception:
-        return 0
+        return 0, []
     finally:
         try:
             conn.close()
         except:
             pass
+
+
+def get_familybot_available_cards_count():
+    return get_familybot_available_cards()[0]
 
 
 def render_stats_cards(cards):
