@@ -1370,7 +1370,7 @@ def main():
     connect_new_random()
 
     time.sleep(5)
-    print("Connected VPN...")
+    # print("Connected VPN...")
     print("Current settings:")
     print(f"  SERVER_IP: {SERVER_IP}")
     print(f"  COUNTRY: {COUNTRY}")
