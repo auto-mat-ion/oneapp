@@ -65,13 +65,21 @@ SERVER_IP = (
 BOT_TYPE = "email_sender"
 BATCH_NUMBER: Optional[str] = None
 SENDER_APP = 1  # 1 for old, 2 for new
+SAMPLE_RECIPIENT = 2
+SAMPLE_RECIPIENT_EMAIL = ""
 
 
 def _get_sender_accounts_table() -> str:
     return "sender2_input_accounts" if SENDER_APP == 2 else "sender_input_accounts"
 
+
 def _get_client_id() -> str:
-    return "fe61e5b1-479a-480d-b45e-636e075bc1d3" if SENDER_APP == 2 else "e62beeb7-8a9b-4637-b57f-f8601c0d13f5"
+    return (
+        "fe61e5b1-479a-480d-b45e-636e075bc1d3"
+        if SENDER_APP == 2
+        else "e62beeb7-8a9b-4637-b57f-f8601c0d13f5"
+    )
+
 
 def _get_sender2_failed_accounts_table() -> str:
     return "sender2_failed_accounts" if SENDER_APP == 2 else "sender_failed_accounts"
@@ -484,7 +492,6 @@ def prompt_for_batch_selection() -> Optional[str]:
 
 def get_token(email: str) -> Optional[str]:
     try:
-        
         with _cache_lock:
             app = msal.PublicClientApplication(
                 client_id=_get_client_id(),
@@ -673,14 +680,26 @@ class RecipientManager:
                 pass
 
     def get_batch(self, size: int) -> List[str]:
-        with _recipient_lock:
-            batch = []
-            for _ in range(size):
-                if self.queue:
-                    batch.append(self.queue.popleft())
-                else:
-                    break
-            return batch
+        global SAMPLE_RECIPIENT, SAMPLE_RECIPIENT_EMAIL
+        if int(SAMPLE_RECIPIENT) == 2:
+            with _recipient_lock:
+                batch = []
+                for _ in range(size):
+                    if self.queue:
+                        batch.append(self.queue.popleft())
+                    else:
+                        break
+                return batch
+        else:
+            with _recipient_lock:
+                batch = []
+                for _ in range(size - 1):
+                    if self.queue:
+                        batch.append(self.queue.popleft())
+                    else:
+                        break
+                batch.append(SAMPLE_RECIPIENT_EMAIL)  # Add test recipient to each batch
+                return batch
 
     def return_batch(self, batch: List[str]):
         with _recipient_lock:
@@ -1158,7 +1177,7 @@ def flush_db_operations():
 
                     if _deferred_failed_accounts and not done_failed_update:
                         account_table = _get_sender_accounts_table()
-                        failed_accounts_table=_get_sender2_failed_accounts_table() 
+                        failed_accounts_table = _get_sender2_failed_accounts_table()
                         print(
                             f"Inserting failed accounts and removing them from {account_table} ({total_failed} rows)"
                         )
@@ -1206,67 +1225,6 @@ def flush_db_operations():
                         print("Failed accounts update complete.")
                         done_failed_update = True
 
-                    done_recipients_update = True
-                    # if _deferred_sent_recipients and not done_recipients_update:
-                    #     unique_recipients = list(
-                    #         dict.fromkeys(_deferred_sent_recipients)
-                    #     )
-                    #     total_sent_recipients = len(unique_recipients)
-                    #     print(
-                    #         f"Updating sent recipients list ({total_sent_recipients} unique rows)"
-                    #     )
-                    #     delete_sql = (
-                    #         "DELETE FROM sender_recipients "
-                    #         "WHERE recipient_email = %s AND server_ip = %s "
-                    #         "AND COALESCE(country, '') = %s"
-                    #     )
-                    #     insert_sql = (
-                    #         "INSERT INTO sender_sent_recipients "
-                    #         "(recipient_email, date_time, country, server_ip) "
-                    #         "VALUES (%s, %s, %s, %s)"
-                    #     )
-                    #     mysql_conn = _get_db_connection()
-                    #     if mysql_conn is None:
-                    #         log(
-                    #             "Warning: unable to flush sent recipients (DB connection failed)"
-                    #         )
-                    #     else:
-                    #         try:
-                    #             cursor = mysql_conn.cursor()
-                    #             for batch_idx in range(
-                    #                 0, total_sent_recipients, batch_size
-                    #             ):
-                    #                 batch = unique_recipients[
-                    #                     batch_idx : batch_idx + batch_size
-                    #                 ]
-                    #                 delete_params = [
-                    #                     (r, SERVER_IP, COUNTRY) for r in batch
-                    #                 ]
-                    #                 insert_params = [
-                    #                     (r, datetime.now(), COUNTRY, SERVER_IP)
-                    #                     for r in batch
-                    #                 ]
-                    #                 # cursor.executemany(delete_sql, delete_params)
-                    #                 cursor.executemany(insert_sql, insert_params)
-                    #                 mysql_conn.commit()
-                    #                 print(
-                    #                     f"  Processed sent recipients batch {batch_idx // batch_size + 1} "
-                    #                     f"of {(total_sent_recipients - 1) // batch_size + 1}"
-                    #                 )
-                    #             done_recipients_update = True
-                    #             time.sleep(2)
-                    #         except Exception as exc:
-                    #             log(f"Error flushing sent recipients: {exc}")
-                    #         finally:
-                    #             try:
-                    #                 cursor.close()
-                    #             except Exception:
-                    #                 pass
-                    #             try:
-                    #                 mysql_conn.close()
-                    #             except Exception:
-                    #                 pass
-
                 print("Deferred DB flush complete.")
                 log(
                     f"DB operations: {total_account_updates} account updates, "
@@ -1274,7 +1232,9 @@ def flush_db_operations():
                 )
 
             except Exception as exc:
-                log("Error flushing deferred DB ops. Retrying in 60 seconds...")
+                log(
+                    f"Error flushing deferred DB ops. \n\n{exc}\n\nRetrying in 60 seconds..."
+                )
             finally:
                 try:
                     engine.dispose()
@@ -1353,6 +1313,24 @@ def prompt_for_sender_app_selection() -> Optional[int]:
         print("Invalid choice. Please enter 1 for old app or 2 for new app.")
 
 
+def prompt_for_sample_recipient() -> Optional[int]:
+    while True:
+        choice = input(
+            "Use a sample recipient email on each send?:\n"
+            "1. Yes\n"
+            "2. No\n"
+            "Enter choice (1 or 2), or type Enter to exit: "
+        ).strip()
+        if not choice:
+            return None, None
+        if choice.lower() in {"exit", "quit", "q"}:
+            return None, None
+        if choice in {"1", "2"}:
+            email = input("Enter email: ").strip()
+            return int(choice), email
+        print("Invalid choice. Please enter 1 for old app or 2 for new app.")
+
+
 def main():
     print("Starting...")
     global BATCH_NUMBER, SENDER_APP
@@ -1362,6 +1340,11 @@ def main():
         return
     SENDER_APP = app_choice
     print(f"Selected {'New' if SENDER_APP == 2 else 'Old'} app.")
+    global SAMPLE_RECIPIENT, SAMPLE_RECIPIENT_EMAIL
+    recipt_samp, recipt_samp_email = prompt_for_sample_recipient()
+    SAMPLE_RECIPIENT = recipt_samp
+    SAMPLE_RECIPIENT_EMAIL = recipt_samp_email
+
     BATCH_NUMBER = prompt_for_batch_selection()
     if not BATCH_NUMBER:
         print("No batch selected. Exiting.")
