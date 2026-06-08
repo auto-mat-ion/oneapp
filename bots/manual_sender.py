@@ -4351,7 +4351,7 @@ def save_cookies():
     Creates threads and signs in simultaneously
     """
     i = 0
-    while i < 5:
+    while True:
         try:
             status, new_profile_data = get_new_profile_data()
             if status:
@@ -4528,7 +4528,7 @@ def manual_sender_main():
         total_recipients=recipients.remaining(),
     )
 
-    account = accounts.accounts[-1]
+    # account = accounts.accounts[-1]
     if not accounts.accounts:
         log("No accounts available for manual send. Exiting.")
         return
