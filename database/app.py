@@ -626,6 +626,36 @@ def parse_second_app_input_accounts(uploaded_file):
     return pd.DataFrame(data)
 
 
+def parse_manualbot_input_accounts(uploaded_file):
+    content = uploaded_file.read().decode("utf-8", errors="replace")
+    rows = [row.strip() for row in content.splitlines() if row.strip()]
+    if rows and all(
+        field in rows[0].lower()
+        for field in ["email", "pass", "recovery", "country"]
+    ):
+        rows = rows[1:]
+    data = []
+    for line in rows:
+        if "," in line:
+            parts = [part.strip() for part in line.split(",")]
+        elif ":" in line:
+            parts = [part.strip() for part in line.split(":")]
+        else:
+            continue
+        if len(parts) >= 3:
+            email, password, recovery = parts[0], parts[1], parts[2]
+            country = parts[3] if len(parts) >= 4 else ""
+            data.append(
+                {
+                    "email": email,
+                    "password": password,
+                    "recovery": recovery,
+                    "country": country,
+                }
+            )
+    return pd.DataFrame(data)
+
+
 def load_emails_from_cache_bins(
     selected_country=None,
     accounts_table="sender_input_accounts",
@@ -1444,6 +1474,14 @@ def validate_dataframe(table_name, df):
                 False,
                 "Table second_app_input_accounts requires columns: email, pass, recovery, country",
             )
+    if table_name == "manualbot_input_accounts":
+        if not all(
+            col in df.columns for col in ["email", "password", "recovery", "country"]
+        ):
+            return (
+                False,
+                "Table manualbot_input_accounts requires columns: email, password, recovery, country",
+            )
     if table_name == "sender_hyperlink_text":
         if "hyperlink_text" not in df.columns:
             return False, "Table sender_hyperlink_text requires column: hyperlink_text"
@@ -1517,6 +1555,7 @@ def general_uploader():
         "password_changer_accounts": "Password Changer Accounts",
         "cache_bins": "Cache Bin Files",
         "second_app_input_accounts": "Second App Input Accounts",
+        "manualbot_input_accounts": "Manual Bot Input Accounts",
     }
 
     table_name = st.selectbox(
@@ -1578,6 +1617,8 @@ def general_uploader():
             df = parse_card_file(uploaded_file)
         elif table_name == "second_app_input_accounts":
             df = parse_second_app_input_accounts(uploaded_file)
+        elif table_name == "manualbot_input_accounts":
+            df = parse_manualbot_input_accounts(uploaded_file)
         elif table_name == "family_link":
             df = parse_text_list(uploaded_file, "link")
         elif table_name == "familybot_extracted_family_links":

@@ -448,6 +448,17 @@ CREATE TABLE
   ) ENGINE = InnoDB;
 
 CREATE TABLE
+  IF NOT EXISTS manualbot_sender_emails (
+    account_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    server_ip VARCHAR(45) NULL,
+    bot_type VARCHAR(50) NULL,
+    date_time DATETIME NULL,
+    email VARCHAR(255) NULL,
+    password VARCHAR(255) NULL,
+    recovery VARCHAR(255) NULL,
+  ) ENGINE = InnoDB;
+
+CREATE TABLE
   IF NOT EXISTS manualbot_input_accounts (
     account_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
     email VARCHAR(255) NULL,

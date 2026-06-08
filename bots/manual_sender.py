@@ -4513,7 +4513,7 @@ def process_wrapper(
     finally:
         try:
             if driver:
-                # driver.quit()
+                driver.quit()
                 pass
         except Exception:
             pass
@@ -4578,23 +4578,23 @@ def manual_sender_main():
 
 # if __name__ == "__main__":
 #     main()
-accounts = AccountManager()
-recipients = RecipientManager()
-content = ContentManager()
-stats = StatsTracker(
-    total_accounts=len(accounts.accounts),
-    total_recipients=recipients.remaining(),
-)
+# accounts = AccountManager()
+# recipients = RecipientManager()
+# content = ContentManager()
+# stats = StatsTracker(
+#     total_accounts=len(accounts.accounts),
+#     total_recipients=recipients.remaining(),
+# )
 
-account = accounts.accounts[-2]
-email_address = account.get("email")
-f = process_wrapper(
-    account,
-    recipients,
-    content,
-    stats,
-    accounts,
-)
+# account = accounts.accounts[-2]
+# email_address = account.get("email")
+# f = process_wrapper(
+#     account,
+#     recipients,
+#     content,
+#     stats,
+#     accounts,
+# )
 
 
-driver = f[1]
+# driver = f[1]
