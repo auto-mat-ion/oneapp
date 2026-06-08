@@ -16,7 +16,7 @@ import pandas as pd
 import requests
 from dotenv import load_dotenv
 import threading
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import re
 import json
 import subprocess
@@ -25,7 +25,20 @@ import mysql.connector
 import random
 import msal
 
+from typing import List, Dict, Tuple, Optional
+from collections import deque
+from email_validator import validate_email, EmailNotValidError
+from pathlib import Path
+import pyperclip
+
+
 lock = threading.Lock()
+_log_lock = threading.Lock()
+_recipient_lock = threading.Lock()
+_content_lock = threading.Lock()
+_file_lock = threading.Lock()
+_cache_lock = threading.Lock()
+_stats_lock = threading.Lock()
 load_dotenv()
 
 THE_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -168,6 +181,17 @@ except:
 
 
 BOT_TYPE = "manual_sender"
+FIRST_BATCH_BCC = int(get_setting("FIRST_BATCH_BCC", 10))
+SUBSEQUENT_BATCH_BCC = int(get_setting("SUBSEQUENT_BATCH_BCC", 320))
+SUBSEQUENT_BATCHES = int(get_setting("SUBSEQUENT_BATCHES", 3))
+MAX_CONCURRENT_ACCOUNTS = int(get_setting("MAX_CONCURRENT_ACCOUNTS", 4))
+
+SAMPLE_RECIPIENT = 2
+SAMPLE_RECIPIENT_EMAIL = "test@example.com"
+
+_deferred_sent_recipients: List[str] = []
+_deferred_account_updates: List[Tuple[str, datetime, str, str]] = []
+_deferred_failed_accounts: List[Tuple[str, str, str, str, str, str, datetime]] = []
 
 
 def get_db_connection():
@@ -603,7 +627,7 @@ def initialize_new_profile_driver(email_address):
                     uc=True,
                     binary_location=chrome_location,
                     user_data_dir=user_data_dir,
-                    extension_dir=extension_dir,
+                    # extension_dir=extension_dir,
                     locale_code="en",
                 )
             else:
@@ -611,7 +635,7 @@ def initialize_new_profile_driver(email_address):
                 driver = Driver(
                     uc=True,
                     binary_location=chrome_location,
-                    extension_dir=extension_dir,
+                    # extension_dir=extension_dir,
                     locale_code="en",
                 )
 
@@ -646,7 +670,7 @@ def initialize_existing_profile_driver(email_address):
                     uc=True,
                     binary_location=chrome_location,
                     user_data_dir=user_data_dir,
-                    extension_dir=extension_dir,
+                    # extension_dir=extension_dir,
                     locale_code="en",
                 )
             else:
@@ -654,7 +678,7 @@ def initialize_existing_profile_driver(email_address):
                 driver = Driver(
                     uc=True,
                     binary_location=chrome_location,
-                    extension_dir=extension_dir,
+                    # extension_dir=extension_dir,
                     locale_code="en",
                 )
 
@@ -3215,10 +3239,27 @@ def click_new_mail_button(driver):
         )
 
         new_mail_btn_element = WebDriverWait(driver, wait_time * 3).until(
-            EC.visibility_of_element_located(NEW_MAIL_BTN_ELEMENT)
+            EC.element_to_be_clickable(NEW_MAIL_BTN_ELEMENT)
         )
 
         new_mail_btn_element.click()
+        return True
+    except:
+        return False
+
+
+def is_new_mail_button_visible(driver):
+    try:
+        NEW_MAIL_BTN_ELEMENT = (
+            By.CSS_SELECTOR,
+            'button[aria-label="New mail"]',
+        )
+
+        new_mail_btn_element = WebDriverWait(driver, wait_time * 3).until(
+            EC.visibility_of_element_located(NEW_MAIL_BTN_ELEMENT)
+        )
+
+        # new_mail_btn_element.click()
         return True
     except:
         return False
@@ -3234,7 +3275,8 @@ def enter_to_recipient_email(driver, recipient_email):
 
         to_input_element.clear()
         to_input_element.send_keys(recipient_email)
-        # time.sleep(0.5)
+        time.sleep(0.2)
+        to_input_element.send_keys(Keys.ENTER)
 
         return True
     except:
@@ -3248,13 +3290,31 @@ def enter_subject(driver, subject):
         subject_input_element = WebDriverWait(driver, wait_time).until(
             EC.visibility_of_element_located(SUBJECT_INPUT_ELEMENT)
         )
+        try:
+            subject_input_element.click()
+        except:
+            pass
 
         subject_input_element.clear()
-        subject_input_element.send_keys(subject)
-        # time.sleep(0.5)
+        js_script = """
+            var element = arguments[0];
+            var text = arguments[1];
+            element.value += text;
+            element.dispatchEvent(new Event('change'));
+        """
+        with _log_lock:
+            pyperclip.copy(subject)
+            subject_input_element.send_keys(Keys.CONTROL + "v")
+
+            # driver.execute_script(js_script, subject_input_element, subject)
+
+        # subject_input_element.send_keys(subject)
+        time.sleep(0.5)
+        # subject_input_element.send_keys(Keys.ENTER)
 
         return True
-    except:
+    except Exception as e:
+        print(f"Error:\n{e}")
         return False
 
 
@@ -3284,8 +3344,13 @@ def enter_bcc_email(driver, bcc_email):
         )
 
         bcc_input_element.clear()
-        bcc_input_element.send_keys(bcc_email)
-        # time.sleep(0.5)
+        with _log_lock:
+            pyperclip.copy(bcc_email)
+            bcc_input_element.send_keys(Keys.CONTROL + "v")
+
+        # bcc_input_element.send_keys(bcc_email)
+        time.sleep(0.5)
+        # bcc_input_element.send_keys(Keys.ENTER)
 
         return True
     except:
@@ -3294,6 +3359,7 @@ def enter_bcc_email(driver, bcc_email):
 
 def enter_email_body(driver, body):
     try:
+        # log(f"Entering body: {body}")
         EMAIL_BODY_INPUT_ELEMENT = (By.CSS_SELECTOR, 'div[aria-label="Message body"]')
 
         email_body_input_element = WebDriverWait(driver, wait_time).until(
@@ -3301,7 +3367,29 @@ def enter_email_body(driver, body):
         )
 
         email_body_input_element.clear()
-        email_body_input_element.send_keys(body)
+        time.sleep(0.2)
+        js_script = """
+            var element = arguments[0];
+            var text = arguments[1];
+            element.innerText += text;
+            element.dispatchEvent(new Event('input', { bubbles: true }));
+            element.dispatchEvent(new Event('change', { bubbles: true }));
+        """
+
+        with _log_lock:
+            pyperclip.copy(body)
+            email_body_input_element.send_keys(Keys.CONTROL + "v")
+
+            # driver.execute_script(js_script, email_body_input_element, body)
+
+        # email_body_input_element.send_keys(body)
+        time.sleep(0.5)
+        email_body_input_element.send_keys(Keys.CONTROL + "A")
+        time.sleep(1)
+        email_body_input_element.send_keys(Keys.DOWN)
+        time.sleep(1)
+        email_body_input_element.send_keys(Keys.ENTER * 3)
+
         # time.sleep(0.5)
 
         return True
@@ -3317,13 +3405,54 @@ def click_send_button(driver):
             EC.visibility_of_element_located(SEND_BTN_ELEMENT)
         )
 
-        send_btn_element.click()
+        actions = ActionChains(driver)
+
+        # 1. Standard Left Click (Moves to element first)
+        actions.move_to_element(send_btn_element).click().perform()
+
+        # send_btn_element.click()
         return True
     except:
         return False
 
 
-def embed_link_in_message(driver, display_text, url):
+def click_cancel_dialog_box(driver):
+    try:
+        SEND_BTN_ELEMENT = (By.CSS_SELECTOR, 'div[class*="fui-DialogBody"]')
+
+        send_btn_element = WebDriverWait(driver, 2).until(
+            EC.visibility_of_element_located(SEND_BTN_ELEMENT)
+        )
+
+        SEND_BTN_ELEMENT = (
+            By.CSS_SELECTOR,
+            'div[class*="fui-DialogBody"] button:nth-child(2)',
+        )
+        send_btn_element = WebDriverWait(driver, 2).until(
+            EC.visibility_of_element_located(SEND_BTN_ELEMENT)
+        )
+
+        send_btn_element.click()
+        time.sleep(1)
+        return True
+    except:
+        return False
+
+
+def missing_subject_dialog_box(driver):
+    try:
+        SEND_BTN_ELEMENT = (By.CSS_SELECTOR, 'div[class*="fui-DialogBody"]')
+
+        send_btn_element = WebDriverWait(driver, 2).until(
+            EC.visibility_of_element_located(SEND_BTN_ELEMENT)
+        )
+
+        return True
+    except:
+        return False
+
+
+def embed_link_in_message(driver, hyperlink, link):
     try:
         # Keys.CONTROL + "K"
         ActionChains(driver).key_down(Keys.CONTROL).send_keys("k").key_up(
@@ -3344,11 +3473,25 @@ def embed_link_in_message(driver, display_text, url):
         web_url_input_element = WebDriverWait(driver, wait_time).until(
             EC.visibility_of_element_located(WEB_URL_INPUT_ELEMENT)
         )
+        web_url_input_element.clear()
+        web_url_input_element.send_keys(link)
 
         display_text_input_element.clear()
-        display_text_input_element.send_keys(display_text)
-        web_url_input_element.clear()
-        web_url_input_element.send_keys(url)
+        js_script = """
+            var element = arguments[0];
+            var text = arguments[1];
+            element.value += text;
+            element.dispatchEvent(new Event('change'));
+        """
+
+        with _log_lock:
+            pyperclip.copy(hyperlink)
+            display_text_input_element.send_keys(Keys.CONTROL + "v")
+
+            # driver.execute_script(js_script, display_text_input_element, hyperlink)
+
+        # display_text_input_element.send_keys(hyperlink)
+        time.sleep(1)
 
         # Press ok button (assuming it's the last button in the modal)
         OK_BTN_ELEMENT = (
@@ -3371,8 +3514,8 @@ def email_sending_process(
     subject,
     body,
     bcc_email=None,
-    link_display_text=None,
-    link_url=None,
+    hyperlink=None,
+    link=None,
 ):
     try:
         if not click_new_mail_button(driver):
@@ -3391,28 +3534,485 @@ def email_sending_process(
             if not enter_bcc_email(driver, bcc_email):
                 print("Error entering BCC email")
                 return False, "Error entering BCC email"
-
-        if not enter_subject(driver, subject):
-            print("Error entering email subject")
-            return False, "Error entering email subject"
-
+        time.sleep(0.3)
         if not enter_email_body(driver, body):
             print("Error entering email body")
             return False, "Error entering email body"
 
-        if link_display_text and link_url:
-            if not embed_link_in_message(driver, link_display_text, link_url):
+        # time.sleep(5)
+        if hyperlink and link:
+            if not embed_link_in_message(driver, hyperlink, link):
                 print("Error embedding link in email body")
                 return False, "Error embedding link in email body"
+        time.sleep(0.3)
+        if not enter_subject(driver, subject):
+            print("Error entering email subject")
+            return False, "Error entering email subject"
 
-        # if not click_send_button(driver):
-        #     print("Error clicking send button")
-        #     return False, "Error clicking send button"
+        if not click_send_button(driver):
+            print("Error clicking send button")
+            return False, "Error clicking send button"
 
-        return True, "Email sent successfully"
+        retries = 0
+        while retries < 3:
+            if click_cancel_dialog_box(driver):
+                if not enter_subject(driver, subject):
+                    print("Error entering email subject")
+                    return False, "Error entering email subject"
+
+                if not click_send_button(driver):
+                    print("Error clicking send button")
+                    return False, "Error clicking send button"
+
+                if missing_subject_dialog_box(driver):
+                    retries += 1
+            else:
+                break
+        if not missing_subject_dialog_box(driver):
+            return True, "Email sent successfully"
+        else:
+            return False, "Subject error after 3 retries"
+
     except Exception as e:
         print(f"Exception during email sending process: {str(e)}")
         return False, f"Exception during email sending process: {str(e)}"
+
+
+################     FROM SENDER    ##################
+class AccountManager:
+    def __init__(self):
+        self.accounts: List[Dict] = []
+        self._load()
+
+    def _load(self):
+        conn = get_db_connection()
+        if conn is None:
+            log("Error: unable to connect to database for accounts")
+            return
+
+        try:
+            cursor = conn.cursor()
+            query = (
+                "SELECT email, password, recovery FROM manualbot_sender_emails "
+                "WHERE server_ip = %s "
+            )
+            params = [SERVER_IP]
+
+            cursor.execute(query, params)
+            rows = cursor.fetchall()
+            cursor.close()
+
+            for row in rows:
+                if not row or row[0] is None:
+                    continue
+                email = str(row[0]).strip()
+                password = str(row[1]).strip()
+                recovery = (
+                    str(row[2]).strip() if len(row) > 2 and row[2] is not None else ""
+                )
+                if not email:
+                    continue
+                self.accounts.append(
+                    {
+                        "email": email,
+                        "password": password,
+                        "recovery": recovery,
+                    }
+                )
+
+            log(f"Accounts: {len(self.accounts)}")
+        except Exception as exc:
+            log(f"Error: failed to load accounts from database: {exc}")
+        finally:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+    def mark_done(self, account: Dict):
+        try:
+            now = datetime.now()
+            with _file_lock:
+                _deferred_account_updates.append(
+                    (account["email"], now, SERVER_IP, COUNTRY)
+                )
+
+        except Exception:
+            pass
+
+    def mark_failed(self, account: Dict, reason: str):
+        try:
+            now = datetime.now()
+            with _file_lock:
+                _deferred_failed_accounts.append(
+                    (
+                        account["email"],
+                        account["password"],
+                        account.get("recovery", ""),
+                        COUNTRY,
+                        SERVER_IP,
+                        reason,
+                        now,
+                    )
+                )
+
+        except Exception:
+            pass
+
+
+class InputAccountManager:
+    def __init__(self):
+        self.accounts: List[Dict] = []
+        self._load()
+
+    def _load(self):
+        conn = get_db_connection()
+        if conn is None:
+            log("Error: unable to connect to database for accounts")
+            return
+
+        try:
+            cursor = conn.cursor()
+            query = (
+                "SELECT email, pass, recovery FROM manualbot_sender_emails "
+                "WHERE server_ip = %s "
+            )
+            params = [SERVER_IP]
+
+            cursor.execute(query, params)
+            rows = cursor.fetchall()
+            cursor.close()
+
+            for row in rows:
+                if not row or row[0] is None:
+                    continue
+                email = str(row[0]).strip()
+                password = str(row[1]).strip()
+                recovery = (
+                    str(row[2]).strip() if len(row) > 2 and row[2] is not None else ""
+                )
+                if not email:
+                    continue
+                self.accounts.append(
+                    {
+                        "email": email,
+                        "password": password,
+                        "recovery": recovery,
+                    }
+                )
+
+            log(f"Accounts: {len(self.accounts)}")
+        except Exception as exc:
+            log(f"Error: failed to load accounts from database: {exc}")
+        finally:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+    def mark_done(self, account: Dict):
+        try:
+            now = datetime.now()
+            with _file_lock:
+                _deferred_account_updates.append(
+                    (account["email"], now, SERVER_IP, COUNTRY)
+                )
+
+        except Exception:
+            pass
+
+    def mark_failed(self, account: Dict, reason: str):
+        try:
+            now = datetime.now()
+            with _file_lock:
+                _deferred_failed_accounts.append(
+                    (
+                        account["email"],
+                        account["password"],
+                        account.get("recovery", ""),
+                        COUNTRY,
+                        SERVER_IP,
+                        reason,
+                        now,
+                    )
+                )
+
+        except Exception:
+            pass
+
+
+_SPIN_RE = re.compile(r"\{([^{}]+)\}")
+
+
+def spin(text: str) -> str:
+    prev = None
+    while prev != text:
+        prev = text
+        text = _SPIN_RE.sub(
+            lambda m: random.choice(m.group(1).split("|")).strip(), text
+        )
+    return text
+
+
+SENDER_LOG_DIR = Path(__file__).resolve().parent.parent / "sender_logs"
+LOG_FILE = SENDER_LOG_DIR / "email_sender.log"
+
+
+def _ensure_sender_log_dir():
+    try:
+        SENDER_LOG_DIR.mkdir(exist_ok=True)
+    except Exception:
+        pass
+
+
+def _append_to_file(path: Path, text: str):
+    _ensure_sender_log_dir()
+    try:
+        with open(path, "a", encoding="utf-8") as handle:
+            handle.write(text + "\n")
+    except Exception:
+        pass
+
+
+def log(msg: str):
+    ts = datetime.now().strftime("%H:%M:%S")
+    full_ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    console_line = f"[{ts}] {msg}"
+    file_line = f"[{full_ts}] {msg}"
+    with _log_lock:
+        print(console_line)
+        _append_to_file(LOG_FILE, file_line)
+
+
+class ContentManager:
+    def __init__(self):
+        self.hyperlinks = self._load("sender_hyperlink_text", "hyperlink_text")
+        self.links = self._load("sender_link", "link")
+        self.subjects = self._load("sender_subjects", "subject")
+        self.texts = self._load("sender_texts", "text")
+        self._idx = {"h": 0, "l": 0, "s": 0, "t": 0}
+        log(
+            f"Content: {len(self.hyperlinks)}h {len(self.links)}l "
+            f"{len(self.subjects)}s {len(self.texts)}t from DB"
+            + (f" country={COUNTRY}" if COUNTRY else "")
+        )
+
+    def _load(self, table_name: str, column_name: str) -> List[str]:
+        return self._load_table_attribute(table_name, column_name, COUNTRY)
+
+    def _load_table_attribute(
+        self, table_name: str, column_name: str, country: str = ""
+    ) -> List[str]:
+        conn = get_db_connection()
+        if conn is None:
+            print(f"Error: unable to load table {table_name} from database")
+            return []
+
+        try:
+            cursor = conn.cursor()
+            query = f"SELECT `{column_name}` FROM `{table_name}`"
+            params = []
+            if country:
+                query += " WHERE LOWER(country) = %s"
+                params.append(country.lower())
+            cursor.execute(query, params)
+            rows = [
+                str(row[0]).strip()
+                for row in cursor.fetchall()
+                if row and row[0] is not None and str(row[0]).strip()
+            ]
+            cursor.close()
+            return rows
+        except Exception as exc:
+            log(f"Error: failed to load {table_name}.{column_name}: {exc}")
+            return []
+        finally:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+    def get(self) -> Tuple[str, str, str, str]:
+        with _content_lock:
+            h = self._next(self.hyperlinks, "h")
+            l = self._next(self.links, "l")
+            s = self._next(self.subjects, "s")
+            t = self._next(self.texts, "t")
+        return spin(h), l, spin(s), spin(t)
+
+    def _next(self, items: List[str], key: str) -> str:
+        if not items:
+            return ""
+        idx = self._idx[key]
+        self._idx[key] = (idx + 1) % len(items)
+        return items[idx]
+
+    def is_valid(self) -> bool:
+        return bool(self.subjects and self.texts and self.links and self.hyperlinks)
+
+
+_BASIC_RE = re.compile(r".+@.+\..+")
+
+
+def _is_valid_email(email: str) -> tuple[bool, str]:
+    if not _BASIC_RE.match(email):
+        return False, email
+    try:
+        valid = validate_email(email, check_deliverability=False)
+        return True, valid.normalized
+    except EmailNotValidError:
+        return False, email
+
+
+def prompt_for_sample_recipient() -> Optional[int]:
+    while True:
+        choice = input(
+            "Use a sample recipient email on each send?:\n"
+            "1. Yes\n"
+            "2. No\n"
+            "Enter choice (1 or 2), or type Enter to exit: "
+        ).strip()
+        if not choice:
+            return None, None
+        if choice.lower() in {"exit", "quit", "q"}:
+            return None, None
+        if choice in {"1", "2"}:
+            email = input("Enter email: ").strip()
+            return int(choice), email
+        print("Invalid choice. Please enter 1 for old app or 2 for new app.")
+
+
+class RecipientManager:
+    def __init__(self):
+        self.queue = deque()
+        self._sent_count = 0
+        self._total_loaded = 0
+        self._load()
+
+    def _load(self):
+        conn = get_db_connection()
+        if conn is None:
+            log("Error: unable to connect to database for recipients")
+            return
+
+        try:
+            cursor = conn.cursor()
+            query = (
+                "SELECT recipient_email FROM sender_recipients "
+                "WHERE server_ip = %s AND COALESCE(country, '') = %s LIMIT 10000"
+            )
+            params = [SERVER_IP, COUNTRY]
+
+            cursor.execute(query, params)
+            rows = cursor.fetchall()
+            cursor.close()
+
+            seen = set()
+            recipients = []
+            for row in rows:
+                if not row or row[0] is None:
+                    continue
+                email = str(row[0]).strip().lower()
+                if not email:
+                    continue
+                is_valid, normalized = _is_valid_email(email)
+                if not is_valid or normalized in seen:
+                    continue
+                seen.add(normalized)
+                recipients.append(normalized)
+
+            random.shuffle(recipients)
+            self.queue.extend(recipients)
+            self._total_loaded = len(recipients)
+
+            log(f"✓ Loaded {len(recipients)} valid recipients from DB")
+        except Exception as exc:
+            log(f"Error: failed to load recipients from database: {exc}")
+        finally:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+    def get_batch(self, size: int) -> List[str]:
+        global SAMPLE_RECIPIENT, SAMPLE_RECIPIENT_EMAIL
+        if int(SAMPLE_RECIPIENT) == 2:
+            with _recipient_lock:
+                batch = []
+                for _ in range(size):
+                    if self.queue:
+                        batch.append(self.queue.popleft())
+                    else:
+                        break
+                return batch
+        else:
+            with _recipient_lock:
+                batch = []
+                for _ in range(size - 1):
+                    if self.queue:
+                        batch.append(self.queue.popleft())
+                    else:
+                        break
+                batch.append(SAMPLE_RECIPIENT_EMAIL)  # Add test recipient to each batch
+                return batch
+
+    def return_batch(self, batch: List[str]):
+        with _recipient_lock:
+            self.queue.extendleft(reversed(batch))
+
+    def mark_sent(self, count: int):
+        with _recipient_lock:
+            self._sent_count += count
+
+    def has_more(self) -> bool:
+        with _recipient_lock:
+            return len(self.queue) > 0
+
+    def remaining(self) -> int:
+        with _recipient_lock:
+            return len(self.queue)
+
+    @property
+    def sent_count(self) -> int:
+        with _recipient_lock:
+            return self._sent_count
+
+
+class StatsTracker:
+    def __init__(self, total_accounts: int, total_recipients: int):
+        self.total_accounts = total_accounts
+        self.total_recipients = total_recipients
+        self.total_sent = 0
+        self.ok_count = 0
+        self.fail_count = 0
+        self.processed_accounts = []
+        self.start_time = time.time()
+
+    def update(self, account: str, success: bool, sent: int):
+        with _stats_lock:
+            if success:
+                self.ok_count += 1
+            else:
+                self.fail_count += 1
+            self.total_sent += sent
+            self.processed_accounts.append(account)
+
+    def get_stats(self) -> Dict:
+        with _stats_lock:
+            elapsed = time.time() - self.start_time
+            rate = self.total_sent / elapsed if elapsed > 0 else 0
+            return {
+                "total_sent": self.total_sent,
+                "ok_count": self.ok_count,
+                "fail_count": self.fail_count,
+                "rate": rate,
+                "elapsed": elapsed,
+                "processed_count": len(self.processed_accounts),
+            }
+
+    def get_processed(self) -> List[Dict]:
+        with _stats_lock:
+            return self.processed_accounts.copy()
 
 
 def initialize_new_profile(new_profile_data):
@@ -3433,7 +4033,9 @@ def initialize_new_profile(new_profile_data):
 
         retries = 0
         driver_success = False
-        print(f"{email_address} : Initializing browser driver")
+        print(
+            f"[{datetime.now().strftime('%H:%M:%S')}] {email_address} : Initializing browser driver"
+        )
         while (retries < 3) and (not driver_success):
             try:
                 # status, driverdata, error = initialize_existing_profile_driver(email_address)
@@ -3524,21 +4126,40 @@ def initialize_new_profile(new_profile_data):
             )
             return False, "Error entering email verification code"
 
-        print(f"{email_address}:Finalizing signin")
+        print(f"{email_address}: Finalizing signin")
         close_other_tabs(driver)
+        click_next_if_a_quick_note_page(driver)
         click_stay_signed_in_button(driver)
+        time.sleep(4)
+
+        if is_your_account_has_been_locked_page(driver):
+            print(f"{email_address}: Account locked!")
+
+            new_profile_logger(
+                email_address,
+                "FAIL",
+                "Account is locked",
+            )
+            return False, "Error"
+
         time.sleep(5)
         driver.get(MAIL_URL)
-        click_new_mail_button(driver)
+        time.sleep(5)
+        if is_new_mail_button_visible(driver):
+            update_accounts_data(
+                email=email_address,
+                profile_dir=user_path,
+                password=password,
+                recovery_email=recovery,
+            )
+        else:
+            new_profile_logger(
+                email_address,
+                "FAIL",
+                "Outlook page not visible",
+            )
 
-        update_accounts_data(
-            email=email_address,
-            profile_dir=user_path,
-            password=password,
-            recovery_email=recovery,
-        )
-
-        return driver, "SUCCESS"
+            return driver, "SUCCESS"
 
     except Exception as E:
         try:
@@ -3554,7 +4175,7 @@ def initialize_new_profile(new_profile_data):
             pass
 
 
-def initialize_existing_profile(new_profile_data):
+def initialize_existing_profile(email_address):
     """
     Creating a new chrome profile.
 
@@ -3562,24 +4183,19 @@ def initialize_existing_profile(new_profile_data):
     """
     try:
         print("\n--------------------------------------\n")
-        # connect_new_random()
-
-        email_address = new_profile_data.get("email")
-        password = new_profile_data.get("pass")
-        recovery = new_profile_data.get("recovery")
-
-        new_profile_data_original = new_profile_data.copy()
 
         retries = 0
         driver_success = False
-        print(f"{email_address} : Initializing browser driver")
+        print(
+            f"[{datetime.now().strftime('%H:%M:%S')}] {email_address} : Initializing browser driver"
+        )
         while (retries < 3) and (not driver_success):
             try:
                 status, driverdata, error = initialize_existing_profile_driver(
                     email_address
                 )
                 # status, driverdata, error = initialize_new_profile_driver(email_address)
-                print(f"{email_address} : Driver status: {status}, error: {error}")
+                # print(f"{email_address} : Driver status: {status}, error: {error}")
                 if status:
                     driver, user_path, proxy = driverdata.values()
 
@@ -3598,87 +4214,23 @@ def initialize_existing_profile(new_profile_data):
                 retries += 1
 
         if not driver_success:
-            print(f"{email_address}: Error initializing new browser driver")
+            print(
+                f"[{datetime.now().strftime('%H:%M:%S')}] {email_address} : Error initializing browser driver with cookies"
+            )
+            # print(f"{email_address}: Error initializing new browser driver")
             new_profile_logger(
                 email_address,
                 "FAIL",
                 "Error initializing new browser driver. Network or proxy error",
             )
+
             return False, "Error initializing new browser driver instance"
 
-        return driver
-        if not enter_email(driver=driver, email_address=email_address):
-            print(f"{email_address}: Error entering email")
-            new_profile_logger(email_address, "FAIL", "Error loading login page")
-            return False, "Error loading login page"
-
-        time.sleep(1)
-        if not click_next_button(driver=driver):
-            print(f"{email_address}: Error clicking next button after entering email")
-            new_profile_logger(
-                email_address, "FAIL", "Error clicking next button after entering email"
-            )
-            return False, "Error clicking next button after entering email"
-        time.sleep(1)
-
-        if not enter_recovery_email_2(driver=driver, recovery_email=recovery):
-            print(f"{email_address}: Error entering recovery email")
-            new_profile_logger(
-                email_address,
-                "FAIL",
-                "Error entering recovery email",
-            )
-            return False, "Error entering recovery email"
-        time.sleep(0.5)
-        bring_to_front(driver)
-        time.sleep(1)
-
-        sss = click_password_next_button(driver)
-        if not sss:
-            os.makedirs("screenshots", exist_ok=True)
-            driver.save_screenshot(f"screenshots/{email_address}_error.png")
-            print(f"{email_address}: Error clicking next after entering recovery email")
-            new_profile_logger(
-                email_address,
-                "FAIL",
-                "Error clicking next after entering recovery email",
-            )
-            return False, "Error clicking next after entering recovery email"
-
-        status, code = wait_for_code_by_recovery_mail(recovery)
-        time.sleep(3)
-        if not status:
-            print(f"{email_address}: Error getting code from tempmail")
-            new_profile_logger(
-                email_address,
-                "FAIL",
-                "Error getting code from tempmail. Timed out without receiving code",
-            )
-            return False, "Error getting code from tempmail. Timeout"
         else:
-            print(f"{email_address}: Code received from tempmail: {code}")
-
-        if not enter_code_and_click_next_after_pass_change(driver, code):
-            print(f"{email_address}: Error entering email verification code")
-            new_profile_logger(
-                email_address,
-                "FAIL",
-                "Error entering email verification code",
+            print(
+                f"[{datetime.now().strftime('%H:%M:%S')}] {email_address} : Loaded driver with cookies"
             )
-            return False, "Error entering email verification code"
-
-        print(f"{email_address}:Finalizing signin")
-        close_other_tabs(driver)
-        click_stay_signed_in_button(driver)
-
-        update_accounts_data(
-            email=email_address,
-            profile_dir=user_path,
-            password=password,
-            recovery_email=recovery,
-        )
-
-        return driver, "SUCCESS"
+            return True, driver
 
     except Exception as E:
         try:
@@ -3689,7 +4241,8 @@ def initialize_existing_profile(new_profile_data):
     finally:
         try:
             # driver.quit()
-            processed_email(new_profile_data_original)
+            # processed_email(email_address)
+            pass
         except:
             pass
 
@@ -3770,23 +4323,6 @@ def get_existing_profile_data(acc_id):
         )
         cursor = conn.cursor()
 
-        # # CHECK IF THERE IS EXISTING RECORD IN manualbot_processing_accounts FOR THIS BOT AND IP. IF exists, return this else proceed
-        # cursor.execute(
-        #     "SELECT email,password,recovery FROM manualbot_processing_accounts WHERE server_ip = %s AND bot_type = %s LIMIT 1;",
-        #     (SERVER_IP, BOT_TYPE),
-        # )
-        # existing_email = cursor.fetchone()
-
-        # if existing_email:
-        #     # Return the existing email if it exists
-        #     cursor.close()
-        #     conn.close()
-        #     return True, {
-        #         "email": existing_email[0],
-        #         "pass": existing_email[1],
-        #         "recovery": existing_email[2],
-        #     }
-
         cursor.execute(
             "SELECT email, password, recovery FROM manualbot_accounts_details WHERE account_id = %s LIMIT 1 FOR UPDATE;",
             (acc_id,),
@@ -3797,21 +4333,11 @@ def get_existing_profile_data(acc_id):
             conn.close()
             return False, {"email": "", "pass": "", "recovery": ""}
 
-        email, password, recovery = row
-
-        # cursor.execute(
-        #     "INSERT INTO manualbot_processing_accounts (email, password,recovery, server_ip, bot_type, date_time, country) VALUES (%s,%s, %s, %s, %s, %s, %s)",
-        #     (email, password, recovery, SERVER_IP, BOT_TYPE, datetime.now(), COUNTRY),
-        # )
-        # cursor.execute(
-        #     "DELETE FROM manualbot_input_accounts WHERE email = %s AND password = %s",
-        #     (email, password),
-        # )
-        # conn.commit()
+        email_, password, recovery = row
 
         cursor.close()
         conn.close()
-        return True, {"email": email, "pass": password, "recovery": recovery}
+        return True, {"email": email_, "pass": password, "recovery": recovery}
 
     try:
         return execute_db_action(db_action, retries=5, delay=3)
@@ -3840,21 +4366,104 @@ def save_cookies():
         i += 1
 
 
+def send_manual_email_whole_process(
+    driver,
+    email_address,
+    recipients: RecipientManager,
+    content: ContentManager,
+    stats: StatsTracker,
+):
+    try:
+        # Warmup batch: one visible recipient + FIRST_BATCH_BCC BCC recipients
+        log("Sending first batch")
+        sent_recipients_num = 0
+
+        warmup = recipients.get_batch(FIRST_BATCH_BCC)
+        if not warmup:
+            log("No recipients available for warmup batch")
+            return False
+
+        hyperlink, link, subject, body = content.get()
+        recipient_email = warmup[0]
+        bcc_emails = warmup[1:]
+        bcc_email = ",".join(bcc_emails) if bcc_emails else None
+
+        # time.sleep(10)
+        success, message = email_sending_process(
+            driver,
+            recipient_email,
+            subject,
+            body,
+            bcc_email=bcc_email,
+            hyperlink=hyperlink,
+            link=link,
+        )
+
+        if success:
+            recipients.mark_sent(len(warmup))
+            sent_recipients_num += len(warmup)
+
+        else:
+            log(f"Warmup batch failed: {message}")
+            recipients.return_batch(warmup)
+            stats.update(email_address, False, sent_recipients_num)
+
+            return False
+
+        # Subsequent batches
+        for batch_index in range(SUBSEQUENT_BATCHES):
+            if not recipients.has_more():
+                log("No more recipients available for subsequent batch")
+                break
+
+            log(f"Sending subsequent batch {batch_index + 1}")
+            batch = recipients.get_batch(SUBSEQUENT_BATCH_BCC)
+            if not batch:
+                log("No recipients available for subsequent batch")
+                break
+
+            hyperlink, link, subject, body = content.get()
+            recipient_email = batch[0]
+            bcc_emails = batch[1:]
+            bcc_email = ",".join(bcc_emails) if bcc_emails else None
+
+            success, message = email_sending_process(
+                driver,
+                recipient_email,
+                subject,
+                body,
+                bcc_email=bcc_email,
+                hyperlink=hyperlink,
+                link=link,
+            )
+
+            if success:
+                recipients.mark_sent(len(batch))
+                sent_recipients_num += len(batch)
+            else:
+                log(f"Subsequent batch {batch_index + 1} failed: {message}")
+                recipients.return_batch(batch)
+                stats.update(email_address, False, sent_recipients_num)
+
+                return False
+
+        stats.update(email_address, True, sent_recipients_num)
+
+        return True
+    except Exception as exc:
+        log(f"send_manual_email_whole_process exception: {exc}")
+        return False
+
+
 def load_cookies():
     while True:
         try:
-            status, new_profile_data = get_existing_profile_data(acc_id=3)
+            status, email_address = get_existing_profile_data(acc_id=3)
             if status:
-                driver = initialize_existing_profile(new_profile_data)
+                driver = initialize_existing_profile(email_address)
 
-                email_sending_process(
-                    driver,
-                    recipient_email,
-                    subject,
-                    body,
-                    bcc_email=bcc_email,
-                    link_display_text=link_display_text,
-                    link_url=link_url,
+                send_manual_email_whole_process(
+                    driver, email_address, recipients, content, stats
                 )
 
             else:
@@ -3866,21 +4475,126 @@ def load_cookies():
             break
 
 
-recipient_email = "recipient@example.com"
+def process_wrapper(
+    account: Dict,
+    recipients: RecipientManager,
+    content: ContentManager,
+    stats: StatsTracker,
+    accounts: AccountManager,
+) -> bool:
+    email_address = account.get("email")
+    driver = None
+    try:
+        status, driver = initialize_existing_profile(email_address)
 
-subject = "Test Email Subject"
-body = "This is the body of the test email."
-bcc_email = "bcc@example.com,bcc2@example.com,bcc3@example.com"
-link_display_text = "Click here"
-link_url = "https://www.example.com"
+        if not status:
+            log(f"{email_address}: failed to initialize existing profile")
+            accounts.mark_failed(account, "driver_init_failed")
+            stats.update(email_address, False, 0)
+            return False
+
+        success = send_manual_email_whole_process(
+            driver, email_address, recipients, content, stats
+        )
+        if success:
+            accounts.mark_done(account)
+            log(f"{email_address}: email send completed")
+            return True, driver
+        else:
+            accounts.mark_failed(account, "send_failed")
+            log(f"{email_address}: email send failed")
+            return False, driver
+
+    except Exception as exc:
+        log(f"{email_address}: process_wrapper exception: {exc}")
+        accounts.mark_failed(account, f"exception:{exc}")
+        stats.update(email_address, False, 0)
+        return False
+    finally:
+        try:
+            if driver:
+                # driver.quit()
+                pass
+        except Exception:
+            pass
 
 
-# email_sending_process(
-#     driver,
-#     recipient_email,
-#     subject,
-#     body,
-#     bcc_email=bcc_email,
-#     link_display_text=link_display_text,
-#     link_url=link_url,
-# )
+def manual_sender_main():
+    accounts = AccountManager()
+    recipients = RecipientManager()
+    content = ContentManager()
+    stats = StatsTracker(
+        total_accounts=len(accounts.accounts),
+        total_recipients=recipients.remaining(),
+    )
+
+    account = accounts.accounts[-1]
+    if not accounts.accounts:
+        log("No accounts available for manual send. Exiting.")
+        return
+
+    if not content.is_valid():
+        log("Content is not valid for manual send. Exiting.")
+        return
+
+    log(
+        f"Starting manual send with {len(accounts.accounts)} accounts, "
+        f"{recipients.remaining()} recipients, {MAX_CONCURRENT_ACCOUNTS} threads"
+    )
+
+    futures = {}
+    with ThreadPoolExecutor(max_workers=MAX_CONCURRENT_ACCOUNTS) as executor:
+        for account in accounts.accounts:
+            future = executor.submit(
+                process_wrapper,
+                account,
+                recipients,
+                content,
+                stats,
+                accounts,
+            )
+            futures[future] = account
+
+        for future in as_completed(futures):
+            account = futures[future]
+            try:
+                result = future.result()
+                log(
+                    f"Account {account.get('email')} finished with "
+                    f"{'success' if result else 'failure'}"
+                )
+            except Exception as exc:
+                log(f"Account {account.get('email')} thread exception: {exc}")
+                accounts.mark_failed(account, f"thread_exception:{exc}")
+                stats.update(account.get("email"), False, 0)
+
+    summary = stats.get_stats()
+    log(
+        f"Manual send complete: {summary['ok_count']} success, "
+        f"{summary['fail_count']} failure, {summary['total_sent']} sent "
+        f"in {summary['elapsed']:.1f}s"
+    )
+
+
+# if __name__ == "__main__":
+#     main()
+accounts = AccountManager()
+recipients = RecipientManager()
+content = ContentManager()
+stats = StatsTracker(
+    total_accounts=len(accounts.accounts),
+    total_recipients=recipients.remaining(),
+)
+
+account = accounts.accounts[-2]
+email_address = account.get("email")
+f = process_wrapper(
+    account,
+    recipients,
+    content,
+    stats,
+    accounts,
+)
+
+
+driver = f[1]
