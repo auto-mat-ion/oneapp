@@ -1341,9 +1341,9 @@ def main():
     SENDER_APP = app_choice
     print(f"Selected {'New' if SENDER_APP == 2 else 'Old'} app.")
     global SAMPLE_RECIPIENT, SAMPLE_RECIPIENT_EMAIL
-    recipt_samp, recipt_samp_email = prompt_for_sample_recipient()
-    SAMPLE_RECIPIENT = recipt_samp
-    SAMPLE_RECIPIENT_EMAIL = recipt_samp_email
+    # recipt_samp, recipt_samp_email = prompt_for_sample_recipient()
+    # SAMPLE_RECIPIENT = recipt_samp
+    # SAMPLE_RECIPIENT_EMAIL = recipt_samp_email
 
     BATCH_NUMBER = prompt_for_batch_selection()
     if not BATCH_NUMBER:
