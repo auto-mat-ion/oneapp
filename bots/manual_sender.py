@@ -2,7 +2,7 @@ import email
 import shutil
 import time
 import time
-from datetime import timedelta, datetime, timezone
+from datetime import timedelta, datetime, timezone, UTC
 import os
 from selenium.webdriver import ActionChains
 from selenium.webdriver.common.by import By
@@ -30,6 +30,7 @@ from collections import deque
 from email_validator import validate_email, EmailNotValidError
 from pathlib import Path
 import pyperclip
+import datetime as date_time_mother
 
 
 lock = threading.Lock()
@@ -4683,8 +4684,7 @@ def get_action_status() -> bool:
         cursor = conn.cursor()
         cursor.execute(
             "SELECT action, status, date_time FROM manualbot_actions_tracker "
-            "WHERE server_ip = %s ORDER BY date_time DESC LIMIT 1",
-            (SERVER_IP,),
+            "ORDER BY action_id DESC LIMIT 1"
         )
         row = cursor.fetchone()
         cursor.close()
@@ -4693,12 +4693,12 @@ def get_action_status() -> bool:
 
         action = str(row[0]).strip().lower() if row[0] is not None else ""
         status = str(row[1]).strip().lower() if row[1] is not None else ""
-        timestamp = row[2]
+        timestamp = row[2].replace(tzinfo=timezone.utc)
 
         if not timestamp or not isinstance(timestamp, datetime):
             return False
 
-        if datetime.now() - timestamp > timedelta(minutes=RUNNER_SESSION_TIME):
+        if datetime.now(UTC) - timestamp > timedelta(minutes=RUNNER_SESSION_TIME):
             return False
 
         return action == "run_bots" and status == "true"
