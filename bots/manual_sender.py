@@ -4152,6 +4152,11 @@ def initialize_new_profile(new_profile_data):
                 password=password,
                 recovery_email=recovery,
             )
+            new_profile_logger(
+                email_address,
+                "SUCCESS",
+                "SUCCESSFULLY SAVED",
+            )
         else:
             new_profile_logger(
                 email_address,
