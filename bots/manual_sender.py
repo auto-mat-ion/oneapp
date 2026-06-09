@@ -2645,7 +2645,7 @@ def new_profile_logger_old(email, status, error):
             return False
 
 
-def new_profile_logger(email, status, error):
+def new_profile_logger(email_address, status, error):
     with lock:
         try:
             conn = mysql.connector.connect(
@@ -2653,8 +2653,8 @@ def new_profile_logger(email, status, error):
             )
             cursor = conn.cursor()
             cursor.execute(
-                "INSERT INTO manualbot_signin_log (server_ip, bot_type, email, log_time, status, error, country) VALUES (%s, %s, %s, %s, %s, %s, %s)",
-                (SERVER_IP, BOT_TYPE, email, datetime.now(), status, error, COUNTRY),
+                "INSERT INTO manualbot_signin_log (server_ip, bot_type, email, date_time, status, error) VALUES ( %s, %s, %s, %s, %s, %s)",
+                (SERVER_IP, BOT_TYPE, email_address, datetime.now(), status, error),
             )
             conn.commit()
             conn.close()
