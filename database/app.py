@@ -6,7 +6,7 @@ import streamlit as st
 import pandas as pd
 import json
 from pathlib import Path
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from sqlalchemy import create_engine
 import re
 
@@ -115,7 +115,7 @@ def insert_manual_sender_action():
         cursor.execute(
             "INSERT INTO manualbot_actions_tracker "
             "(server_ip, date_time, action, status) VALUES (%s, %s, %s, %s)",
-            (get_current_server_ip(), datetime.now(), "run_bots", "True"),
+            (get_current_server_ip(), datetime.now(UTC), "run_bots", "True"),
         )
         conn.commit()
         return True, "Signal sent.."
@@ -704,7 +704,10 @@ def parse_manualbot_sender_emails(uploaded_file):
             continue
         if len(parts) >= 4:
             server_ip, email, password, recovery = (
-                parts[0], parts[1], parts[2], parts[3]
+                parts[0],
+                parts[1],
+                parts[2],
+                parts[3],
             )
             data.append(
                 {
