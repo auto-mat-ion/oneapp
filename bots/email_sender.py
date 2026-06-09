@@ -1128,7 +1128,6 @@ def flush_db_operations():
         retries = 0
         done_acc_update = False
         done_failed_update = False
-        done_recipients_update = False
         while retries < 7:
             engine = _create_sqlalchemy_engine()
             if engine is None:
@@ -1182,7 +1181,7 @@ def flush_db_operations():
                             f"Inserting failed accounts and removing them from {account_table} ({total_failed} rows)"
                         )
                         insert_sql = text(
-                            f"INSERT INTO {failed_accounts_table()} "
+                            f"INSERT INTO {failed_accounts_table} "
                             "(email, pass, recovery, country, server_ip, fail_reason, date_time) "
                             "VALUES (:email, :password, :recovery, :country, :server_ip, :reason, :date_time)"
                         )
@@ -1314,21 +1313,20 @@ def prompt_for_sender_app_selection() -> Optional[int]:
 
 
 def prompt_for_sample_recipient() -> Optional[int]:
-    while True:
-        choice = input(
-            "Use a sample recipient email on each send?:\n"
-            "1. Yes\n"
-            "2. No\n"
-            "Enter choice (1 or 2), or type Enter to exit: "
-        ).strip()
-        if not choice:
-            return None, None
-        if choice.lower() in {"exit", "quit", "q"}:
-            return None, None
-        if choice in {"1", "2"}:
-            email = input("Enter email: ").strip()
-            return int(choice), email
-        print("Invalid choice. Please enter 1 for old app or 2 for new app.")
+    choice = input(
+        "Use a sample recipient email on each send?:\n"
+        "1. Yes\n"
+        "2. No\n"
+        "Enter choice (1 or 2), or type Enter to exit: "
+    ).strip()
+    if not choice:
+        return None, None
+    if choice.lower() in {"exit", "quit", "q"}:
+        return None, None
+    if choice in {"1", "2"}:
+        email = input("Enter email: ").strip()
+        return int(choice), email
+    print("Invalid choice. Please enter 1 for old app or 2 for new app.")
 
 
 def main():
@@ -1341,9 +1339,9 @@ def main():
     SENDER_APP = app_choice
     print(f"Selected {'New' if SENDER_APP == 2 else 'Old'} app.")
     global SAMPLE_RECIPIENT, SAMPLE_RECIPIENT_EMAIL
-    # recipt_samp, recipt_samp_email = prompt_for_sample_recipient()
-    # SAMPLE_RECIPIENT = recipt_samp
-    # SAMPLE_RECIPIENT_EMAIL = recipt_samp_email
+    recipt_samp, recipt_samp_email = prompt_for_sample_recipient()
+    SAMPLE_RECIPIENT = recipt_samp
+    SAMPLE_RECIPIENT_EMAIL = recipt_samp_email
 
     BATCH_NUMBER = prompt_for_batch_selection()
     if not BATCH_NUMBER:
