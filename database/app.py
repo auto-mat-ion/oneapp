@@ -101,6 +101,37 @@ def get_db_tables():
         conn.close()
 
 
+def get_current_server_ip():
+    settings = load_bot_settings()
+    return settings.get("SERVER_IP", "")
+
+
+def insert_manual_sender_action():
+    conn = get_db_connection()
+    if conn is None:
+        return False, "Unable to connect to database"
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO manualbot_actions_tracker "
+            "(server_ip, date_time, action, status) VALUES (%s, %s, %s, %s)",
+            (get_current_server_ip(), datetime.now(), "run_bots", "True"),
+        )
+        conn.commit()
+        return True, "Signal sent.."
+    except Exception as exc:
+        return False, f"Unable to insert action: {exc}"
+    finally:
+        try:
+            cursor.close()
+        except Exception:
+            pass
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
 def test_db_connection():
     if mysql is None:
         return False, (
@@ -630,8 +661,7 @@ def parse_manualbot_input_accounts(uploaded_file):
     content = uploaded_file.read().decode("utf-8", errors="replace")
     rows = [row.strip() for row in content.splitlines() if row.strip()]
     if rows and all(
-        field in rows[0].lower()
-        for field in ["email", "pass", "recovery", "country"]
+        field in rows[0].lower() for field in ["email", "pass", "recovery", "country"]
     ):
         rows = rows[1:]
     data = []
@@ -656,11 +686,42 @@ def parse_manualbot_input_accounts(uploaded_file):
     return pd.DataFrame(data)
 
 
+def parse_manualbot_sender_emails(uploaded_file):
+    content = uploaded_file.read().decode("utf-8", errors="replace")
+    rows = [row.strip() for row in content.splitlines() if row.strip()]
+    if rows and all(
+        field in rows[0].lower()
+        for field in ["server_ip", "email", "password", "recovery"]
+    ):
+        rows = rows[1:]
+    data = []
+    for line in rows:
+        if "," in line:
+            parts = [part.strip() for part in line.split(",")]
+        elif ":" in line:
+            parts = [part.strip() for part in line.split(":")]
+        else:
+            continue
+        if len(parts) >= 4:
+            server_ip, email, password, recovery = (
+                parts[0], parts[1], parts[2], parts[3]
+            )
+            data.append(
+                {
+                    "server_ip": server_ip,
+                    "email": email,
+                    "password": password,
+                    "recovery": recovery,
+                }
+            )
+    return pd.DataFrame(data)
+
+
 def load_emails_from_cache_bins(
     selected_country=None,
     accounts_table="sender_input_accounts",
     cache_table="cache_bins",
-    sender_failed_accounts_table ="sender_failed_accounts"
+    sender_failed_accounts_table="sender_failed_accounts",
 ):
     """
     Load emails from cache table, parse them, and get password/recovery/country from accounts_details.
@@ -1482,6 +1543,14 @@ def validate_dataframe(table_name, df):
                 False,
                 "Table manualbot_input_accounts requires columns: email, password, recovery, country",
             )
+    if table_name == "manualbot_sender_emails":
+        if not all(
+            col in df.columns for col in ["server_ip", "email", "password", "recovery"]
+        ):
+            return (
+                False,
+                "Table manualbot_sender_emails requires columns: server_ip, email, password, recovery",
+            )
     if table_name == "sender_hyperlink_text":
         if "hyperlink_text" not in df.columns:
             return False, "Table sender_hyperlink_text requires column: hyperlink_text"
@@ -1696,6 +1765,7 @@ def general_uploader():
 def email_sender_uploader():
     table_options = {
         "sender_input_accounts": "Sender Input Accounts",
+        "manualbot_sender_emails": "Manual Sender Emails",
         "sender_hyperlink_text": "Sender Hyperlink Text",
         "sender_link": "Sender Links",
         "sender_recipients": "Sender Recipients",
@@ -1791,7 +1861,9 @@ def email_sender_uploader():
         and data_source == "Get from Database (Cache Bins)"
     ):
         cache_table = "second_app_cache_bins" if is_new_app_sender else "cache_bins"
-        sender_failed_accounts_table = "sender2_failed_accounts" if is_new_app_sender else "sender_failed_accounts"
+        sender_failed_accounts_table = (
+            "sender2_failed_accounts" if is_new_app_sender else "sender_failed_accounts"
+        )
         st.info(
             f"This will load emails from {cache_table}, parse them, and get password/recovery from the database."
         )
@@ -1801,7 +1873,7 @@ def email_sender_uploader():
                     None if selected_country == "All" else selected_country,
                     accounts_table=target_table,
                     cache_table=cache_table,
-                    sender_failed_accounts_table=sender_failed_accounts_table
+                    sender_failed_accounts_table=sender_failed_accounts_table,
                 )
             if df is not None:
                 st.session_state.sender_df = df
@@ -1819,6 +1891,8 @@ def email_sender_uploader():
                 df = parse_email_sender_input_accounts(uploaded_file)
         elif table_name == "sender_hyperlink_text":
             df = parse_text_list(uploaded_file, "hyperlink_text")
+        elif table_name == "manualbot_sender_emails":
+            df = parse_manualbot_sender_emails(uploaded_file)
         elif table_name == "sender_link":
             df = parse_text_list(uploaded_file, "link")
         elif table_name == "sender_recipients":
@@ -1836,11 +1910,20 @@ def email_sender_uploader():
         df = st.session_state.sender_df
 
     if df is not None:
+        if selected_country != "All" and "country" not in df.columns:
+            if table_name in [
+                "sender_input_accounts",
+                "sender_hyperlink_text",
+                "sender_link",
+                "sender_recipients",
+                "sender_subjects",
+                "sender_texts",
+            ]:
+                df["country"] = selected_country
+
         if table_name == "sender_input_accounts":
             if use_country:
                 df["country"] = use_country
-            elif selected_country != "All" and "country" not in df.columns:
-                df["country"] = selected_country
 
         st.subheader("Preview top 10 files")
         st.dataframe(df.head(10), width="stretch")
@@ -3792,6 +3875,16 @@ def main():
         st.session_state.selected_page = "Stats"
     if st.sidebar.button("Database Management", width="stretch"):
         st.session_state.selected_page = "Database Management"
+
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("Manual Sender Bot")
+    if st.sidebar.button("Run Manual Sender Bot", width="stretch"):
+        with st.spinner("Writing manual sender action..."):
+            success, message = insert_manual_sender_action()
+            if success:
+                st.sidebar.success(message)
+            else:
+                st.sidebar.error(message)
 
     st.sidebar.markdown("---")
     st.sidebar.markdown("**Database Configuration**")

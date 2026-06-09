@@ -4,7 +4,7 @@
     "DB_USER": "root",
     "DB_PASSWORD": "root101.",
     "DB_NAME": "oneapp",
-    "SERVER_IP": "test_ip"
+    "SERVER_IP": "13.140.147.200"
   },
   "email_sender": {
     "COUNTRY": "Netherlands",
@@ -20,15 +20,23 @@
     "SAVE_TO_SENT": false,
     "CLIENT_ID": "e62beeb7-8a9b-4637-b57f-f8601c0d13f5",
     "SERVER_IPS": [
-      "51.161.34.220",
-      "51.77.195.218",
+      "51.91.59.107",
       "79.137.75.57",
       "51.91.56.36",
-      "51.91.59.107",
       "193.70.86.209",
+      "51.161.34.220",
+      "51.77.195.218",
       "51.91.97.55",
       "162.19.220.105",
-      "test_ip"
+      "51.255.193.28",
+      "162.19.229.213",
+      "51.178.51.6",
+      "162.19.229.114",
+      "158.69.197.228",
+      "13.140.147.58",
+      "13.140.147.200",
+      "13.140.147.52",
+      "13.140.147.203"
     ]
   },
   "new_app_email_sender": {
@@ -130,10 +138,15 @@
     "TEMPMAIL_URL": "https://temp-mail.io/en",
     "OUTLOOK_URL": "https://outlook.live.com/",
     "MAX_SIGNIN_THREADS": 1,
-    "COUNTRY": "poland",
+    "COUNTRY": "Netherlands",
     "EMAIL_WAIT_TIME": 120,
     "SAVE_COOKIES": "true",
-    "EXPRESSVPN_CMD": "C:\\Program Files (x86)\\ExpressVPN\\services\\ExpressVPN.CLI.exe"
+    "EXPRESSVPN_CMD": "C:\\Program Files (x86)\\ExpressVPN\\services\\ExpressVPN.CLI.exe",
+    "FIRST_BATCH_BCC": 10,
+    "SUBSEQUENT_BATCH_BCC": 320,
+    "SUBSEQUENT_BATCHES": 3,
+    "MAX_CONCURRENT_ACCOUNTS": 10,
+    "RUNNER_SESSION_TIME": 45
   },
   "second_app": {
     "CHROMEDRIVER_LOCATION": "../utils/chromedriver/chrome.exe",

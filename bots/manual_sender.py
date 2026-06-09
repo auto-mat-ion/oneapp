@@ -16,7 +16,7 @@ import pandas as pd
 import requests
 from dotenv import load_dotenv
 import threading
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, as_completed, wait, FIRST_COMPLETED
 import re
 import json
 import subprocess
@@ -179,12 +179,19 @@ try:
 except:
     CREDIT_CARD_INTERVAL_HRS = 50
 
+try:
+    RUNNER_SESSION_TIME = int(get_setting("RUNNER_SESSION_TIME", 45))
+    if not RUNNER_SESSION_TIME:
+        RUNNER_SESSION_TIME = 45
+except:
+    RUNNER_SESSION_TIME = 45
+
 
 BOT_TYPE = "manual_sender"
 FIRST_BATCH_BCC = int(get_setting("FIRST_BATCH_BCC", 10))
 SUBSEQUENT_BATCH_BCC = int(get_setting("SUBSEQUENT_BATCH_BCC", 320))
 SUBSEQUENT_BATCHES = int(get_setting("SUBSEQUENT_BATCHES", 3))
-MAX_CONCURRENT_ACCOUNTS = int(get_setting("MAX_CONCURRENT_ACCOUNTS", 4))
+MAX_CONCURRENT_ACCOUNTS = int(get_setting("MAX_CONCURRENT_ACCOUNTS", 10))
 
 SAMPLE_RECIPIENT = 2
 SAMPLE_RECIPIENT_EMAIL = "test@example.com"
@@ -3582,6 +3589,7 @@ def email_sending_process(
 class AccountManager:
     def __init__(self):
         self.accounts: List[Dict] = []
+        self._lock = threading.Lock()
         self._load()
 
     def _load(self):
@@ -3636,7 +3644,7 @@ class AccountManager:
                 _deferred_account_updates.append(
                     (account["email"], now, SERVER_IP, COUNTRY)
                 )
-
+            self._remove_account(account)
         except Exception:
             pass
 
@@ -3655,7 +3663,15 @@ class AccountManager:
                         now,
                     )
                 )
+            self._remove_account(account)
+        except Exception:
+            pass
 
+    def _remove_account(self, account: Dict):
+        try:
+            with self._lock:
+                if account in self.accounts:
+                    self.accounts.remove(account)
         except Exception:
             pass
 
@@ -3674,7 +3690,7 @@ class InputAccountManager:
         try:
             cursor = conn.cursor()
             query = (
-                "SELECT email, pass, recovery FROM manualbot_sender_emails "
+                "SELECT email, password, recovery FROM manualbot_sender_emails "
                 "WHERE server_ip = %s "
             )
             params = [SERVER_IP]
@@ -3899,7 +3915,7 @@ class RecipientManager:
             cursor = conn.cursor()
             query = (
                 "SELECT recipient_email FROM sender_recipients "
-                "WHERE server_ip = %s AND COALESCE(country, '') = %s LIMIT 10000"
+                "WHERE server_ip = %s AND COALESCE(country, '') = %s "
             )
             params = [SERVER_IP, COUNTRY]
 
@@ -4377,11 +4393,21 @@ def send_manual_email_whole_process(
     recipients: RecipientManager,
     content: ContentManager,
     stats: StatsTracker,
+    stop_event: Optional[threading.Event] = None,
+    end_time: Optional[datetime] = None,
 ):
     try:
+        if stop_event and stop_event.is_set():
+            log(f"{email_address}: stopping before start due to time limit")
+            return False
+
         # Warmup batch: one visible recipient + FIRST_BATCH_BCC BCC recipients
         log("Sending first batch")
         sent_recipients_num = 0
+
+        if end_time and datetime.now() >= end_time:
+            log(f"{email_address}: time window expired before warmup")
+            return False
 
         warmup = recipients.get_batch(FIRST_BATCH_BCC)
         if not warmup:
@@ -4393,7 +4419,6 @@ def send_manual_email_whole_process(
         bcc_emails = warmup[1:]
         bcc_email = ",".join(bcc_emails) if bcc_emails else None
 
-        # time.sleep(10)
         success, message = email_sending_process(
             driver,
             recipient_email,
@@ -4407,16 +4432,25 @@ def send_manual_email_whole_process(
         if success:
             recipients.mark_sent(len(warmup))
             sent_recipients_num += len(warmup)
-
         else:
             log(f"Warmup batch failed: {message}")
             recipients.return_batch(warmup)
             stats.update(email_address, False, sent_recipients_num)
-
             return False
 
         # Subsequent batches
         for batch_index in range(SUBSEQUENT_BATCHES):
+            if stop_event and stop_event.is_set():
+                log(
+                    f"{email_address}: stopping before batch {batch_index + 1} due to time limit"
+                )
+                return False
+            if end_time and datetime.now() >= end_time:
+                log(
+                    f"{email_address}: time window expired before batch {batch_index + 1}"
+                )
+                return False
+
             if not recipients.has_more():
                 log("No more recipients available for subsequent batch")
                 break
@@ -4486,10 +4520,16 @@ def process_wrapper(
     content: ContentManager,
     stats: StatsTracker,
     accounts: AccountManager,
+    stop_event: Optional[threading.Event] = None,
+    end_time: Optional[datetime] = None,
 ) -> bool:
     email_address = account.get("email")
     driver = None
     try:
+        if stop_event and stop_event.is_set():
+            log(f"{email_address}: skipping start because time window closed")
+            return False
+
         status, driver = initialize_existing_profile(email_address)
 
         if not status:
@@ -4499,16 +4539,22 @@ def process_wrapper(
             return False
 
         success = send_manual_email_whole_process(
-            driver, email_address, recipients, content, stats
+            driver,
+            email_address,
+            recipients,
+            content,
+            stats,
+            stop_event=stop_event,
+            end_time=end_time,
         )
         if success:
             accounts.mark_done(account)
             log(f"{email_address}: email send completed")
-            return True, driver
+            return True
         else:
             accounts.mark_failed(account, "send_failed")
             log(f"{email_address}: email send failed")
-            return False, driver
+            return False
 
     except Exception as exc:
         log(f"{email_address}: process_wrapper exception: {exc}")
@@ -4524,18 +4570,34 @@ def process_wrapper(
             pass
 
 
-def manual_sender_main():
-    accounts = AccountManager()
-    recipients = RecipientManager()
-    content = ContentManager()
-    stats = StatsTracker(
-        total_accounts=len(accounts.accounts),
-        total_recipients=recipients.remaining(),
-    )
+def manual_sender_main(
+    accounts: Optional[AccountManager] = None,
+    recipients: Optional[RecipientManager] = None,
+    content: Optional[ContentManager] = None,
+    stats: Optional[StatsTracker] = None,
+    stop_event: Optional[threading.Event] = None,
+    end_time: Optional[datetime] = None,
+):
+    if accounts is None:
+        accounts = AccountManager()
+    if recipients is None:
+        recipients = RecipientManager()
+    if content is None:
+        content = ContentManager()
+    if stats is None:
+        stats = StatsTracker(
+            total_accounts=len(accounts.accounts),
+            total_recipients=recipients.remaining(),
+        )
+    if stop_event is None:
+        stop_event = threading.Event()
 
-    # account = accounts.accounts[-1]
     if not accounts.accounts:
         log("No accounts available for manual send. Exiting.")
+        return
+
+    if recipients.remaining() == 0:
+        log("No recipients available for manual send. Exiting.")
         return
 
     if not content.is_valid():
@@ -4547,31 +4609,62 @@ def manual_sender_main():
         f"{recipients.remaining()} recipients, {MAX_CONCURRENT_ACCOUNTS} threads"
     )
 
+    pending_accounts = deque(accounts.accounts)
     futures = {}
     with ThreadPoolExecutor(max_workers=MAX_CONCURRENT_ACCOUNTS) as executor:
-        for account in accounts.accounts:
-            future = executor.submit(
-                process_wrapper,
-                account,
-                recipients,
-                content,
-                stats,
-                accounts,
-            )
-            futures[future] = account
+        while pending_accounts or futures:
+            if end_time and datetime.now() >= end_time:
+                stop_event.set()
 
-        for future in as_completed(futures):
-            account = futures[future]
-            try:
-                result = future.result()
-                log(
-                    f"Account {account.get('email')} finished with "
-                    f"{'success' if result else 'failure'}"
+            while (
+                len(futures) < MAX_CONCURRENT_ACCOUNTS
+                and pending_accounts
+                and not stop_event.is_set()
+            ):
+                account = pending_accounts.popleft()
+                future = executor.submit(
+                    process_wrapper,
+                    account,
+                    recipients,
+                    content,
+                    stats,
+                    accounts,
+                    stop_event,
+                    end_time,
                 )
-            except Exception as exc:
-                log(f"Account {account.get('email')} thread exception: {exc}")
-                accounts.mark_failed(account, f"thread_exception:{exc}")
-                stats.update(account.get("email"), False, 0)
+                futures[future] = account
+
+            if not futures:
+                break
+
+            done, _ = wait(futures.keys(), timeout=1, return_when=FIRST_COMPLETED)
+            for future in done:
+                account = futures.pop(future)
+                try:
+                    result = future.result()
+                    log(
+                        f"Account {account.get('email')} finished with "
+                        f"{'success' if result else 'failure'}"
+                    )
+                except Exception as exc:
+                    log(f"Account {account.get('email')} thread exception: {exc}")
+                    accounts.mark_failed(account, f"thread_exception:{exc}")
+                    stats.update(account.get("email"), False, 0)
+
+        if stop_event.is_set() and futures:
+            log("Time limit reached: waiting for active accounts to stop")
+            for future in as_completed(futures):
+                account = futures[future]
+                try:
+                    result = future.result()
+                    log(
+                        f"Account {account.get('email')} finished with "
+                        f"{'success' if result else 'failure'}"
+                    )
+                except Exception as exc:
+                    log(f"Account {account.get('email')} thread exception: {exc}")
+                    accounts.mark_failed(account, f"thread_exception:{exc}")
+                    stats.update(account.get("email"), False, 0)
 
     summary = stats.get_stats()
     log(
@@ -4581,25 +4674,100 @@ def manual_sender_main():
     )
 
 
-# if __name__ == "__main__":
-#     main()
-# accounts = AccountManager()
-# recipients = RecipientManager()
-# content = ContentManager()
-# stats = StatsTracker(
-#     total_accounts=len(accounts.accounts),
-#     total_recipients=recipients.remaining(),
-# )
+def get_action_status() -> bool:
+    conn = get_db_connection()
+    if conn is None:
+        return False
 
-# account = accounts.accounts[-2]
-# email_address = account.get("email")
-# f = process_wrapper(
-#     account,
-#     recipients,
-#     content,
-#     stats,
-#     accounts,
-# )
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT action, status, date_time FROM manualbot_actions_tracker "
+            "WHERE server_ip = %s ORDER BY date_time DESC LIMIT 1",
+            (SERVER_IP,),
+        )
+        row = cursor.fetchone()
+        cursor.close()
+        if not row:
+            return False
+
+        action = str(row[0]).strip().lower() if row[0] is not None else ""
+        status = str(row[1]).strip().lower() if row[1] is not None else ""
+        timestamp = row[2]
+
+        if not timestamp or not isinstance(timestamp, datetime):
+            return False
+
+        if datetime.now() - timestamp > timedelta(minutes=RUNNER_SESSION_TIME):
+            return False
+
+        return action == "run_bots" and status == "true"
+    except Exception as exc:
+        log(f"Error checking action status: {exc}")
+        return False
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
 
 
-# driver = f[1]
+def runner():
+    accounts = AccountManager()
+    recipients = RecipientManager()
+    stats = StatsTracker(
+        total_accounts=len(accounts.accounts),
+        total_recipients=recipients.remaining(),
+    )
+
+    log("Manual sender runner started. Waiting for database signal.")
+    while True:
+        if not get_action_status():
+            time.sleep(5)
+            continue
+
+        if not accounts.accounts:
+            log("Reloading pending accounts before starting new run.")
+            accounts = AccountManager()
+
+        if recipients.remaining() == 0:
+            log("Reloading recipients before starting new run.")
+            recipients = RecipientManager()
+
+        content = ContentManager()
+
+        if not accounts.accounts:
+            log("No pending accounts found. Waiting for next signal.")
+            time.sleep(5)
+            continue
+
+        if recipients.remaining() == 0:
+            log("No recipients found. Waiting for next signal.")
+            time.sleep(5)
+            continue
+
+        if not content.is_valid():
+            log("Loaded content is invalid. Waiting for next signal.")
+            time.sleep(5)
+            continue
+
+        log(
+            f"Signal received. Running manual sender for {RUNNER_SESSION_TIME} minutes."
+        )
+        stop_event = threading.Event()
+        end_time = datetime.now() + timedelta(minutes=RUNNER_SESSION_TIME)
+
+        manual_sender_main(
+            accounts=accounts,
+            recipients=recipients,
+            content=content,
+            stats=stats,
+            stop_event=stop_event,
+            end_time=end_time,
+        )
+
+        log(
+            f"{RUNNER_SESSION_TIME}-minute window complete. Waiting for the next signal."
+        )
+        while get_action_status():
+            time.sleep(5)

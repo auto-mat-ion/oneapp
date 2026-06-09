@@ -455,7 +455,7 @@ CREATE TABLE
     date_time DATETIME NULL,
     email VARCHAR(255) NULL,
     password VARCHAR(255) NULL,
-    recovery VARCHAR(255) NULL,
+    recovery VARCHAR(255) NULL
   ) ENGINE = InnoDB;
 
 CREATE TABLE
@@ -500,6 +500,15 @@ CREATE TABLE
     email VARCHAR(255) NULL,
     status VARCHAR(255) NULL,
     error TEXT NULL
+  ) ENGINE = InnoDB;
+
+CREATE TABLE
+  IF NOT EXISTS manualbot_actions_tracker (
+    action_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    server_ip VARCHAR(45) NULL,
+    date_time DATETIME NULL,
+    action VARCHAR(255) NULL,
+    status VARCHAR(255) NULL
   ) ENGINE = InnoDB;
 
 -- APP2
