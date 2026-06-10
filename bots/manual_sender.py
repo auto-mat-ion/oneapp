@@ -4495,7 +4495,7 @@ def send_manual_email_whole_process(
         return False
 
 
-def load_cookies():
+def load_cookies(recipients, content, stats):
     while True:
         try:
             status, email_address = get_existing_profile_data(acc_id=3)
