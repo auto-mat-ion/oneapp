@@ -784,10 +784,30 @@ def load_emails_from_cache_bins(
         cursor.execute(f"SELECT LOWER(email) FROM {sender_failed_accounts_table}")
         failed_emails = {row[0] for row in cursor.fetchall() if row and row[0]}
 
+        excluded_emails = set()
+        extra_exclusion_tables = [
+            "manualbot_accounts_details",
+            "manualbot_input_accounts",
+            "manualbot_sender_emails",
+            "sender2_failed_accounts",
+            "sender2_input_accounts",
+        ]
+        for exclusion_table in extra_exclusion_tables:
+            try:
+                cursor.execute(f"SELECT LOWER(email) FROM {exclusion_table}")
+                excluded_emails.update(
+                    row[0] for row in cursor.fetchall() if row and row[0]
+                )
+            except Exception:
+                # Skip missing or inaccessible tables
+                continue
+
         available_emails = [
             email
             for email in emails
-            if email not in assigned_emails and email not in failed_emails
+            if email not in assigned_emails
+            and email not in failed_emails
+            and email not in excluded_emails
         ]
         if not available_emails:
             st.warning(
