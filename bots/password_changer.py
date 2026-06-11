@@ -2900,7 +2900,7 @@ def load_cache():
             return msal.SerializableTokenCache()
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT cache_bin_file FROM cache_bins WHERE server_ip = %s AND bot_type = %s ORDER BY date_time DESC LIMIT 1",
+            "SELECT cache_bin_file FROM second_app_cache_bins WHERE server_ip = %s AND bot_type = %s ORDER BY date_time DESC LIMIT 1",
             (SERVER_IP, BOT_TYPE),
         )
         result = cursor.fetchone()
@@ -2927,13 +2927,13 @@ def save_cache(cache):
             cursor = conn.cursor()
             # Check if row exists
             cursor.execute(
-                "SELECT cache_id FROM cache_bins WHERE server_ip = %s AND bot_type = %s",
+                "SELECT cache_id FROM second_app_cache_bins WHERE server_ip = %s AND bot_type = %s",
                 (SERVER_IP, BOT_TYPE),
             )
             result = cursor.fetchone()
             if result:
                 cursor.execute(
-                    "UPDATE cache_bins SET date_time = %s, cache_bin_file = %s WHERE server_ip = %s AND bot_type = %s",
+                    "UPDATE second_app_cache_bins SET date_time = %s, cache_bin_file = %s WHERE server_ip = %s AND bot_type = %s",
                     (
                         datetime.now(),
                         serialized_cache.encode("utf-8"),
@@ -2943,7 +2943,7 @@ def save_cache(cache):
                 )
             else:
                 cursor.execute(
-                    "INSERT INTO cache_bins (server_ip, bot_type, date_time, cache_bin_file) VALUES (%s, %s, %s, %s)",
+                    "INSERT INTO second_app_cache_bins (server_ip, bot_type, date_time, cache_bin_file) VALUES (%s, %s, %s, %s)",
                     (
                         SERVER_IP,
                         BOT_TYPE,
@@ -3273,7 +3273,6 @@ def initialize_new_profile(new_profile_data):
     """
     try:
         print("\n--------------------------------------\n")
-        connect_new_random()
 
         email_address = new_profile_data.get("email")
         password = new_profile_data.get("pass")
@@ -3387,19 +3386,19 @@ def initialize_new_profile(new_profile_data):
             has_recovery_phone="NO",
         )
 
-        status, error = change_acc_pass(driver, new_profile_data)
-        if status:
-            update_accounts_data(email=email_address, password=error)
+        # status, error = change_acc_pass(driver, new_profile_data)
+        # if status:
+        #     update_accounts_data(email=email_address, password=error)
 
-            new_profile_data["pass"] = error
+        #     new_profile_data["pass"] = error
 
-        else:
-            new_profile_logger(
-                email_address,
-                "FAIL",
-                "Password change failed: " + error,
-            )
-            return False, f"Error changing password: {error}", driver
+        # else:
+        #     new_profile_logger(
+        #         email_address,
+        #         "FAIL",
+        #         "Password change failed: " + error,
+        #     )
+        #     return False, f"Error changing password: {error}", driver
 
         print(f"{email_address}: Setting up SMTP")
         status, error = smtp_process(driver, new_profile_data)
@@ -3492,6 +3491,7 @@ def run_password_changerbot():
 
     while True:
         try:
+            connect_new_random()
             status, new_profile_data = get_new_profile_data()
             if status:
                 initialize_new_profile(new_profile_data)
