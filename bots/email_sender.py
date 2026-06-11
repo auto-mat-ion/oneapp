@@ -126,6 +126,8 @@ _stats_lock = threading.Lock()
 
 _shared_cache = msal.SerializableTokenCache()
 _shutdown = threading.Event()
+_connect_lock = threading.Lock()
+_pause_requested = threading.Event()
 
 
 _BASIC_RE = re.compile(r".+@.+\..+")
@@ -222,6 +224,23 @@ def connect_new_random():
         return True
     except:
         return False
+
+
+def spinner():
+    """Run connect_new_random() every 10 minutes while pausing active send threads."""
+    while not _shutdown.wait(600):
+        log("Spinner: pausing active send threads for reconnect")
+        _pause_requested.set()
+        time.sleep(5)
+        with _connect_lock:
+            connect_new_random()
+        _pause_requested.clear()
+        log("Spinner: reconnect complete, resuming send threads")
+
+
+def wait_for_pause_clear():
+    while _pause_requested.is_set() and not _shutdown.is_set():
+        time.sleep(1)
 
 
 def connect_random_random():
@@ -1079,6 +1098,129 @@ def process_account(
     return (sent > 0), sent, ""
 
 
+class AccountState:
+    def __init__(self, account: Dict, account_idx: int, total_accounts: int):
+        self.account = account
+        self.account_idx = account_idx
+        self.total_accounts = total_accounts
+        self.batch_round = 0
+        self.token = None
+        self.sent = 0
+        self.failed = False
+        self.completed = False
+        self.finalized = False
+        self.error = ""
+        self.started = False
+
+
+def process_account_batch(
+    state: AccountState,
+    recipients: "RecipientManager",
+    content: "ContentManager",
+) -> Dict:
+    if (
+        _shutdown.is_set()
+        or state.failed
+        or state.completed
+        or not recipients.has_more()
+    ):
+        return {"skipped": True}
+
+    session = make_session()
+    try:
+        email = state.account["email"]
+        if not state.started:
+            log(f"[{state.account_idx + 1}/{state.total_accounts}] {email}")
+            state.started = True
+
+        if state.batch_round == 0:
+            batch_size = FIRST_BATCH_BCC + 1
+            label = "warmup"
+        else:
+            batch_size = SUBSEQUENT_BATCH_BCC + 1
+            label = f"b{state.batch_round + 1}"
+
+        batch = recipients.get_batch(batch_size)
+        if not batch:
+            state.completed = True
+            return {"skipped": True}
+
+        if not state.token:
+            state.token = get_token(email)
+            if not state.token:
+                recipients.return_batch(batch)
+                state.failed = True
+                state.error = "AUTH_FAILED"
+                return {"failed": True, "error": "AUTH_FAILED", "sent": 0}
+            log(f"  ✓ {_short(email)}: token OK")
+
+        h, link, subj, body = content.get()
+        html = build_html(body, h, link)
+        wait_for_pause_clear()
+        with _connect_lock:
+            ok, err = send_email(
+                session, state.token, email, batch[0], batch[1:], subj, html
+            )
+
+        if not ok:
+            recipients.return_batch(batch)
+            log(f"  ✗ {_short(email)} {label}: {err}")
+
+            if err in FATAL_ERRORS:
+                state.failed = True
+                state.error = err
+                return {"failed": True, "error": err, "sent": 0}
+
+            if err in TOKEN_ERRORS:
+                wait_for_pause_clear()
+                with _connect_lock:
+                    new_token = refresh_token(email)
+                if not new_token:
+                    state.failed = True
+                    state.error = "TOKEN_REFRESH_FAILED"
+                    return {"failed": True, "error": "TOKEN_REFRESH_FAILED", "sent": 0}
+
+                state.token = new_token
+                log(f"  ↻ {_short(email)}: token refreshed, retrying {label}")
+                h, link, subj, body = content.get()
+                html = build_html(body, h, link)
+                wait_for_pause_clear()
+                with _connect_lock:
+                    ok, err = send_email(
+                        session, state.token, email, batch[0], batch[1:], subj, html
+                    )
+                if not ok:
+                    recipients.return_batch(batch)
+                    state.failed = True
+                    state.error = f"{label.upper()}_RETRY_FAIL:{err}"
+                    return {
+                        "failed": True,
+                        "error": state.error,
+                        "sent": 0,
+                    }
+            else:
+                state.failed = True
+                state.error = f"{label.upper()}_FAIL:{err}"
+                return {"failed": True, "error": state.error, "sent": 0}
+
+        state.sent += len(batch)
+        recipients.mark_sent(len(batch))
+        log_sent(batch)
+        log(f"  ✓ {_short(email)} {label}: {len(batch)} rcpts")
+
+        if state.batch_round == 0:
+            time.sleep(random.uniform(BATCH_DELAY_MIN, BATCH_DELAY_MAX))
+
+        state.batch_round += 1
+        if state.batch_round > SUBSEQUENT_BATCHES:
+            state.completed = True
+            return {"completed": True, "sent": len(batch)}
+
+        return {"sent": len(batch)}
+    finally:
+        session.close()
+
+
 class StatsTracker:
     def __init__(self, total_accounts: int, total_recipients: int):
         self.total_accounts = total_accounts
@@ -1343,6 +1485,9 @@ def main():
     SAMPLE_RECIPIENT = recipt_samp
     SAMPLE_RECIPIENT_EMAIL = recipt_samp_email
 
+    spinner_thread = threading.Thread(target=spinner, daemon=True)
+    spinner_thread.start()
+
     BATCH_NUMBER = prompt_for_batch_selection()
     if not BATCH_NUMBER:
         print("No batch selected. Exiting.")
@@ -1406,42 +1551,77 @@ def main():
     log("-" * 55)
 
     stats = StatsTracker(total_acc, total_rcpt)
+    account_states = [
+        AccountState(account, idx, total_acc)
+        for idx, account in enumerate(accounts.accounts)
+    ]
 
     with ThreadPoolExecutor(max_workers=MAX_CONCURRENT_ACCOUNTS) as executor:
-        futures = {}
-
-        for i, account in enumerate(accounts.accounts):
+        for round_idx in range(SUBSEQUENT_BATCHES + 1):
             if _shutdown.is_set():
-                log("Shutdown: not submitting more accounts...")
+                log("Shutdown: stopping batch rounds...")
                 break
+            if not recipients.has_more():
+                log("All recipients consumed.")
+                break
+
+            log(f"Starting batch {round_idx + 1}/{SUBSEQUENT_BATCHES + 1}")
+            futures = {}
+            active_states = [
+                s for s in account_states if not s.failed and not s.completed
+            ]
+
+            if not active_states:
+                break
+
+            for idx, state in enumerate(active_states):
+                if _shutdown.is_set():
+                    break
+                if not recipients.has_more():
+                    break
+                if idx > 0:
+                    time.sleep(random.uniform(STAGGER_MIN, STAGGER_MAX))
+                futures[
+                    executor.submit(process_account_batch, state, recipients, content)
+                ] = state
+
+            for future in as_completed(futures):
+                state = futures[future]
+                result = future.result()
+
+                if _shutdown.is_set():
+                    log("Shutdown: waiting for remaining accounts...")
+
+                if result.get("skipped"):
+                    continue
+
+                if result.get("failed") and not state.finalized:
+                    state.finalized = True
+                    accounts.mark_failed(state.account, result.get("error", ""))
+                    stats.update(state.account, False, state.sent)
+                    continue
+
+                if result.get("completed") and not state.finalized:
+                    state.finalized = True
+                    accounts.mark_done(state.account)
+                    stats.update(state.account, True, state.sent)
 
             if not recipients.has_more():
-                log("All recipients consumed (pre-check).")
+                log("No recipients left after batch round.")
                 break
 
-            if i > 0:
-                time.sleep(random.uniform(STAGGER_MIN, STAGGER_MAX))
-
-            future = executor.submit(
-                process_account_wrapper,
-                account,
-                i,
-                total_acc,
-                recipients,
-                content,
-                accounts,
-                stats,
-            )
-            futures[future] = account
-
-        for future in as_completed(futures):
-            result = future.result()
-
-            if _shutdown.is_set():
-                log("Shutdown: waiting for remaining accounts...")
-
-            if result.get("skipped"):
+        for state in account_states:
+            if state.finalized:
                 continue
+            if state.failed:
+                state.finalized = True
+                accounts.mark_failed(state.account, state.error or "FAILED")
+                stats.update(state.account, False, state.sent)
+            elif state.started and not state.completed:
+                state.completed = True
+                state.finalized = True
+                accounts.mark_done(state.account)
+                stats.update(state.account, True, state.sent)
 
     processed = stats.get_processed()
     unused = [a for a in accounts.accounts if a not in processed]
