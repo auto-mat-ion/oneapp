@@ -3602,7 +3602,7 @@ class AccountManager:
             cursor = conn.cursor()
             query = (
                 "SELECT email, password, recovery FROM manualbot_sender_emails "
-                "WHERE server_ip = %s LIMIT 150"
+                "WHERE server_ip = %s LIMIT 150 OFFSET 150"
             )
             params = [SERVER_IP]
 
@@ -3622,6 +3622,7 @@ class AccountManager:
                     continue
                 self.accounts.append(
                     {
+                        "account_number": len(self.accounts) + 1,
                         "email": email,
                         "password": password,
                         "recovery": recovery,
