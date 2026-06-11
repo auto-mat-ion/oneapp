@@ -8,9 +8,9 @@
   },
   "email_sender": {
     "COUNTRY": "Netherlands",
-    "FIRST_BATCH_BCC": 9,
+    "FIRST_BATCH_BCC": 329,
     "SUBSEQUENT_BATCH_BCC": 329,
-    "SUBSEQUENT_BATCHES": 3,
+    "SUBSEQUENT_BATCHES": 0,
     "MAX_CONCURRENT_BATCHES": 1,
     "MAX_CONCURRENT_ACCOUNTS": 1,
     "BATCH_DELAY_MIN": 0.0,
@@ -133,10 +133,10 @@
     "EMAIL_WAIT_TIME": 120,
     "SAVE_COOKIES": "true",
     "EXPRESSVPN_CMD": "C:\\Program Files (x86)\\ExpressVPN\\services\\ExpressVPN.CLI.exe",
-    "FIRST_BATCH_BCC": 10,
-    "SUBSEQUENT_BATCH_BCC": 320,
-    "SUBSEQUENT_BATCHES": 3,
-    "MAX_CONCURRENT_ACCOUNTS": 5,
+    "FIRST_BATCH_BCC": 329,
+    "SUBSEQUENT_BATCH_BCC": 329,
+    "SUBSEQUENT_BATCHES": 0,
+    "MAX_CONCURRENT_ACCOUNTS": 10,
     "RUNNER_SESSION_TIME": 45
   },
   "second_app": {
