@@ -748,7 +748,7 @@ class AccountManager:
             rows = cursor.fetchall()
             cursor.close()
 
-            for row in rows:
+            for row in rows[30:]:
                 if not row or row[0] is None:
                     continue
                 email = str(row[0]).strip()
