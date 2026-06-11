@@ -4650,11 +4650,15 @@ def manual_sender_main(
                 try:
                     result = future.result()
                     log(
-                        f"Account {account.get('email')} finished with "
+                        f"Account {account.get('account_number')} "
+                        f"({account.get('email')}) finished with "
                         f"{'success' if result else 'failure'}"
                     )
                 except Exception as exc:
-                    log(f"Account {account.get('email')} thread exception: {exc}")
+                    log(
+                        f"Account {account.get('account_number')} "
+                        f"({account.get('email')}) thread exception: {exc}"
+                    )
                     accounts.mark_failed(account, f"thread_exception:{exc}")
                     stats.update(account.get("email"), False, 0)
 
@@ -4665,11 +4669,15 @@ def manual_sender_main(
                 try:
                     result = future.result()
                     log(
-                        f"Account {account.get('email')} finished with "
+                        f"Account {account.get('account_number')} "
+                        f"({account.get('email')}) finished with "
                         f"{'success' if result else 'failure'}"
                     )
                 except Exception as exc:
-                    log(f"Account {account.get('email')} thread exception: {exc}")
+                    log(
+                        f"Account {account.get('account_number')} "
+                        f"({account.get('email')}) thread exception: {exc}"
+                    )
                     accounts.mark_failed(account, f"thread_exception:{exc}")
                     stats.update(account.get("email"), False, 0)
 
