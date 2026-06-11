@@ -1,7 +1,7 @@
 from bots.familybot import run_familybot, run_familybot_share
 from bots.hotmailbot import run_hotmailbot
 from bots.password_changer import run_password_changerbot
-from bots.email_sender import main
+from bots.email_sender_2 import main
 
 # from bots.email_sender_test import main_sec
 from bots.new_app_hotmail import run_second_app_hotmails
