@@ -15,8 +15,8 @@
     "MAX_CONCURRENT_ACCOUNTS": 1,
     "BATCH_DELAY_MIN": 0.0,
     "BATCH_DELAY_MAX": 0.0,
-    "STAGGER_MIN": 0.0,
-    "STAGGER_MAX": 0.0,
+    "STAGGER_MIN": 3.0,
+    "STAGGER_MAX": 3.0,
     "SAVE_TO_SENT": false,
     "CLIENT_ID": "e62beeb7-8a9b-4637-b57f-f8601c0d13f5",
     "SERVER_IPS": [
