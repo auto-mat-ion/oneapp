@@ -195,7 +195,7 @@ SUBSEQUENT_BATCHES = int(get_setting("SUBSEQUENT_BATCHES", 3))
 MAX_CONCURRENT_ACCOUNTS = int(get_setting("MAX_CONCURRENT_ACCOUNTS", 5))
 
 SAMPLE_RECIPIENT = 1
-SAMPLE_RECIPIENT_EMAIL = ["b87g8na9k2@bwmyga.com", "k2qpcakboj@ozsaip.com"]
+SAMPLE_RECIPIENT_EMAIL = ["b87g8na9k2@bwmyga.com", "mitestingacc.01@gmail.com"]
 
 _deferred_account_updates: List[Tuple[str, datetime, str, str]] = []
 _deferred_failed_accounts: List[Tuple[str, str, str, str, str, str, datetime]] = []
