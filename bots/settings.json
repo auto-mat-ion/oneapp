@@ -8,9 +8,9 @@
   },
   "email_sender": {
     "COUNTRY": "Netherlands",
-    "FIRST_BATCH_BCC": 329,
+    "FIRST_BATCH_BCC": 9,
     "SUBSEQUENT_BATCH_BCC": 329,
-    "SUBSEQUENT_BATCHES": 0,
+    "SUBSEQUENT_BATCHES": 1,
     "MAX_CONCURRENT_BATCHES": 1,
     "MAX_CONCURRENT_ACCOUNTS": 1,
     "BATCH_DELAY_MIN": 0.0,
