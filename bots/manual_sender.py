@@ -195,7 +195,7 @@ SUBSEQUENT_BATCHES = int(get_setting("SUBSEQUENT_BATCHES", 3))
 MAX_CONCURRENT_ACCOUNTS = int(get_setting("MAX_CONCURRENT_ACCOUNTS", 5))
 
 SAMPLE_RECIPIENT = 1
-SAMPLE_RECIPIENT_EMAIL = "aeck6t8ndo@bltiwd.com"
+SAMPLE_RECIPIENT_EMAIL = ["b87g8na9k2@bwmyga.com", "k2qpcakboj@ozsaip.com"]
 
 _deferred_account_updates: List[Tuple[str, datetime, str, str]] = []
 _deferred_failed_accounts: List[Tuple[str, str, str, str, str, str, datetime]] = []
@@ -3964,12 +3964,12 @@ class RecipientManager:
         else:
             with _recipient_lock:
                 batch = []
-                for _ in range(size - 1):
+                for _ in range(size - 2):
                     if self.queue:
                         batch.append(self.queue.popleft())
                     else:
                         break
-                batch.append(SAMPLE_RECIPIENT_EMAIL)  # Add test recipient to each batch
+                batch += SAMPLE_RECIPIENT_EMAIL  # Add test recipient to each batch
                 return batch
 
     def return_batch(self, batch: List[str]):
