@@ -194,10 +194,9 @@ SUBSEQUENT_BATCH_BCC = int(get_setting("SUBSEQUENT_BATCH_BCC", 320))
 SUBSEQUENT_BATCHES = int(get_setting("SUBSEQUENT_BATCHES", 3))
 MAX_CONCURRENT_ACCOUNTS = int(get_setting("MAX_CONCURRENT_ACCOUNTS", 5))
 
-SAMPLE_RECIPIENT = 2
-SAMPLE_RECIPIENT_EMAIL = "test@example.com"
+SAMPLE_RECIPIENT = 1
+SAMPLE_RECIPIENT_EMAIL = "aeck6t8ndo@bltiwd.com"
 
-_deferred_sent_recipients: List[str] = []
 _deferred_account_updates: List[Tuple[str, datetime, str, str]] = []
 _deferred_failed_accounts: List[Tuple[str, str, str, str, str, str, datetime]] = []
 
@@ -3603,7 +3602,7 @@ class AccountManager:
             cursor = conn.cursor()
             query = (
                 "SELECT email, password, recovery FROM manualbot_sender_emails "
-                "WHERE server_ip = %s "
+                "WHERE server_ip = %s LIMIT 150"
             )
             params = [SERVER_IP]
 
