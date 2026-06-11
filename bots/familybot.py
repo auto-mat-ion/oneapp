@@ -3830,6 +3830,32 @@ def country_is_the_desired(driver):
     except:
         return False
 
+def language_lingo_is_the_desired(driver):
+    try:
+        COUNTRY_EDIT_BUTTON_ELEMENT = (
+            By.CSS_SELECTOR,
+            'div[id="profile.langsettings.language-info.edit-msa-language"]',
+        )
+
+        country_edit_button = WebDriverWait(driver, wait_time / 3).until(
+            EC.element_to_be_clickable(COUNTRY_EDIT_BUTTON_ELEMENT)
+        )
+
+        # scroll to view first
+        driver.execute_script(
+            "arguments[0].scrollIntoView({ behavior: 'smooth', block: 'center' });",
+            country_edit_button,
+        )
+        time.sleep(1)
+
+        if 'english' in country_edit_button.text.lower():
+            return True
+        else:
+            return False
+
+    except:
+        return False
+
 
 def language_is_the_desired(driver):
     try:
@@ -4157,6 +4183,94 @@ def change_account_country(driver, new_profile_data):
         return False
     except:
         return False
+
+
+
+def change_account_language_lingo(driver, new_profile_data):
+    try:
+        retries = 0
+        num_of_retries = 5
+        while retries < num_of_retries:
+            try:
+                email = new_profile_data.get("email")
+                password = new_profile_data.get("pass")
+                bring_to_front(driver)
+
+                driver.get("https://account.microsoft.com/profile")
+
+                login_on_country_page(driver, new_profile_data)
+
+                if language_lingo_is_the_desired(driver):
+                    return True
+
+                COUNTRY_EDIT_BUTTON_ELEMENT = (
+                    By.CSS_SELECTOR,
+                    'div[id="profile.langsettings.language-info.edit-msa-language"]',
+                )
+
+                country_edit_button = WebDriverWait(driver, wait_time).until(
+                    EC.element_to_be_clickable(COUNTRY_EDIT_BUTTON_ELEMENT)
+                )
+
+                # scroll to view first
+                driver.execute_script(
+                    "arguments[0].scrollIntoView({ behavior: 'smooth', block: 'center' });",
+                    country_edit_button,
+                )
+                time.sleep(1)
+                country_edit_button.click()
+                time.sleep(1)
+
+                COUNTRY_INPUT_ELEMENT = (
+                    By.CSS_SELECTOR,
+                    'input[id="profile.edit-profile-info.region-input"]',
+                )
+
+                country_input_element = WebDriverWait(driver, wait_time).until(
+                    EC.visibility_of_element_located(COUNTRY_INPUT_ELEMENT)
+                )
+
+                # data[0]
+                country_input_element.click()
+                re_login_existing_acc(driver, password)
+                time.sleep(0.5)
+                country_input_element.send_keys(Keys.BACK_SPACE * 50)
+                time.sleep(0.5)
+                country_input_element.send_keys(CHANGE_COUNTRY)
+                time.sleep(2.5)
+                country_input_element.send_keys(Keys.ENTER)
+                time.sleep(1)
+
+                try:
+                    SAVE_BUTTON_ELEMENT = (By.CSS_SELECTOR, 'button[aria-label="Save"]')
+
+                    save_button_element = WebDriverWait(driver, wait_time).until(
+                        EC.element_to_be_clickable(SAVE_BUTTON_ELEMENT)
+                    )
+
+                    save_button_element.click()
+                    time.sleep(2)
+                except:
+                    logout_then_re_login_existing_acc(driver, new_profile_data)
+
+                if country_is_the_desired(driver):
+                    return True
+                else:
+                    print(
+                        f"{email} : Country not changed. Retrying... ({retries}/{num_of_retries})"
+                    )
+                    retries += 1
+
+            except Exception as E:
+                retries += 1
+                print(
+                    f"{email} : Exception error changing country. Retrying... ({retries}/{num_of_retries})"
+                )
+
+        return False
+    except:
+        return False
+
 
 
 def change_account_language(driver, new_profile_data):
@@ -4921,60 +5035,6 @@ def num_available_cards():
 
         return len(available_cards), available_cards
 
-        # For fully used, insert into familybot_fully_used_cards and delete from familybot_card_details
-        for card in fully_used:
-            expiry = f"{card['expiry_month']}/{card['expiry_year'][2:]}"
-            cursor.execute(
-                "INSERT INTO familybot_fully_used_cards (server_ip, bot_type,date_time, card_number, expiry_month_year, cvv, country, name_on_card, address_line1, city, postal_code, state) VALUES (%s, %s,%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
-                (
-                    SERVER_IP,
-                    BOT_TYPE,
-                    datetime.now(),
-                    card["card_number"],
-                    expiry,
-                    card["cvv"],
-                    card.get("country", PREFERRED_SMS_COUNTRY),
-                    card["name_on_card"],
-                    card["address_line1"],
-                    card["city"],
-                    card["postal_code"],
-                    card["state"],
-                ),
-            )
-            cursor.execute(
-                "DELETE FROM familybot_card_details WHERE card_number = %s AND expiry_month_year = %s AND cvv = %s",
-                (card["card_number"], expiry, card["cvv"]),
-            )
-
-        # Return the first available card, move to processing_card_details
-        if available_cards:
-            card = available_cards[0]
-            expiry = f"{card['expiry_month']}/{card['expiry_year'][2:]}"
-            cursor.execute(
-                "INSERT INTO processing_card_details (server_ip, bot_type,date_time,name_on_card, card_number, expiry_month_year, cvv,country, address_line1, city, state, postal_code) VALUES (%s, %s, %s,%s, %s,%s,%s, %s, %s, %s, %s, %s)",
-                (
-                    SERVER_IP,
-                    BOT_TYPE,
-                    datetime.now(),
-                    card["name_on_card"],
-                    card["card_number"],
-                    expiry,
-                    card["cvv"],
-                    card.get("country", PREFERRED_SMS_COUNTRY),
-                    card["address_line1"],
-                    card["city"],
-                    card["state"],
-                    card["postal_code"],
-                ),
-            )
-            cursor.execute(
-                "DELETE FROM familybot_card_details WHERE card_number = %s AND expiry_month_year = %s AND cvv = %s",
-                (card["card_number"], expiry, card["cvv"]),
-            )
-            conn.commit()
-            return card
-        else:
-            return None
     finally:
         conn.close()
 

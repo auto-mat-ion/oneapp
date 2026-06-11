@@ -4482,7 +4482,7 @@ def send_manual_email_whole_process(
                 recipients.mark_sent(len(batch))
                 sent_recipients_num += len(batch)
                 log(
-                    f"{email_address}: Subsequent batch {batch_index + 1} sent to {batch} recipients ✓"
+                    f"{email_address}: Subsequent batch {batch_index + 1} sent to {len(batch)} recipients ✓"
                 )
             else:
                 log(

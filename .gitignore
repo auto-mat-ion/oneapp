@@ -9,3 +9,7 @@ bots/settings.json
 database/backup*
 undistributed_accounts_2026-06-03_18-44-34.csv
 sender_logs/
+*bots/__pycache__
+*database/__pycache__
+*total andrew_8.1mln_bounces_cleaned.txt
+*profiles
