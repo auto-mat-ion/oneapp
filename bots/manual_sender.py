@@ -4203,7 +4203,7 @@ def initialize_existing_profile(email_address):
     A dictionary with email_address, password
     """
     try:
-        print("\n--------------------------------------\n")
+        # print("\n--------------------------------------\n")
 
         retries = 0
         driver_success = False
@@ -4402,7 +4402,7 @@ def send_manual_email_whole_process(
             return False
 
         # Warmup batch: one visible recipient + FIRST_BATCH_BCC BCC recipients
-        log("Sending first batch")
+        log(f"{email_address}: Sending first batch")
         sent_recipients_num = 0
 
         if end_time and datetime.now() >= end_time:
@@ -4411,7 +4411,7 @@ def send_manual_email_whole_process(
 
         warmup = recipients.get_batch(FIRST_BATCH_BCC)
         if not warmup:
-            log("No recipients available for warmup batch")
+            log(f"{email_address}: No recipients available for warmup batch")
             return False
 
         hyperlink, link, subject, body = content.get()
@@ -4433,7 +4433,7 @@ def send_manual_email_whole_process(
             recipients.mark_sent(len(warmup))
             sent_recipients_num += len(warmup)
         else:
-            log(f"Warmup batch failed: {message}")
+            log(f"{email_address}: Warmup batch failed: {message}")
             recipients.return_batch(warmup)
             stats.update(email_address, False, sent_recipients_num)
             return False
@@ -4452,13 +4452,15 @@ def send_manual_email_whole_process(
                 return False
 
             if not recipients.has_more():
-                log("No more recipients available for subsequent batch")
+                log(
+                    f"{email_address}: No more recipients available for subsequent batch"
+                )
                 break
 
-            log(f"Sending subsequent batch {batch_index + 1}")
+            log(f"{email_address}: Sending subsequent batch {batch_index + 1}")
             batch = recipients.get_batch(SUBSEQUENT_BATCH_BCC)
             if not batch:
-                log("No recipients available for subsequent batch")
+                log(f"{email_address}: No recipients available for subsequent batch")
                 break
 
             hyperlink, link, subject, body = content.get()
@@ -4479,8 +4481,13 @@ def send_manual_email_whole_process(
             if success:
                 recipients.mark_sent(len(batch))
                 sent_recipients_num += len(batch)
+                log(
+                    f"{email_address}: Subsequent batch {batch_index + 1} sent to {batch} recipients ✓"
+                )
             else:
-                log(f"Subsequent batch {batch_index + 1} failed: {message}")
+                log(
+                    f"{email_address}: Subsequent batch {batch_index + 1} failed: {message} X"
+                )
                 recipients.return_batch(batch)
                 stats.update(email_address, False, sent_recipients_num)
 
@@ -4490,7 +4497,7 @@ def send_manual_email_whole_process(
 
         return True
     except Exception as exc:
-        log(f"send_manual_email_whole_process exception: {exc}")
+        log(f"{email_address}: send_manual_email_whole_process exception: {exc}")
         return False
 
 
