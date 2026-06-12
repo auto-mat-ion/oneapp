@@ -560,10 +560,17 @@ def spin(text: str) -> str:
 
 class ContentManager:
     def __init__(self):
+        # self.hyperlinks = self._load("sender_hyperlink_text", "hyperlink_text")
+        # self.links = self._load("sender_link", "link")
+        # self.subjects = self._load("sender_subjects", "subject")
+        # self.texts = self._load("sender_texts", "text")
+
         self.hyperlinks = self._load("sender_hyperlink_text", "hyperlink_text")
         self.links = self._load("sender_link", "link")
-        self.subjects = self._load("sender_subjects", "subject")
-        self.texts = self._load("sender_texts", "text")
+        self.subjects = ["Make Tonight More Exciting 💕"]
+        self.texts = [
+            "Fresh faces have joined recently. Browse compatible profiles and begin meaningful conversations today."
+        ]
         self._idx = {"h": 0, "l": 0, "s": 0, "t": 0}
         log(
             f"Content: {len(self.hyperlinks)}h {len(self.links)}l "
