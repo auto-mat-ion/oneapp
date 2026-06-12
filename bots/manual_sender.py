@@ -3602,7 +3602,7 @@ class AccountManager:
             cursor = conn.cursor()
             query = (
                 "SELECT email, password, recovery FROM manualbot_sender_emails "
-                "WHERE server_ip = %s LIMIT 500 OFFSET 400"
+                "WHERE server_ip = %s LIMIT 1000 OFFSET 512"
             )
             params = [SERVER_IP]
 
