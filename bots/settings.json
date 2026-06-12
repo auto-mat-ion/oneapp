@@ -4,13 +4,13 @@
     "DB_USER": "root",
     "DB_PASSWORD": "root101.",
     "DB_NAME": "oneapp",
-    "SERVER_IP": "51.91.59.107"
+    "SERVER_IP": "13.140.161.126"
   },
   "email_sender": {
     "COUNTRY": "Netherlands",
     "FIRST_BATCH_BCC": 9,
-    "SUBSEQUENT_BATCH_BCC": 329,
-    "SUBSEQUENT_BATCHES": 1,
+    "SUBSEQUENT_BATCH_BCC": 319,
+    "SUBSEQUENT_BATCHES": 3,
     "MAX_CONCURRENT_BATCHES": 1,
     "MAX_CONCURRENT_ACCOUNTS": 1,
     "BATCH_DELAY_MIN": 0.0,
@@ -27,7 +27,8 @@
       "158.69.197.228",
       "137.74.115.164",
       "193.70.87.230",
-      "135.125.100.61"
+      "135.125.100.61",
+      "13.140.147.58"
     ]
   },
   "new_app_email_sender": {
@@ -133,9 +134,9 @@
     "EMAIL_WAIT_TIME": 120,
     "SAVE_COOKIES": "true",
     "EXPRESSVPN_CMD": "C:\\Program Files (x86)\\ExpressVPN\\services\\ExpressVPN.CLI.exe",
-    "FIRST_BATCH_BCC": 329,
-    "SUBSEQUENT_BATCH_BCC": 329,
-    "SUBSEQUENT_BATCHES": 0,
+    "FIRST_BATCH_BCC": 10,
+    "SUBSEQUENT_BATCH_BCC": 330,
+    "SUBSEQUENT_BATCHES": 3,
     "MAX_CONCURRENT_ACCOUNTS": 10,
     "RUNNER_SESSION_TIME": 45
   },
