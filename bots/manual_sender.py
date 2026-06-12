@@ -3602,14 +3602,13 @@ class AccountManager:
             cursor = conn.cursor()
             query = (
                 "SELECT email, password, recovery FROM manualbot_sender_emails "
-                "WHERE server_ip = %s LIMIT 150 OFFSET 180"
+                "WHERE server_ip = %s LIMIT 150 OFFSET 190"
             )
             params = [SERVER_IP]
 
             cursor.execute(query, params)
             rows = cursor.fetchall()
             cursor.close()
-
             for row in rows:
                 if not row or row[0] is None:
                     continue
