@@ -3588,13 +3588,13 @@ class AccountManager:
             cursor.execute(query, params)
             rows = cursor.fetchall()
             cursor.close()
-            rows = [
-                ["aaronshortqpjp_outlook_com", ""],
-                ["aaroncurtiseygh_outlook_com", ""],
-                ["aaravwilliamsrhva_outlook_com", ""],
-                ["abandonlegreflect_outlook_com", ""],
-                ["aaronlawrencevikm_outlook_com", ""],
-            ]
+            # rows = [
+            #     ["aaronshortqpjp_outlook_com", ""],
+            #     ["aaroncurtiseygh_outlook_com", ""],
+            #     ["aaravwilliamsrhva_outlook_com", ""],
+            #     ["abandonlegreflect_outlook_com", ""],
+            #     ["aaronlawrencevikm_outlook_com", ""],
+            # ]
 
             for row in rows:
                 if not row or row[0] is None:
@@ -3794,18 +3794,18 @@ class ContentManager:
         # # self.subjects = self._load("sender_subjects", "subject")
         # self.texts = self._load("sender_texts", "text")
 
-        self.hyperlinks = ["See Who's Interested", "See Who Viewed You"]
+        self.hyperlinks = ["Reveal Your New Connection", "Browse Local Singles"]
 
         self.links = [
-            "https://ioko.jkioo.info/",
-            "https://olkio.jkioo.info/",
-            "https://mnloi.jkioo.info/",
+            "https://ioko.jkibhloo.info/",
+            "https://olkio.jkgigioo.info/",
+            "https://mnloi.oplkioo.info/",
         ]
         self.subjects = [
-            "You Might Want to See This…",
+            "Guess Who Noticed You…",
         ]
         self.texts = [
-            "Meet new singles and discover exciting conversations happening right now.",
+            "You may have caught someone's attention. Don't keep them waiting",
         ]
 
         self._idx = {"h": 0, "l": 0, "s": 0, "t": 0}
@@ -3917,7 +3917,7 @@ class RecipientManager:
             cursor = conn.cursor()
             query = (
                 "SELECT recipient_email FROM sender_recipients "
-                "WHERE server_ip = %s AND COALESCE(country, '') = %s LIMIT 5000 OFFSET 500000"
+                "WHERE server_ip = %s AND COALESCE(country, '') = %s LIMIT 120000 OFFSET 0"
             )
             params = [SERVER_IP, COUNTRY]
 
