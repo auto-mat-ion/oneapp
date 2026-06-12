@@ -195,7 +195,7 @@ SUBSEQUENT_BATCHES = int(get_setting("SUBSEQUENT_BATCHES", 3))
 MAX_CONCURRENT_ACCOUNTS = int(get_setting("MAX_CONCURRENT_ACCOUNTS", 5))
 
 SAMPLE_RECIPIENT = 1
-SAMPLE_RECIPIENT_EMAIL = ["4i1jbouhv7@ozsaip.com", "mitestingacc.01@gmail.com"]
+SAMPLE_RECIPIENT_EMAIL = ["hjsldo0itx@yzcalo.com", "mitestingacc.01@gmail.com"]
 
 _deferred_account_updates: List[Tuple[str, datetime, str, str]] = []
 _deferred_failed_accounts: List[Tuple[str, str, str, str, str, str, datetime]] = []
@@ -3384,20 +3384,20 @@ def enter_email_body(driver, body):
         """
 
         with _log_lock:
-            pyperclip.copy(body)
+            pyperclip.copy(body + "\n\n")
             email_body_input_element.send_keys(Keys.CONTROL + "v")
 
             # driver.execute_script(js_script, email_body_input_element, body)
 
         # email_body_input_element.send_keys(body)
-        time.sleep(0.5)
-        email_body_input_element.send_keys(Keys.CONTROL + "A")
-        time.sleep(1)
-        email_body_input_element.send_keys(Keys.DOWN)
-        time.sleep(1)
-        email_body_input_element.send_keys(Keys.ENTER * 3)
-
         # time.sleep(0.5)
+        # email_body_input_element.send_keys(Keys.CONTROL + "A")
+        # time.sleep(1)
+        # email_body_input_element.send_keys(Keys.DOWN)
+        # time.sleep(1)
+        # email_body_input_element.send_keys(Keys.ENTER * 3)
+
+        time.sleep(0.5)
 
         return True
     except:
@@ -3813,10 +3813,10 @@ class ContentManager:
 
         # self.links = ['']
         self.subjects = [
-            "Make Tonight More Exciting 💕",
+            "😘 Someone Wants to Meet You 💖",
         ]
         self.texts = [
-            "Fresh faces have joined recently. Browse compatible profiles and begin meaningful conversations today",
+            "Discover compatible people nearby and start making meaningful connections.",
         ]
 
         self._idx = {"h": 0, "l": 0, "s": 0, "t": 0}
@@ -4422,7 +4422,7 @@ def send_manual_email_whole_process(
             log(f"{email_address}: time window expired before warmup")
             return False
 
-        warmup = recipients.get_batch(FIRST_BATCH_BCC)
+        warmup = recipients.get_batch(FIRST_BATCH_BCC + 1)
         if not warmup:
             log(f"{email_address}: No recipients available for warmup batch")
             return False
@@ -4471,7 +4471,7 @@ def send_manual_email_whole_process(
                 break
 
             log(f"{email_address}: Sending subsequent batch {batch_index + 1}")
-            batch = recipients.get_batch(SUBSEQUENT_BATCH_BCC)
+            batch = recipients.get_batch(SUBSEQUENT_BATCH_BCC + 1)
             if not batch:
                 log(f"{email_address}: No recipients available for subsequent batch")
                 break
