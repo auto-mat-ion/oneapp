@@ -12,3 +12,4 @@ sender_logs/
 *database/__pycache__
 *total andrew_8.1mln_bounces_cleaned.txt
 *profiles
+utils/generate_subdomains.py
