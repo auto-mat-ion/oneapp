@@ -1053,7 +1053,7 @@ def get_cache_bin_emails():
     return sorted(emails), cache_bin_data
 
 
-def get_undistributed_sender_accounts():
+def _get_undistributed_sender_accounts(exclude_tables=None):
     """Return a DataFrame of undistributed sender accounts enriched from accounts_details."""
     cache_emails, _cache_bin = get_cache_bin_emails()
     if not cache_emails:
@@ -1079,18 +1079,21 @@ def get_undistributed_sender_accounts():
             ]
         )
 
+    exclude_tables = exclude_tables or []
     try:
         cursor = conn.cursor()
-        cursor.execute("SELECT LOWER(email) FROM sender_input_accounts")
-        assigned_emails = {row[0] for row in cursor.fetchall() if row and row[0]}
-        cursor.execute("SELECT LOWER(email) FROM sender_failed_accounts")
-        failed_emails = {row[0] for row in cursor.fetchall() if row and row[0]}
+        excluded_emails = set()
+        for table in exclude_tables:
+            try:
+                cursor.execute(f"SELECT LOWER(email) FROM {table}")
+                excluded_emails.update(
+                    row[0] for row in cursor.fetchall() if row and row[0]
+                )
+            except Exception:
+                continue
 
         remaining_emails = [
-            email
-            for email in cache_emails
-            if email.lower() not in assigned_emails
-            and email.lower() not in failed_emails
+            email for email in cache_emails if email.lower() not in excluded_emails
         ]
 
         if not remaining_emails:
@@ -1155,6 +1158,30 @@ def get_undistributed_sender_accounts():
             conn.close()
         except:
             pass
+
+
+def get_undistributed_sender_accounts():
+    return _get_undistributed_sender_accounts(
+        exclude_tables=[
+            "sender_input_accounts",
+            "sender_failed_accounts",
+        ]
+    )
+
+
+def get_undistributed_sender_accounts_for_manualbot():
+    return _get_undistributed_sender_accounts(
+        exclude_tables=[
+            "sender2_input_accounts",
+            "sender_input_accounts",
+            "manualbot_input_accounts",
+            "sender2_failed_accounts",
+            "sender_failed_accounts",
+            "manualbot_accounts_details",
+            "manualbot_sender_emails",
+            "manualbot_signin_log",
+        ]
+    )
 
 
 def count_unassigned_sender_accounts(return_country_distribution=False):
@@ -3636,6 +3663,9 @@ def database_management():
                             pass
 
                 undistributed_df = get_undistributed_sender_accounts()
+                manualbot_undistributed_df = (
+                    get_undistributed_sender_accounts_for_manualbot()
+                )
 
         if st.session_state.download_data_loaded:
             if not sender_df.empty:
@@ -3704,6 +3734,31 @@ def database_management():
             else:
                 st.warning(
                     "No undistributed sender accounts found after filtering assigned and failed accounts."
+                )
+
+            if not manualbot_undistributed_df.empty:
+                manualbot_download_df = manualbot_undistributed_df.rename(
+                    columns={
+                        "email_acc": "email",
+                        "password": "pass",
+                        "recovery_email": "recovery",
+                    }
+                )[["email", "pass", "recovery", "country"]]
+                manualbot_csv = manualbot_download_df.to_csv(index=False).encode(
+                    "utf-8"
+                )
+                st.download_button(
+                    label="Download manualbot undistributed emails",
+                    data=manualbot_csv,
+                    file_name=f"manualbot_undistributed_emails_{now}.csv",
+                    mime="text/csv",
+                )
+                st.write(
+                    f"Found {len(manualbot_download_df)} manualbot undistributed email records."
+                )
+            else:
+                st.warning(
+                    "No manualbot undistributed emails found after filtering distributed tables."
                 )
 
 
