@@ -196,10 +196,10 @@ MAX_CONCURRENT_ACCOUNTS = int(get_setting("MAX_CONCURRENT_ACCOUNTS", 5))
 
 SAMPLE_RECIPIENT = 1
 SAMPLE_RECIPIENT_EMAIL = [
-    "Stacho1988@gmail.com",
+    # "Stacho1988@gmail.com",
     "mitestingacc.01@gmail.com",
-    "Stacash.affiliate@gmail.com",
-    "manual@affworker.com",
+    # "Stacash.affiliate@gmail.com",
+    # "manual@affworker.com",
 ]
 
 _deferred_account_updates: List[Tuple[str, datetime, str, str]] = []
@@ -3287,8 +3287,9 @@ def enter_to_recipient_email(driver, recipient_email):
 
         to_input_element.clear()
         to_input_element.send_keys(recipient_email)
-        time.sleep(0.2)
+        # time.sleep(0.2)
         to_input_element.send_keys(Keys.ENTER)
+        # time.sleep(0.2)
 
         return True
     except:
@@ -3308,21 +3309,14 @@ def enter_subject(driver, subject):
             pass
 
         subject_input_element.clear()
-        js_script = """
-            var element = arguments[0];
-            var text = arguments[1];
-            element.value += text;
-            element.dispatchEvent(new Event('change'));
-        """
-        with _log_lock:
-            pyperclip.copy(subject)
-            subject_input_element.send_keys(Keys.CONTROL + "v")
 
-            # driver.execute_script(js_script, subject_input_element, subject)
+        # with _log_lock:
+        # pyperclip.copy(subject)
+        # subject_input_element.send_keys(Keys.CONTROL + "v")
 
-        # subject_input_element.send_keys(subject)
-        time.sleep(0.5)
-        # subject_input_element.send_keys(Keys.ENTER)
+        subject_input_element.send_keys(subject)
+
+        # time.sleep(0.5)
 
         return True
     except Exception as e:
@@ -3359,9 +3353,10 @@ def enter_bcc_email(driver, bcc_email):
         with _log_lock:
             pyperclip.copy(bcc_email)
             bcc_input_element.send_keys(Keys.CONTROL + "v")
+            pass
 
         # bcc_input_element.send_keys(bcc_email)
-        time.sleep(0.5)
+        # time.sleep(0.5)
         # bcc_input_element.send_keys(Keys.ENTER)
 
         return True
@@ -3379,30 +3374,14 @@ def enter_email_body(driver, body):
         )
 
         email_body_input_element.clear()
-        time.sleep(0.2)
-        js_script = """
-            var element = arguments[0];
-            var text = arguments[1];
-            element.innerText += text;
-            element.dispatchEvent(new Event('input', { bubbles: true }));
-            element.dispatchEvent(new Event('change', { bubbles: true }));
-        """
+        # time.sleep(0.2)
 
-        with _log_lock:
-            pyperclip.copy(body + "\n\n")
-            email_body_input_element.send_keys(Keys.CONTROL + "v")
+        # with _log_lock:
+        #     pyperclip.copy(body + "\n\n")
+        #     email_body_input_element.send_keys(Keys.CONTROL + "v")
 
-            # driver.execute_script(js_script, email_body_input_element, body)
-
-        # email_body_input_element.send_keys(body)
-        # time.sleep(0.5)
-        # email_body_input_element.send_keys(Keys.CONTROL + "A")
-        # time.sleep(1)
-        # email_body_input_element.send_keys(Keys.DOWN)
-        # time.sleep(1)
-        # email_body_input_element.send_keys(Keys.ENTER * 3)
-
-        time.sleep(0.5)
+        email_body_input_element.send_keys(body)
+        # time.sleep(0.2)
 
         return True
     except:
@@ -3419,10 +3398,12 @@ def click_send_button(driver):
 
         actions = ActionChains(driver)
 
-        # 1. Standard Left Click (Moves to element first)
         actions.move_to_element(send_btn_element).click().perform()
+        try:
+            send_btn_element.click()
+        except:
+            pass
 
-        # send_btn_element.click()
         return True
     except:
         return False
@@ -3470,7 +3451,7 @@ def embed_link_in_message(driver, hyperlink, link):
         ActionChains(driver).key_down(Keys.CONTROL).send_keys("k").key_up(
             Keys.CONTROL
         ).perform()
-        time.sleep(0.5)
+        # time.sleep(0.1)
 
         # Enter display text and web url input and press ok
         DISPLAY_TEXT_INPUT_ELEMENT = (
@@ -3489,21 +3470,13 @@ def embed_link_in_message(driver, hyperlink, link):
         web_url_input_element.send_keys(link)
 
         display_text_input_element.clear()
-        js_script = """
-            var element = arguments[0];
-            var text = arguments[1];
-            element.value += text;
-            element.dispatchEvent(new Event('change'));
-        """
 
-        with _log_lock:
-            pyperclip.copy(hyperlink)
-            display_text_input_element.send_keys(Keys.CONTROL + "v")
+        # with _log_lock:
+        #     pyperclip.copy(hyperlink)
+        #     display_text_input_element.send_keys(Keys.CONTROL + "v")
 
-            # driver.execute_script(js_script, display_text_input_element, hyperlink)
-
-        # display_text_input_element.send_keys(hyperlink)
-        time.sleep(1)
+        display_text_input_element.send_keys(hyperlink)
+        # time.sleep(1)
 
         # Press ok button (assuming it's the last button in the modal)
         OK_BTN_ELEMENT = (
@@ -3565,21 +3538,22 @@ def email_sending_process(
             print("Error clicking send button")
             return False, "Error clicking send button"
 
-        retries = 0
-        while retries < 3:
-            if click_cancel_dialog_box(driver):
-                if not enter_subject(driver, subject):
-                    print("Error entering email subject")
-                    return False, "Error entering email subject"
+        # retries = 0
+        # while retries < 3:
+        #     if click_cancel_dialog_box(driver):
+        #         if not enter_subject(driver, subject):
+        #             print("Error entering email subject")
+        #             return False, "Error entering email subject"
 
-                if not click_send_button(driver):
-                    print("Error clicking send button")
-                    return False, "Error clicking send button"
+        #         if not click_send_button(driver):
+        #             print("Error clicking send button")
+        #             return False, "Error clicking send button"
 
-                if missing_subject_dialog_box(driver):
-                    retries += 1
-            else:
-                break
+        #         if missing_subject_dialog_box(driver):
+        #             retries += 1
+        #     else:
+        #         break
+
         if not missing_subject_dialog_box(driver):
             return True, "Email sent successfully"
         else:
@@ -3614,6 +3588,14 @@ class AccountManager:
             cursor.execute(query, params)
             rows = cursor.fetchall()
             cursor.close()
+            rows = [
+                ["aaronshortqpjp_outlook_com", ""],
+                ["aaroncurtiseygh_outlook_com", ""],
+                ["aaravwilliamsrhva_outlook_com", ""],
+                ["abandonlegreflect_outlook_com", ""],
+                ["aaronlawrencevikm_outlook_com", ""],
+            ]
+
             for row in rows:
                 if not row or row[0] is None:
                     continue
@@ -3807,18 +3789,20 @@ def log(msg: str):
 
 class ContentManager:
     def __init__(self):
-        self.hyperlinks = self._load("sender_hyperlink_text", "hyperlink_text")
-        self.links = self._load("sender_link", "link")
-        # self.subjects = self._load("sender_subjects", "subject")
+        # self.hyperlinks = self._load("sender_hyperlink_text", "hyperlink_text")
+        # self.links = self._load("sender_link", "link")
+        # # self.subjects = self._load("sender_subjects", "subject")
         # self.texts = self._load("sender_texts", "text")
 
-        # self.hyperlinks = [
-        #     "Learn More",
-        # ]
+        self.hyperlinks = ["See Who's Interested", "See Who Viewed You"]
 
-        # self.links = ['']
+        self.links = [
+            "https://ioko.jkioo.info/",
+            "https://olkio.jkioo.info/",
+            "https://mnloi.jkioo.info/",
+        ]
         self.subjects = [
-            "😍 You Might Want to See This…",
+            "You Might Want to See This…",
         ]
         self.texts = [
             "Meet new singles and discover exciting conversations happening right now.",
@@ -3933,7 +3917,7 @@ class RecipientManager:
             cursor = conn.cursor()
             query = (
                 "SELECT recipient_email FROM sender_recipients "
-                "WHERE server_ip = %s AND COALESCE(country, '') = %s LIMIT 250000 OFFSET 250000"
+                "WHERE server_ip = %s AND COALESCE(country, '') = %s LIMIT 5000 OFFSET 500000"
             )
             params = [SERVER_IP, COUNTRY]
 
