@@ -4075,7 +4075,7 @@ class RecipientManager:
             cursor = conn.cursor()
             query = (
                 "SELECT recipient_email FROM sender_recipients "
-                "WHERE server_ip = %s AND COALESCE(country, '') = %s LIMIT 150000 OFFSET 500000"
+                "WHERE server_ip = %s AND COALESCE(country, '') = %s "
             )
             params = [SERVER_IP, COUNTRY]
 
