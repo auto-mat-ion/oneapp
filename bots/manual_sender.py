@@ -195,7 +195,12 @@ SUBSEQUENT_BATCHES = int(get_setting("SUBSEQUENT_BATCHES", 3))
 MAX_CONCURRENT_ACCOUNTS = int(get_setting("MAX_CONCURRENT_ACCOUNTS", 5))
 
 SAMPLE_RECIPIENT = 1
-SAMPLE_RECIPIENT_EMAIL = ["hjsldo0itx@yzcalo.com", "mitestingacc.01@gmail.com"]
+SAMPLE_RECIPIENT_EMAIL = [
+    "Stacho1988@gmail.com",
+    "mitestingacc.01@gmail.com",
+    "Stacash.affiliate@gmail.com",
+    "manual@affworker.com",
+]
 
 _deferred_account_updates: List[Tuple[str, datetime, str, str]] = []
 _deferred_failed_accounts: List[Tuple[str, str, str, str, str, str, datetime]] = []
@@ -3602,7 +3607,7 @@ class AccountManager:
             cursor = conn.cursor()
             query = (
                 "SELECT email, password, recovery FROM manualbot_sender_emails "
-                "WHERE server_ip = %s LIMIT 1000 OFFSET 512"
+                "WHERE server_ip = %s LIMIT 200 OFFSET 0"
             )
             params = [SERVER_IP]
 
@@ -3813,10 +3818,10 @@ class ContentManager:
 
         # self.links = ['']
         self.subjects = [
-            "😘 Someone Wants to Meet You 💖",
+            "😍 You Might Want to See This…",
         ]
         self.texts = [
-            "Discover compatible people nearby and start making meaningful connections.",
+            "Meet new singles and discover exciting conversations happening right now.",
         ]
 
         self._idx = {"h": 0, "l": 0, "s": 0, "t": 0}
@@ -3928,7 +3933,7 @@ class RecipientManager:
             cursor = conn.cursor()
             query = (
                 "SELECT recipient_email FROM sender_recipients "
-                "WHERE server_ip = %s AND COALESCE(country, '') = %s LIMIT 250000 OFFSET 109000"
+                "WHERE server_ip = %s AND COALESCE(country, '') = %s LIMIT 250000 OFFSET 250000"
             )
             params = [SERVER_IP, COUNTRY]
 
@@ -3977,7 +3982,7 @@ class RecipientManager:
         else:
             with _recipient_lock:
                 batch = []
-                for _ in range(size - 2):
+                for _ in range(size - len(SAMPLE_RECIPIENT_EMAIL)):
                     if self.queue:
                         batch.append(self.queue.popleft())
                     else:
@@ -4422,7 +4427,7 @@ def send_manual_email_whole_process(
             log(f"{email_address}: time window expired before warmup")
             return False
 
-        warmup = recipients.get_batch(FIRST_BATCH_BCC + 1)
+        warmup = recipients.get_batch(FIRST_BATCH_BCC)
         if not warmup:
             log(f"{email_address}: No recipients available for warmup batch")
             return False
@@ -4471,7 +4476,7 @@ def send_manual_email_whole_process(
                 break
 
             log(f"{email_address}: Sending subsequent batch {batch_index + 1}")
-            batch = recipients.get_batch(SUBSEQUENT_BATCH_BCC + 1)
+            batch = recipients.get_batch(SUBSEQUENT_BATCH_BCC)
             if not batch:
                 log(f"{email_address}: No recipients available for subsequent batch")
                 break
@@ -4677,9 +4682,9 @@ def manual_sender_main(
                 finally:
                     summary = stats.get_stats()
                     log(
-                        f"Totals after account {account.get('account_number')}: "
+                        f"*** Totals after account {account.get('account_number')}: "
                         f"{summary['ok_count']} success, {summary['fail_count']} failure, "
-                        f"{summary['total_sent']} sent"
+                        f"{summary['total_sent']} sent ***"
                     )
 
         if stop_event.is_set() and futures:
@@ -4703,9 +4708,9 @@ def manual_sender_main(
                 finally:
                     summary = stats.get_stats()
                     log(
-                        f"Totals after account {account.get('account_number')}: "
+                        f"*** Totals after account {account.get('account_number')}: "
                         f"{summary['ok_count']} success, {summary['fail_count']} failure, "
-                        f"{summary['total_sent']} sent"
+                        f"{summary['total_sent']} sent ***"
                     )
 
     summary = stats.get_stats()
