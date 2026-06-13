@@ -3583,7 +3583,7 @@ class AccountManager:
             query = (
                 "SELECT email, password, recovery FROM manualbot_sender_emails "
                 "WHERE server_ip = %s "
-                "LIMIT 300 offset 355"
+                "LIMIT 300 offset 150"
             )
             params = [SERVER_IP]
 
@@ -3920,7 +3920,7 @@ class RecipientManager:
             query = (
                 "SELECT recipient_email FROM sender_recipients "
                 "WHERE server_ip = %s AND COALESCE(country, '') = %s "
-                # "LIMIT 10000 offset 0"
+                "LIMIT 1000000 offset 150000"
             )
             params = [SERVER_IP, COUNTRY]
 
