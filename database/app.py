@@ -132,6 +132,171 @@ def insert_manual_sender_action():
             pass
 
 
+def truncate_table(table_name):
+    conn = get_db_connection()
+    if conn is None:
+        return False, "Unable to connect to database"
+    try:
+        cursor = conn.cursor()
+        cursor.execute(f"TRUNCATE TABLE `{table_name}`")
+        conn.commit()
+        return True, None
+    except Exception as exc:
+        return False, str(exc)
+    finally:
+        try:
+            cursor.close()
+        except Exception:
+            pass
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+def replace_manualbot_texts(text_value, country=None):
+    if not isinstance(text_value, str) or not text_value.strip():
+        return False, "Please enter text for manualbot_texts."
+
+    success, error = truncate_table("manualbot_texts")
+    if not success:
+        return False, f"Unable to clear manualbot_texts: {error}"
+
+    conn = get_db_connection()
+    if conn is None:
+        return False, "Unable to connect to database"
+
+    try:
+        cursor = conn.cursor()
+        if country and country.strip():
+            cursor.execute(
+                "INSERT INTO manualbot_texts (text, country) VALUES (%s, %s)",
+                (text_value.strip(), country.strip()),
+            )
+        else:
+            cursor.execute(
+                "INSERT INTO manualbot_texts (text) VALUES (%s)",
+                (text_value.strip(),),
+            )
+        conn.commit()
+        return True, "manualbot_texts replaced successfully."
+    except Exception as exc:
+        return False, str(exc)
+    finally:
+        try:
+            cursor.close()
+        except Exception:
+            pass
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+def replace_manualbot_subjects(subjects_value, country=None):
+    if not isinstance(subjects_value, str) or not subjects_value.strip():
+        return False, "Please enter one or more subjects for manualbot_subjects."
+
+    values = [line.strip() for line in subjects_value.splitlines() if line.strip()]
+    if not values:
+        return False, "No valid subjects found. Enter one subject per line."
+
+    success, error = truncate_table("manualbot_subjects")
+    if not success:
+        return False, f"Unable to clear manualbot_subjects: {error}"
+
+    conn = get_db_connection()
+    if conn is None:
+        return False, "Unable to connect to database"
+
+    try:
+        cursor = conn.cursor()
+        if country and country.strip():
+            for subject in values:
+                cursor.execute(
+                    "INSERT INTO manualbot_subjects (subject, country) VALUES (%s, %s)",
+                    (subject, country.strip()),
+                )
+        else:
+            for subject in values:
+                cursor.execute(
+                    "INSERT INTO manualbot_subjects (subject) VALUES (%s)",
+                    (subject,),
+                )
+        conn.commit()
+        return True, f"manualbot_subjects replaced with {len(values)} record(s)."
+    except Exception as exc:
+        return False, str(exc)
+    finally:
+        try:
+            cursor.close()
+        except Exception:
+            pass
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+def replace_manualbot_hyperlink_text(uploaded_file, text_input="", country=None):
+    content = ""
+    if uploaded_file is not None:
+        content = uploaded_file.read().decode("utf-8", errors="replace")
+    elif text_input:
+        content = text_input
+    else:
+        return (
+            False,
+            "Please upload a TXT or CSV file or paste hyperlinks for manualbot_hyperlink_text.",
+        )
+
+    values = [line.strip() for line in content.splitlines() if line.strip()]
+    if values and values[0].strip().lower() in ("hyperlink_text", "link"):
+        values = values[1:]
+    values = [line for line in values if line]
+    if not values:
+        return False, "No hyperlinks were provided for manualbot_hyperlink_text."
+
+    success, error = truncate_table("manualbot_hyperlink_text")
+    if not success:
+        return False, f"Unable to clear manualbot_hyperlink_text: {error}"
+
+    conn = get_db_connection()
+    if conn is None:
+        return False, "Unable to connect to database"
+
+    try:
+        cursor = conn.cursor()
+        if country and country.strip():
+            for hyperlink in values:
+                cursor.execute(
+                    "INSERT INTO manualbot_hyperlink_text (hyperlink_text, country) VALUES (%s, %s)",
+                    (hyperlink, country.strip()),
+                )
+        else:
+            for hyperlink in values:
+                cursor.execute(
+                    "INSERT INTO manualbot_hyperlink_text (hyperlink_text) VALUES (%s)",
+                    (hyperlink,),
+                )
+        conn.commit()
+        return (
+            True,
+            f"manualbot_hyperlink_text replaced with {len(values)} hyperlink(s).",
+        )
+    except Exception as exc:
+        return False, str(exc)
+    finally:
+        try:
+            cursor.close()
+        except Exception:
+            pass
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
 def test_db_connection():
     if mysql is None:
         return False, (
@@ -3964,26 +4129,123 @@ def main():
             else:
                 st.sidebar.error(message)
 
+    if "manualbot_editor_open" not in st.session_state:
+        st.session_state.manualbot_editor_open = False
+
+    if st.sidebar.button(
+        "Open Manualbot Content Editor"
+        if not st.session_state.manualbot_editor_open
+        else "Close Manualbot Content Editor",
+        width="stretch",
+        key="toggle_manualbot_editor",
+    ):
+        st.session_state.manualbot_editor_open = (
+            not st.session_state.manualbot_editor_open
+        )
+
     st.sidebar.markdown("---")
     st.sidebar.markdown("**Database Configuration**")
     st.sidebar.write(f"**Host:** {get_db_config().get('host', 'localhost')}")
     st.sidebar.write(f"**Database:** {get_db_config().get('database', 'oneapp')}")
     st.sidebar.write(f"**Refreshed:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
-    st.title(st.session_state.selected_page)
-    st.markdown("---")
+    if st.session_state.manualbot_editor_open:
+        st.title("Manual Sender Content")
+        st.markdown("---")
 
-    if st.session_state.selected_page == "Bot Settings":
-        bot_settings()
-    elif st.session_state.selected_page == "General Upload":
-        general_uploader()
-    elif st.session_state.selected_page == "Email Sender Upload":
-        email_sender_uploader()
-    elif st.session_state.selected_page == "Stats":
-        # pass
-        stats_page()
-    elif st.session_state.selected_page == "Database Management":
-        database_management()
+        content_option = st.selectbox(
+            "Content to replace",
+            ["Email subject", "Email text", "Hyperlink text"],
+            key="manualbot_content_option",
+        )
+
+        country_option = st.selectbox(
+            "Country",
+            [
+                "Netherlands",
+                "All",
+                "United States",
+                "Poland",
+                "Sweden",
+                "United Kingdom",
+            ],
+            index=0,
+            key="manualbot_content_country",
+        )
+
+        upload_file = None
+        text_value = None
+
+        if content_option == "Hyperlink text":
+            hyperlink_input_mode = st.radio(
+                "Hyperlink input mode",
+                ["Upload file", "Paste hyperlinks"],
+                index=0,
+                key="manualbot_hyperlink_input_mode",
+                horizontal=True,
+            )
+
+            if hyperlink_input_mode == "Upload file":
+                upload_file = st.file_uploader(
+                    "Upload a TXT or CSV file with one hyperlink per line",
+                    type=["txt", "csv"],
+                    key="manualbot_content_file",
+                )
+            else:
+                text_value = st.text_area(
+                    "Paste hyperlinks here",
+                    value="",
+                    key="manualbot_content_text",
+                    help="Enter one hyperlink per line.",
+                )
+        else:
+            text_value = st.text_area(
+                "Paste content here",
+                value="",
+                key="manualbot_content_text",
+                help=(
+                    "For email subject or email text, paste the content here. "
+                    "For subject replacement, use one subject per line."
+                ),
+            )
+
+        if st.button("Replace manualbot content", key="manualbot_content_upload"):
+            if content_option == "Email subject":
+                success, message = replace_manualbot_subjects(
+                    text_value or "",
+                    country_option,
+                )
+            elif content_option == "Email text":
+                success, message = replace_manualbot_texts(
+                    text_value or "",
+                    country_option,
+                )
+            else:
+                success, message = replace_manualbot_hyperlink_text(
+                    upload_file,
+                    text_value or "",
+                    country_option,
+                )
+
+            if success:
+                st.success(message)
+            else:
+                st.error(message)
+    else:
+        st.title(st.session_state.selected_page)
+        st.markdown("---")
+
+        if st.session_state.selected_page == "Bot Settings":
+            bot_settings()
+        elif st.session_state.selected_page == "General Upload":
+            general_uploader()
+        elif st.session_state.selected_page == "Email Sender Upload":
+            email_sender_uploader()
+        elif st.session_state.selected_page == "Stats":
+            # pass
+            stats_page()
+        elif st.session_state.selected_page == "Database Management":
+            database_management()
 
 
 if __name__ == "__main__":
