@@ -3447,6 +3447,7 @@ def missing_subject_dialog_box(driver):
 
 def embed_link_in_message(driver, hyperlink, link):
     try:
+        return True
         # Keys.CONTROL + "K"
         ActionChains(driver).key_down(Keys.CONTROL).send_keys("k").key_up(
             Keys.CONTROL
@@ -3582,7 +3583,7 @@ class AccountManager:
             query = (
                 "SELECT email, password, recovery FROM manualbot_sender_emails "
                 "WHERE server_ip = %s "
-                "LIMIT 300 offset 315"
+                "LIMIT 300 offset 355"
             )
             params = [SERVER_IP]
 
