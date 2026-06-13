@@ -9,6 +9,8 @@ from pathlib import Path
 from datetime import datetime, timedelta, UTC
 from sqlalchemy import create_engine
 import re
+import string
+
 
 try:
     import mysql.connector
@@ -283,6 +285,80 @@ def replace_manualbot_hyperlink_text(uploaded_file, text_input="", country=None)
         return (
             True,
             f"manualbot_hyperlink_text replaced with {len(values)} hyperlink(s).",
+        )
+    except Exception as exc:
+        return False, str(exc)
+    finally:
+        try:
+            cursor.close()
+        except Exception:
+            pass
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+def random_subdomain(length=6):
+    return "".join(random.choices(string.ascii_lowercase + string.digits, k=length))
+
+
+def generate_subdomains(domain, count=1000):
+    subs = set()
+    while len(subs) < count:
+        subs.add(f"http://{random_subdomain()}.{domain}")
+    return subs
+
+
+def replace_sender_link_from_domain(domain_input, country=None):
+    if not isinstance(domain_input, str) or not domain_input.strip():
+        return False, "Please enter one or more domains for sender_link generation."
+
+    domains = [line.strip() for line in domain_input.splitlines() if line.strip()]
+    if not domains:
+        return False, "No valid domains found. Enter one domain per line."
+
+    all_links = []
+    for domain in domains:
+        if "." not in domain:
+            return (
+                False,
+                f"Invalid domain: {domain}. Please enter fully qualified domains.",
+            )
+        try:
+            all_links.extend(generate_subdomains(domain, 1000))
+        except Exception as exc:
+            return False, f"Failed to generate subdomains for {domain}: {exc}"
+
+    if not all_links:
+        return False, "No subdomains were generated from the provided domains."
+
+    success, error = truncate_table("sender_link")
+    if not success:
+        return False, f"Unable to clear sender_link: {error}"
+
+    conn = get_db_connection()
+    if conn is None:
+        return False, "Unable to connect to database"
+
+    try:
+        cursor = conn.cursor()
+        if country and country.strip():
+            values = [(link, country.strip()) for link in all_links]
+            cursor.executemany(
+                "INSERT INTO sender_link (link, country) VALUES (%s, %s)",
+                values,
+            )
+        else:
+            values = [(link,) for link in all_links]
+            cursor.executemany(
+                "INSERT INTO sender_link (link) VALUES (%s)",
+                values,
+            )
+        conn.commit()
+        return (
+            True,
+            f"sender_link replaced with {len(all_links)} generated subdomain(s).",
         )
     except Exception as exc:
         return False, str(exc)
@@ -4155,7 +4231,7 @@ def main():
 
         content_option = st.selectbox(
             "Content to replace",
-            ["Email subject", "Email text", "Hyperlink text"],
+            ["Email subject", "Email text", "Hyperlink text", "Link domain"],
             key="manualbot_content_option",
         )
 
@@ -4198,6 +4274,15 @@ def main():
                     key="manualbot_content_text",
                     help="Enter one hyperlink per line.",
                 )
+        elif content_option == "Link domain":
+            text_value = st.text_area(
+                "Paste domain(s) here",
+                value="",
+                key="manualbot_content_text",
+                help=(
+                    "Enter one domain per line. Generated subdomains will overwrite sender_link."
+                ),
+            )
         else:
             text_value = st.text_area(
                 "Paste content here",
@@ -4219,6 +4304,11 @@ def main():
                 success, message = replace_manualbot_texts(
                     text_value or "",
                     country_option,
+                )
+            elif content_option == "Link domain":
+                success, message = replace_sender_link_from_domain(
+                    text_value or "",
+                    None if country_option == "All" else country_option,
                 )
             else:
                 success, message = replace_manualbot_hyperlink_text(

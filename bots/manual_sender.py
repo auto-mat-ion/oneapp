@@ -3581,7 +3581,7 @@ class AccountManager:
             cursor = conn.cursor()
             query = (
                 "SELECT email, password, recovery FROM manualbot_sender_emails "
-                "WHERE server_ip = %s "
+                "WHERE server_ip = %s LIMIT 10 offsett 0"
             )
             params = [SERVER_IP]
 
@@ -3917,7 +3917,7 @@ class RecipientManager:
             cursor = conn.cursor()
             query = (
                 "SELECT recipient_email FROM sender_recipients "
-                "WHERE server_ip = %s AND COALESCE(country, '') = %s "
+                "WHERE server_ip = %s AND COALESCE(country, '') = %s LIMIT 10000 offset 0"
             )
             params = [SERVER_IP, COUNTRY]
 
@@ -4706,6 +4706,7 @@ def manual_sender_main(
 
 
 def get_action_status() -> bool:
+    return True
     conn = get_db_connection()
     if conn is None:
         return False
