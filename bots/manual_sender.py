@@ -3507,38 +3507,43 @@ def email_sending_process(
         if not click_new_mail_button(driver):
             print("Error clicking new mail button")
             return False, "Error clicking new mail button"
+        time.sleep(2)
 
         if not enter_to_recipient_email(driver, recipient_email):
             print("Error entering recipient email")
             return False, "Error entering recipient email"
+        time.sleep(2)
 
         if bcc_email:
             if not click_bcc_button(driver):
                 print("Error clicking BCC button")
                 return False, "Error clicking BCC button"
+            time.sleep(2)
 
             if not enter_bcc_email(driver, bcc_email):
                 print("Error entering BCC email")
                 return False, "Error entering BCC email"
-        time.sleep(0.3)
+        time.sleep(2)
         if not enter_email_body(driver, body):
             print("Error entering email body")
             return False, "Error entering email body"
 
-        # time.sleep(5)
+        time.sleep(2)
         if hyperlink and link:
             if not embed_link_in_message(driver, hyperlink, link):
                 print("Error embedding link in email body")
                 return False, "Error embedding link in email body"
-        time.sleep(0.3)
+        time.sleep(2)
         if not enter_subject(driver, subject):
             print("Error entering email subject")
             return False, "Error entering email subject"
+        time.sleep(2)
 
         if not click_send_button(driver):
             print("Error clicking send button")
-            return False, "Error clicking send button"
 
+            return False, "Error clicking send button"
+        time.sleep(2)
         # retries = 0
         # while retries < 3:
         #     if click_cancel_dialog_box(driver):
@@ -3583,7 +3588,7 @@ class AccountManager:
             query = (
                 "SELECT email, password, recovery FROM manualbot_sender_emails "
                 "WHERE server_ip = %s "
-                "LIMIT 300 offset 150"
+                "LIMIT 1 offset 320"
             )
             params = [SERVER_IP]
 
@@ -3920,7 +3925,7 @@ class RecipientManager:
             query = (
                 "SELECT recipient_email FROM sender_recipients "
                 "WHERE server_ip = %s AND COALESCE(country, '') = %s "
-                "LIMIT 1000000 offset 150000"
+                "LIMIT 1000000 offset 350000"
             )
             params = [SERVER_IP, COUNTRY]
 
