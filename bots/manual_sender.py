@@ -3581,7 +3581,7 @@ class AccountManager:
             cursor = conn.cursor()
             query = (
                 "SELECT email, password, recovery FROM manualbot_sender_emails "
-                "WHERE server_ip = %s LIMIT 10 offsett 0"
+                "WHERE server_ip = %s LIMIT 10 offset 0"
             )
             params = [SERVER_IP]
 
@@ -4802,3 +4802,5 @@ def runner():
         )
         while get_action_status():
             time.sleep(5)
+
+        return
