@@ -511,6 +511,27 @@ CREATE TABLE
     status VARCHAR(255) NULL
   ) ENGINE = InnoDB;
 
+CREATE TABLE
+  IF NOT EXISTS manualbot_hyperlink_text (
+    text_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    hyperlink_text TEXT NULL,
+    country VARCHAR(255) NULL
+  ) ENGINE = InnoDB;
+
+CREATE TABLE
+  IF NOT EXISTS manualbot_subjects (
+    subject_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    subject VARCHAR(255) NULL,
+    country VARCHAR(255) NULL
+  ) ENGINE = InnoDB;
+
+CREATE TABLE
+  IF NOT EXISTS manualbot_texts (
+    text_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    text TEXT NULL,
+    country VARCHAR(255) NULL
+  ) ENGINE = InnoDB;
+
 -- APP2
 CREATE TABLE
   IF NOT EXISTS second_app_cache_bins (
