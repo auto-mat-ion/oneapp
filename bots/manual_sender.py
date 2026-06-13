@@ -196,10 +196,10 @@ MAX_CONCURRENT_ACCOUNTS = int(get_setting("MAX_CONCURRENT_ACCOUNTS", 5))
 
 SAMPLE_RECIPIENT = 1
 SAMPLE_RECIPIENT_EMAIL = [
-    # "Stacho1988@gmail.com",
+    "Stacho1988@gmail.com",
     "mitestingacc.01@gmail.com",
-    # "Stacash.affiliate@gmail.com",
-    # "manual@affworker.com",
+    "Stacash.affiliate@gmail.com",
+    "manual@affworker.com",
 ]
 
 _deferred_account_updates: List[Tuple[str, datetime, str, str]] = []
@@ -3581,7 +3581,7 @@ class AccountManager:
             cursor = conn.cursor()
             query = (
                 "SELECT email, password, recovery FROM manualbot_sender_emails "
-                "WHERE server_ip = %s LIMIT 200 OFFSET 0"
+                "WHERE server_ip = %s "
             )
             params = [SERVER_IP]
 
@@ -3789,24 +3789,24 @@ def log(msg: str):
 
 class ContentManager:
     def __init__(self):
-        # self.hyperlinks = self._load("sender_hyperlink_text", "hyperlink_text")
-        # self.links = self._load("sender_link", "link")
-        # # self.subjects = self._load("sender_subjects", "subject")
-        # self.texts = self._load("sender_texts", "text")
+        self.hyperlinks = self._load("manualbot_hyperlink_text", "hyperlink_text")
+        self.links = self._load("sender_link", "link")
+        self.subjects = self._load("manualbot_subjects", "subject")
+        self.texts = self._load("manualbot_texts", "text")
 
-        self.hyperlinks = ["Reveal Your New Connection", "Browse Local Singles"]
+        # self.hyperlinks = ["Reveal Your New Connection", "Browse Local Singles"]
 
-        self.links = [
-            "https://ioko.jkibhloo.info/",
-            "https://olkio.jkgigioo.info/",
-            "https://mnloi.oplkioo.info/",
-        ]
-        self.subjects = [
-            "Guess Who Noticed You…",
-        ]
-        self.texts = [
-            "You may have caught someone's attention. Don't keep them waiting",
-        ]
+        # self.links = [
+        #     "https://ioko.jkibhloo.info/",
+        #     "https://olkio.jkgigioo.info/",
+        #     "https://mnloi.oplkioo.info/",
+        # ]
+        # self.subjects = [
+        #     "Guess Who Noticed You…",
+        # ]
+        # self.texts = [
+        #     "You may have caught someone's attention. Don't keep them waiting",
+        # ]
 
         self._idx = {"h": 0, "l": 0, "s": 0, "t": 0}
         log(
@@ -3917,7 +3917,7 @@ class RecipientManager:
             cursor = conn.cursor()
             query = (
                 "SELECT recipient_email FROM sender_recipients "
-                "WHERE server_ip = %s AND COALESCE(country, '') = %s LIMIT 120000 OFFSET 0"
+                "WHERE server_ip = %s AND COALESCE(country, '') = %s "
             )
             params = [SERVER_IP, COUNTRY]
 
