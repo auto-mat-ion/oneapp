@@ -3447,7 +3447,7 @@ def missing_subject_dialog_box(driver):
 
 def embed_link_in_message(driver, hyperlink, link):
     try:
-        return True
+        # return True
         # Keys.CONTROL + "K"
         ActionChains(driver).key_down(Keys.CONTROL).send_keys("k").key_up(
             Keys.CONTROL
