@@ -3380,7 +3380,7 @@ def enter_email_body(driver, body):
         #     pyperclip.copy(body + "\n\n")
         #     email_body_input_element.send_keys(Keys.CONTROL + "v")
 
-        email_body_input_element.send_keys(body)
+        email_body_input_element.send_keys(body + "\n\n")
         # time.sleep(0.2)
 
         return True
@@ -3581,7 +3581,8 @@ class AccountManager:
             cursor = conn.cursor()
             query = (
                 "SELECT email, password, recovery FROM manualbot_sender_emails "
-                "WHERE server_ip = %s LIMIT 10 offset 0"
+                "WHERE server_ip = %s "
+                "LIMIT 300 offset 205"
             )
             params = [SERVER_IP]
 
@@ -3917,7 +3918,8 @@ class RecipientManager:
             cursor = conn.cursor()
             query = (
                 "SELECT recipient_email FROM sender_recipients "
-                "WHERE server_ip = %s AND COALESCE(country, '') = %s LIMIT 10000 offset 0"
+                "WHERE server_ip = %s AND COALESCE(country, '') = %s "
+                # "LIMIT 10000 offset 0"
             )
             params = [SERVER_IP, COUNTRY]
 
@@ -4706,7 +4708,7 @@ def manual_sender_main(
 
 
 def get_action_status() -> bool:
-    return True
+    # return True
     conn = get_db_connection()
     if conn is None:
         return False
@@ -4803,4 +4805,4 @@ def runner():
         while get_action_status():
             time.sleep(5)
 
-        return
+        # return
