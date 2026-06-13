@@ -3582,7 +3582,7 @@ class AccountManager:
             query = (
                 "SELECT email, password, recovery FROM manualbot_sender_emails "
                 "WHERE server_ip = %s "
-                "LIMIT 300 offset 205"
+                "LIMIT 300 offset 315"
             )
             params = [SERVER_IP]
 
