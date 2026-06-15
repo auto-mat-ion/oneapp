@@ -304,6 +304,7 @@ def random_subdomain(length=6):
 
 
 def generate_subdomains(domain, count=1000):
+    return [domain]
     subs = set()
     while len(subs) < count:
         subs.add(f"http://{random_subdomain()}.{domain}")
