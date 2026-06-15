@@ -3364,7 +3364,7 @@ def enter_bcc_email(driver, bcc_email):
         return False
 
 
-def enter_email_body(driver, body):
+def enter_email_body(driver, body, link):
     try:
         # log(f"Entering body: {body}")
         EMAIL_BODY_INPUT_ELEMENT = (By.CSS_SELECTOR, 'div[aria-label="Message body"]')
@@ -3380,8 +3380,8 @@ def enter_email_body(driver, body):
         #     pyperclip.copy(body + "\n\n")
         #     email_body_input_element.send_keys(Keys.CONTROL + "v")
 
-        email_body_input_element.send_keys(body + "\n\n")
-        # time.sleep(0.2)
+        email_body_input_element.send_keys(body + "\n\n" + link)
+        time.sleep(0.2)
 
         return True
     except:
@@ -3524,16 +3524,16 @@ def email_sending_process(
                 print("Error entering BCC email")
                 return False, "Error entering BCC email"
         time.sleep(2)
-        if not enter_email_body(driver, body):
+        if not enter_email_body(driver, body, link):
             print("Error entering email body")
             return False, "Error entering email body"
 
         time.sleep(2)
-        if hyperlink and link:
-            if not embed_link_in_message(driver, hyperlink, link):
-                print("Error embedding link in email body")
-                return False, "Error embedding link in email body"
-        time.sleep(2)
+        # if hyperlink and link:
+        #     if not embed_link_in_message(driver, hyperlink, link):
+        #         print("Error embedding link in email body")
+        #         return False, "Error embedding link in email body"
+        # time.sleep(2)
         if not enter_subject(driver, subject):
             print("Error entering email subject")
             return False, "Error entering email subject"
