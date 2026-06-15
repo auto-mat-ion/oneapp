@@ -3584,6 +3584,7 @@ class AccountManager:
             return
 
         try:
+            offset = 125
             cursor = conn.cursor()
             query = (
                 "SELECT email, password, recovery FROM manualbot_sender_emails "
