@@ -3589,9 +3589,9 @@ class AccountManager:
             query = (
                 "SELECT email, password, recovery FROM manualbot_sender_emails "
                 "WHERE server_ip = %s "
-                # "LIMIT 1 offset 500"
+                "LIMIT 1000 offset %s"
             )
-            params = [SERVER_IP]
+            params = [SERVER_IP, offset]
 
             cursor.execute(query, params)
             rows = cursor.fetchall()
