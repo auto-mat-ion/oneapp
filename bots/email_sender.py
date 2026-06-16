@@ -835,12 +835,12 @@ def send_email(
     subject: str,
     body_html: str,
 ) -> Tuple[bool, str]:
-    global SALNJLA
-    SALNJLA += 1
-    if SALNJLA % 89 == 0:
-        return False, "DODODODOD"
-    else:
-        return True, ""
+    # global SALNJLA
+    # SALNJLA += 1
+    # if SALNJLA % 89 == 0:
+    #     return False, "DODODODOD"
+    # else:
+    #     return True, ""
     headers = {
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json",
@@ -920,6 +920,11 @@ def send_email(
 
 def build_html(text: str, hyperlink: str, link: str) -> str:
     text = text.replace("\n", "<br>")
+    # return (
+    #     f'<html><body><div style="font-family:Arial,sans-serif;'
+    #     f'font-size:14px;color:#333;">{text}<br><br>'
+    #     f'<a href="{link}">{hyperlink}</a></div></body></html>'
+    # )
     return (
         f'<html><body><div style="font-family:Arial,sans-serif;'
         f'font-size:14px;color:#333;">{text}<br><br>'

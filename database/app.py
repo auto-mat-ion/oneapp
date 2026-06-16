@@ -49,6 +49,102 @@ def load_full_settings():
         return {}
 
 
+def get_email_sender_server_ips():
+    settings = load_full_settings()
+    server_ips = settings.get("email_sender", {}).get("SERVER_IPS", [])
+    if not isinstance(server_ips, list):
+        return []
+    return [str(ip).strip() for ip in server_ips if str(ip).strip()]
+
+
+def sanitize_state_key(value):
+    return (
+        str(value)
+        .replace(".", "_")
+        .replace(":", "_")
+        .replace("/", "_")
+        .replace(" ", "_")
+    )
+
+
+def parse_uploaded_values(uploaded_file, text_value):
+    content = ""
+    if uploaded_file is not None:
+        try:
+            content = uploaded_file.read().decode("utf-8", errors="replace")
+        except Exception:
+            content = ""
+    elif isinstance(text_value, str):
+        content = text_value
+
+    if not isinstance(content, str) or not content.strip():
+        return []
+
+    lines = [line.strip() for line in content.splitlines() if line.strip()]
+    return lines
+
+
+def replace_manualbot_content_rows(
+    table_name,
+    column_name,
+    values,
+    country=None,
+    server_assignments=None,
+):
+    if not values:
+        return False, "No content values were provided."
+    if server_assignments is not None and len(server_assignments) != len(values):
+        return False, "Server assignment count does not match content count."
+
+    success, error = truncate_table(table_name)
+    if not success:
+        return False, f"Unable to clear {table_name}: {error}"
+
+    conn = get_db_connection()
+    if conn is None:
+        return False, "Unable to connect to database"
+
+    try:
+        cursor = conn.cursor()
+        params = []
+        if country and country.strip():
+            if server_assignments is not None:
+                query = f"INSERT INTO {table_name} ({column_name}, server_ip, country) VALUES (%s, %s, %s)"
+                params = [
+                    (value, server_assignments[idx], country.strip())
+                    for idx, value in enumerate(values)
+                ]
+            else:
+                query = (
+                    f"INSERT INTO {table_name} ({column_name}, country) VALUES (%s, %s)"
+                )
+                params = [(value, country.strip()) for value in values]
+        else:
+            if server_assignments is not None:
+                query = f"INSERT INTO {table_name} ({column_name}, server_ip) VALUES (%s, %s)"
+                params = [
+                    (value, server_assignments[idx]) for idx, value in enumerate(values)
+                ]
+            else:
+                query = f"INSERT INTO {table_name} ({column_name}) VALUES (%s)"
+                params = [(value,) for value in values]
+
+        cursor.executemany(query, params)
+        conn.commit()
+        return True, f"Inserted {len(values)} rows into {table_name}."
+    except Exception as exc:
+        return False, str(exc)
+    finally:
+        try:
+            cursor.close()
+        except Exception:
+            pass
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
 def save_settings(settings):
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
     settings_path = os.path.join(BASE_DIR, "../bots/settings.json")
@@ -311,7 +407,9 @@ def generate_subdomains(domain, count=1000):
     return subs
 
 
-def replace_sender_link_from_domain(domain_input, country=None):
+def replace_sender_link_from_domain(
+    domain_input, country=None, server_assignments=None
+):
     if not isinstance(domain_input, str) or not domain_input.strip():
         return False, "Please enter one or more domains for sender_link generation."
 
@@ -334,9 +432,12 @@ def replace_sender_link_from_domain(domain_input, country=None):
     if not all_links:
         return False, "No subdomains were generated from the provided domains."
 
-    success, error = truncate_table("sender_link")
+    if server_assignments is not None and len(server_assignments) != len(all_links):
+        return False, "Server assignment count does not match generated link count."
+
+    success, error = truncate_table("manualbot_link")
     if not success:
-        return False, f"Unable to clear sender_link: {error}"
+        return False, f"Unable to clear manualbot_link: {error}"
 
     conn = get_db_connection()
     if conn is None:
@@ -344,22 +445,32 @@ def replace_sender_link_from_domain(domain_input, country=None):
 
     try:
         cursor = conn.cursor()
-        if country and country.strip():
-            values = [(link, country.strip()) for link in all_links]
-            cursor.executemany(
-                "INSERT INTO sender_link (link, country) VALUES (%s, %s)",
-                values,
-            )
+        if server_assignments is not None:
+            if country and country.strip():
+                values = [
+                    (link, server_assignments[idx], country.strip())
+                    for idx, link in enumerate(all_links)
+                ]
+                query = "INSERT INTO manualbot_link (link, server_ip, country) VALUES (%s, %s, %s)"
+            else:
+                values = [
+                    (link, server_assignments[idx])
+                    for idx, link in enumerate(all_links)
+                ]
+                query = "INSERT INTO manualbot_link (link, server_ip) VALUES (%s, %s)"
         else:
-            values = [(link,) for link in all_links]
-            cursor.executemany(
-                "INSERT INTO sender_link (link) VALUES (%s)",
-                values,
-            )
+            if country and country.strip():
+                values = [(link, country.strip()) for link in all_links]
+                query = "INSERT INTO manualbot_link (link, country) VALUES (%s, %s)"
+            else:
+                values = [(link,) for link in all_links]
+                query = "INSERT INTO manualbot_link (link) VALUES (%s)"
+
+        cursor.executemany(query, values)
         conn.commit()
         return (
             True,
-            f"sender_link replaced with {len(all_links)} generated subdomain(s).",
+            f"manualbot_link replaced with {len(all_links)} generated subdomain(s).",
         )
     except Exception as exc:
         return False, str(exc)
@@ -4239,8 +4350,8 @@ def main():
         country_option = st.selectbox(
             "Country",
             [
-                "Netherlands",
                 "All",
+                "Netherlands",
                 "United States",
                 "Poland",
                 "Sweden",
@@ -4250,39 +4361,21 @@ def main():
             key="manualbot_content_country",
         )
 
+        input_mode = st.radio(
+            "Input mode",
+            ["Upload file", "Paste content"],
+            index=0,
+            key="manualbot_content_input_mode",
+            horizontal=True,
+        )
+
         upload_file = None
-        text_value = None
-
-        if content_option == "Hyperlink text":
-            hyperlink_input_mode = st.radio(
-                "Hyperlink input mode",
-                ["Upload file", "Paste hyperlinks"],
-                index=0,
-                key="manualbot_hyperlink_input_mode",
-                horizontal=True,
-            )
-
-            if hyperlink_input_mode == "Upload file":
-                upload_file = st.file_uploader(
-                    "Upload a TXT or CSV file with one hyperlink per line",
-                    type=["txt", "csv"],
-                    key="manualbot_content_file",
-                )
-            else:
-                text_value = st.text_area(
-                    "Paste hyperlinks here",
-                    value="",
-                    key="manualbot_content_text",
-                    help="Enter one hyperlink per line.",
-                )
-        elif content_option == "Link domain":
-            text_value = st.text_area(
-                "Paste domain(s) here",
-                value="",
-                key="manualbot_content_text",
-                help=(
-                    "Enter one domain per line. Generated subdomains will overwrite sender_link."
-                ),
+        text_value = ""
+        if input_mode == "Upload file":
+            upload_file = st.file_uploader(
+                "Upload a TXT or CSV file",
+                type=["txt", "csv"],
+                key="manualbot_content_file",
             )
         else:
             text_value = st.text_area(
@@ -4290,38 +4383,198 @@ def main():
                 value="",
                 key="manualbot_content_text",
                 help=(
-                    "For email subject or email text, paste the content here. "
-                    "For subject replacement, use one subject per line."
+                    "Enter one value per line. For Link domain, use one domain per line. "
+                    "For email subject/text, paste the content to replace."
                 ),
+                height=200,
             )
 
-        if st.button("Replace manualbot content", key="manualbot_content_upload"):
-            if content_option == "Email subject":
-                success, message = replace_manualbot_subjects(
-                    text_value or "",
-                    country_option,
-                )
-            elif content_option == "Email text":
-                success, message = replace_manualbot_texts(
-                    text_value or "",
-                    country_option,
-                )
-            elif content_option == "Link domain":
-                success, message = replace_sender_link_from_domain(
-                    text_value or "",
-                    None if country_option == "All" else country_option,
-                )
-            else:
-                success, message = replace_manualbot_hyperlink_text(
-                    upload_file,
-                    text_value or "",
-                    country_option,
-                )
+        values = parse_uploaded_values(upload_file, text_value)
 
-            if success:
-                st.success(message)
+        if values:
+            column_name = {
+                "Email subject": "subject",
+                "Email text": "text",
+                "Hyperlink text": "hyperlink_text",
+                "Link domain": "link",
+            }[content_option]
+
+            st.subheader("Preview")
+            st.dataframe(pd.DataFrame({column_name: values}).head(10), width="stretch")
+
+            if content_option != "Link domain":
+                server_ips = get_email_sender_server_ips()
+                if not server_ips:
+                    st.warning(
+                        "No SERVER_IPS configured in bots/settings.json under email_sender."
+                    )
+                else:
+                    selected_servers = st.multiselect(
+                        "Select servers to assign",
+                        server_ips,
+                        default=server_ips,
+                        key="manualbot_selected_servers",
+                    )
+                    if not selected_servers:
+                        st.warning("Select at least one server to distribute content.")
+                    else:
+                        dist_method = st.radio(
+                            "Distribution method",
+                            ["Equal", "Manual"],
+                            index=0,
+                            key="manualbot_distribution_method",
+                            horizontal=True,
+                        )
+
+                        total_rows = len(values)
+                        assigned_counts = []
+                        if dist_method == "Equal":
+                            base, remainder = divmod(total_rows, len(selected_servers))
+                            assigned_counts = [
+                                base + (1 if i < remainder else 0)
+                                for i in range(len(selected_servers))
+                            ]
+                            st.write("### Server assignments")
+                            st.table(
+                                pd.DataFrame(
+                                    {
+                                        "server_ip": selected_servers,
+                                        "assigned_rows": assigned_counts,
+                                    }
+                                )
+                            )
+                        else:
+                            st.write("### Manual server distribution")
+                            assigned_counts = []
+                            for server in selected_servers:
+                                key = f"manualbot_count_{sanitize_state_key(server)}"
+                                count = st.number_input(
+                                    f"Rows for {server}",
+                                    min_value=0,
+                                    max_value=total_rows,
+                                    value=0,
+                                    step=1,
+                                    key=key,
+                                )
+                                assigned_counts.append(count)
+
+                        total_assigned = sum(assigned_counts)
+                    if total_assigned != total_rows:
+                        st.warning(
+                            f"Total assigned rows ({total_assigned}) must equal uploaded rows ({total_rows})."
+                        )
+
+                    if total_assigned == total_rows:
+                        if st.button(
+                            "Save content with server distribution",
+                            key="manualbot_save_content",
+                        ):
+                            server_assignments = []
+                            for server, count in zip(selected_servers, assigned_counts):
+                                server_assignments.extend([server] * count)
+
+                            target_table = {
+                                "Email subject": "manualbot_subjects",
+                                "Email text": "manualbot_texts",
+                                "Hyperlink text": "manualbot_hyperlink_text",
+                            }[content_option]
+                            country_param = (
+                                None if country_option == "All" else country_option
+                            )
+                            success, message = replace_manualbot_content_rows(
+                                target_table,
+                                column_name,
+                                values,
+                                country=country_param,
+                                server_assignments=server_assignments,
+                            )
+                            if success:
+                                st.success(message)
+                            else:
+                                st.error(message)
             else:
-                st.error(message)
+                server_ips = get_email_sender_server_ips()
+                if not server_ips:
+                    st.warning(
+                        "No SERVER_IPS configured in bots/settings.json under email_sender."
+                    )
+                else:
+                    selected_servers = st.multiselect(
+                        "Select servers to assign links",
+                        server_ips,
+                        default=server_ips,
+                        key="manualbot_link_selected_servers",
+                    )
+                    if not selected_servers:
+                        st.warning("Select at least one server to distribute links.")
+                    else:
+                        dist_method = st.radio(
+                            "Link server distribution method",
+                            ["Equal", "Manual"],
+                            index=0,
+                            key="manualbot_link_distribution_method",
+                            horizontal=True,
+                        )
+
+                        total_rows = len(values)
+                        assigned_counts = []
+                        if dist_method == "Equal":
+                            base, remainder = divmod(total_rows, len(selected_servers))
+                            assigned_counts = [
+                                base + (1 if i < remainder else 0)
+                                for i in range(len(selected_servers))
+                            ]
+                            st.write("### Link server assignments")
+                            st.table(
+                                pd.DataFrame(
+                                    {
+                                        "server_ip": selected_servers,
+                                        "assigned_rows": assigned_counts,
+                                    }
+                                )
+                            )
+                        else:
+                            st.write("### Manual link server assignment")
+                            for server in selected_servers:
+                                key = (
+                                    f"manualbot_link_count_{sanitize_state_key(server)}"
+                                )
+                                count = st.number_input(
+                                    f"Links for {server}",
+                                    min_value=0,
+                                    max_value=total_rows,
+                                    value=0,
+                                    step=1,
+                                    key=key,
+                                )
+                                assigned_counts.append(count)
+
+                        total_assigned = sum(assigned_counts)
+                    if total_assigned != total_rows:
+                        st.warning(
+                            f"Total assigned links ({total_assigned}) must equal uploaded links ({total_rows})."
+                        )
+
+                    if total_assigned == total_rows:
+                        if st.button(
+                            "Save sender links with server assignment",
+                            key="manualbot_save_links",
+                        ):
+                            server_assignments = []
+                            for server, count in zip(selected_servers, assigned_counts):
+                                server_assignments.extend([server] * count)
+
+                            success, message = replace_sender_link_from_domain(
+                                "\n".join(values),
+                                None if country_option == "All" else country_option,
+                                server_assignments=server_assignments,
+                            )
+                            if success:
+                                st.success(message)
+                            else:
+                                st.error(message)
+        else:
+            st.info("Upload a file or paste content to enable distribution and save.")
     else:
         st.title(st.session_state.selected_page)
         st.markdown("---")
