@@ -2177,12 +2177,12 @@ def email_sender_uploader():
     }
 
     country_options = [
+        "Netherlands",
         "All",
         "United States",
         "Poland",
         "Sweden",
         "United Kingdom",
-        "Netherlands",
     ]
 
     # Initialize session state keys at function start
@@ -4350,8 +4350,8 @@ def main():
         country_option = st.selectbox(
             "Country",
             [
-                "All",
                 "Netherlands",
+                "All",
                 "United States",
                 "Poland",
                 "Sweden",
