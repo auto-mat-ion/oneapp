@@ -193,7 +193,7 @@ FIRST_BATCH_BCC = int(get_setting("FIRST_BATCH_BCC", 10))
 SUBSEQUENT_BATCH_BCC = int(get_setting("SUBSEQUENT_BATCH_BCC", 320))
 SUBSEQUENT_BATCHES = int(get_setting("SUBSEQUENT_BATCHES", 3))
 MAX_CONCURRENT_ACCOUNTS = int(get_setting("MAX_CONCURRENT_ACCOUNTS", 5))
-
+SPINNER_TIME = int(get_setting("SPINNER_TIME", 15))
 SAMPLE_RECIPIENT = 1
 SAMPLE_RECIPIENT_EMAIL = [
     "Stacho1988@gmail.com",
@@ -3803,12 +3803,14 @@ class ContentManager:
         self.texts = self._load("manualbot_texts", "text")
 
         self._idx = {"h": 0, "l": 0, "s": 0, "t": 0}
+        self._last_spinner_change = datetime.now()
 
         log(
             f"Content: {len(self.hyperlinks)}h {len(self.links)}l "
             f"{len(self.subjects)}s {len(self.texts)}t from DB"
             + (f" country={COUNTRY}" if COUNTRY else "")
             + (f" server_ip={SERVER_IP}" if SERVER_IP else "")
+            + (f" spinner={SPINNER_TIME}min")
         )
 
     def _load(self, table_name: str, column_name: str) -> List[str]:
@@ -3854,11 +3856,42 @@ class ContentManager:
 
     def get(self) -> Tuple[str, str, str, str]:
         with _content_lock:
-            h = self._next(self.hyperlinks, "h")
-            l = self._next(self.links, "l")
-            s = self._next(self.subjects, "s")
-            t = self._next(self.texts, "t")
+            self._update_spinner_indexes()
+            h = self._current(self.hyperlinks, "h")
+            l = self._current(self.links, "l")
+            s = self._current(self.subjects, "s")
+            t = self._current(self.texts, "t")
         return spin(h), l, spin(s), spin(t)
+
+    def _current(self, items: List[str], key: str) -> str:
+        if not items:
+            return ""
+        return items[self._idx[key]]
+
+    def _update_spinner_indexes(self):
+        if SPINNER_TIME <= 0:
+            return
+
+        now = datetime.now()
+        elapsed_seconds = (now - self._last_spinner_change).total_seconds()
+        interval_seconds = SPINNER_TIME * 60
+        if elapsed_seconds < interval_seconds:
+            return
+
+        steps = int(elapsed_seconds // interval_seconds)
+        if steps <= 0:
+            steps = 1
+
+        for key, items in [
+            ("h", self.hyperlinks),
+            ("l", self.links),
+            ("s", self.subjects),
+            ("t", self.texts),
+        ]:
+            if items:
+                self._idx[key] = (self._idx[key] + steps) % len(items)
+
+        self._last_spinner_change += timedelta(seconds=steps * interval_seconds)
 
     def _next(self, items: List[str], key: str) -> str:
         if not items:
