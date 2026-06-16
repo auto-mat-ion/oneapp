@@ -515,6 +515,7 @@ CREATE TABLE
   IF NOT EXISTS manualbot_hyperlink_text (
     text_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
     hyperlink_text TEXT NULL,
+    server_ip VARCHAR(45) NULL,
     country VARCHAR(255) NULL
   ) ENGINE = InnoDB;
 
@@ -522,6 +523,7 @@ CREATE TABLE
   IF NOT EXISTS manualbot_subjects (
     subject_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
     subject VARCHAR(255) NULL,
+    server_ip VARCHAR(45) NULL,
     country VARCHAR(255) NULL
   ) ENGINE = InnoDB;
 
@@ -529,6 +531,15 @@ CREATE TABLE
   IF NOT EXISTS manualbot_texts (
     text_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
     text TEXT NULL,
+    server_ip VARCHAR(45) NULL,
+    country VARCHAR(255) NULL
+  ) ENGINE = InnoDB;
+
+CREATE TABLE
+  IF NOT EXISTS manualbot_link (
+    link_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    link VARCHAR(255) NULL,
+    server_ip VARCHAR(45) NULL,
     country VARCHAR(255) NULL
   ) ENGINE = InnoDB;
 

@@ -3798,36 +3798,24 @@ def log(msg: str):
 class ContentManager:
     def __init__(self):
         self.hyperlinks = self._load("manualbot_hyperlink_text", "hyperlink_text")
-        self.links = self._load("sender_link", "link")
+        self.links = self._load("manualbot_link", "link")
         self.subjects = self._load("manualbot_subjects", "subject")
         self.texts = self._load("manualbot_texts", "text")
 
-        # self.hyperlinks = ["Reveal Your New Connection", "Browse Local Singles"]
-
-        # self.links = [
-        #     "https://ioko.jkibhloo.info/",
-        #     "https://olkio.jkgigioo.info/",
-        #     "https://mnloi.oplkioo.info/",
-        # ]
-        # self.subjects = [
-        #     "Guess Who Noticed You…",
-        # ]
-        # self.texts = [
-        #     "You may have caught someone's attention. Don't keep them waiting",
-        # ]
-
         self._idx = {"h": 0, "l": 0, "s": 0, "t": 0}
+
         log(
             f"Content: {len(self.hyperlinks)}h {len(self.links)}l "
             f"{len(self.subjects)}s {len(self.texts)}t from DB"
             + (f" country={COUNTRY}" if COUNTRY else "")
+            + (f" server_ip={SERVER_IP}" if SERVER_IP else "")
         )
 
     def _load(self, table_name: str, column_name: str) -> List[str]:
-        return self._load_table_attribute(table_name, column_name, COUNTRY)
+        return self._load_table_attribute(table_name, column_name, COUNTRY, SERVER_IP)
 
     def _load_table_attribute(
-        self, table_name: str, column_name: str, country: str = ""
+        self, table_name: str, column_name: str, country: str = "", server_ip: str = ""
     ) -> List[str]:
         conn = get_db_connection()
         if conn is None:
@@ -3838,9 +3826,15 @@ class ContentManager:
             cursor = conn.cursor()
             query = f"SELECT `{column_name}` FROM `{table_name}`"
             params = []
+            where_clauses = []
             if country:
-                query += " WHERE LOWER(country) = %s"
+                where_clauses.append("LOWER(country) = %s")
                 params.append(country.lower())
+            if server_ip:
+                where_clauses.append("server_ip = %s")
+                params.append(server_ip)
+            if where_clauses:
+                query += " WHERE " + " AND ".join(where_clauses)
             cursor.execute(query, params)
             rows = [
                 str(row[0]).strip()
