@@ -4399,7 +4399,7 @@ def main():
                 "Link domain": "link",
             }[content_option]
 
-            st.subheader("Preview")
+            st.subheader(f"Preview: {len(values)} records")
             st.dataframe(pd.DataFrame({column_name: values}).head(10), width="stretch")
 
             if content_option != "Link domain":
