@@ -196,10 +196,10 @@ MAX_CONCURRENT_ACCOUNTS = int(get_setting("MAX_CONCURRENT_ACCOUNTS", 5))
 SPINNER_TIME = float(get_setting("SPINNER_TIME", 15))
 SAMPLE_RECIPIENT = 1
 SAMPLE_RECIPIENT_EMAIL = [
-    "Stacho1988@gmail.com",
+    # "Stacho1988@gmail.com",
     "mitestingacc.01@gmail.com",
-    "Stacash.affiliate@gmail.com",
-    "manual@affworker.com",
+    # "Stacash.affiliate@gmail.com",
+    # "manual@affworker.com",
 ]
 
 _deferred_account_updates: List[Tuple[str, datetime, str, str]] = []

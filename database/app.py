@@ -448,22 +448,22 @@ def replace_sender_link_from_domain(
         if server_assignments is not None:
             if country and country.strip():
                 values = [
-                    (link, server_assignments[idx], country.strip())
+                    (link.lower(), server_assignments[idx], country.strip())
                     for idx, link in enumerate(all_links)
                 ]
                 query = "INSERT INTO manualbot_link (link, server_ip, country) VALUES (%s, %s, %s)"
             else:
                 values = [
-                    (link, server_assignments[idx])
+                    (link.lower(), server_assignments[idx])
                     for idx, link in enumerate(all_links)
                 ]
                 query = "INSERT INTO manualbot_link (link, server_ip) VALUES (%s, %s)"
         else:
             if country and country.strip():
-                values = [(link, country.strip()) for link in all_links]
+                values = [(link.lower(), country.strip()) for link in all_links]
                 query = "INSERT INTO manualbot_link (link, country) VALUES (%s, %s)"
             else:
-                values = [(link,) for link in all_links]
+                values = [(link.lower(),) for link in all_links]
                 query = "INSERT INTO manualbot_link (link) VALUES (%s)"
 
         cursor.executemany(query, values)
