@@ -141,7 +141,7 @@
     "SUBSEQUENT_BATCHES": 3,
     "MAX_CONCURRENT_ACCOUNTS": 5,
     "SPINNER_TIME": 15,
-    "RUNNER_SESSION_TIME": 45
+    "RUNNER_SESSION_TIME": 240
   },
   "second_app": {
     "CHROMEDRIVER_LOCATION": "../utils/chromedriver/chrome.exe",

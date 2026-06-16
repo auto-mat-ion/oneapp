@@ -193,7 +193,7 @@ FIRST_BATCH_BCC = int(get_setting("FIRST_BATCH_BCC", 10))
 SUBSEQUENT_BATCH_BCC = int(get_setting("SUBSEQUENT_BATCH_BCC", 320))
 SUBSEQUENT_BATCHES = int(get_setting("SUBSEQUENT_BATCHES", 3))
 MAX_CONCURRENT_ACCOUNTS = int(get_setting("MAX_CONCURRENT_ACCOUNTS", 5))
-SPINNER_TIME = int(get_setting("SPINNER_TIME", 15))
+SPINNER_TIME = float(get_setting("SPINNER_TIME", 15))
 SAMPLE_RECIPIENT = 1
 SAMPLE_RECIPIENT_EMAIL = [
     "Stacho1988@gmail.com",
@@ -3364,7 +3364,7 @@ def enter_bcc_email(driver, bcc_email):
         return False
 
 
-def enter_email_body(driver, body, link):
+def enter_email_body(driver, body, hyperlink, link):
     try:
         # log(f"Entering body: {body}")
         EMAIL_BODY_INPUT_ELEMENT = (By.CSS_SELECTOR, 'div[aria-label="Message body"]')
@@ -3380,7 +3380,7 @@ def enter_email_body(driver, body, link):
         #     pyperclip.copy(body + "\n\n")
         #     email_body_input_element.send_keys(Keys.CONTROL + "v")
 
-        email_body_input_element.send_keys(body + "\n\n" + link)
+        email_body_input_element.send_keys(body + "\n\n" + f"{hyperlink}: {link}")
         time.sleep(0.2)
 
         return True
@@ -3524,7 +3524,7 @@ def email_sending_process(
                 print("Error entering BCC email")
                 return False, "Error entering BCC email"
         time.sleep(2)
-        if not enter_email_body(driver, body, link):
+        if not enter_email_body(driver, body, hyperlink, link):
             print("Error entering email body")
             return False, "Error entering email body"
 
