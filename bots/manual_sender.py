@@ -196,8 +196,8 @@ MAX_CONCURRENT_ACCOUNTS = int(get_setting("MAX_CONCURRENT_ACCOUNTS", 5))
 SPINNER_TIME = float(get_setting("SPINNER_TIME", 15))
 SAMPLE_RECIPIENT = 1
 SAMPLE_RECIPIENT_EMAIL = [
-    # "Stacho1988@gmail.com",
-    "mitestingacc.01@gmail.com",
+    "Stacho1988@gmail.com",
+    "mitestingacc.02@gmail.com",
     # "Stacash.affiliate@gmail.com",
     # "manual@affworker.com",
 ]
@@ -3584,7 +3584,7 @@ class AccountManager:
             return
 
         try:
-            offset = 0
+            offset = 300
             cursor = conn.cursor()
             query = (
                 "SELECT email, password, recovery FROM manualbot_sender_emails "

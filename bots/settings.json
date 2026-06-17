@@ -19,6 +19,7 @@
     "STAGGER_MAX": 3.0,
     "SAVE_TO_SENT": false,
     "CLIENT_ID": "e62beeb7-8a9b-4637-b57f-f8601c0d13f5",
+    "SPINNER_TIME": 15,
     "SERVER_IPS": [
       "51.77.216.17",
       "51.75.119.199",
