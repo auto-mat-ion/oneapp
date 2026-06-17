@@ -408,7 +408,10 @@ def generate_subdomains(domain, count=1000):
 
 
 def replace_sender_link_from_domain(
-    domain_input, country=None, server_assignments=None
+    table_name,
+    domain_input,
+    country=None,
+    server_assignments=None,
 ):
     if not isinstance(domain_input, str) or not domain_input.strip():
         return False, "Please enter one or more domains for sender_link generation."
@@ -435,9 +438,9 @@ def replace_sender_link_from_domain(
     if server_assignments is not None and len(server_assignments) != len(all_links):
         return False, "Server assignment count does not match generated link count."
 
-    success, error = truncate_table("manualbot_link")
+    success, error = truncate_table(table_name)
     if not success:
-        return False, f"Unable to clear manualbot_link: {error}"
+        return False, f"Unable to clear {table_name}: {error}"
 
     conn = get_db_connection()
     if conn is None:
@@ -451,26 +454,26 @@ def replace_sender_link_from_domain(
                     (link.lower(), server_assignments[idx], country.strip())
                     for idx, link in enumerate(all_links)
                 ]
-                query = "INSERT INTO manualbot_link (link, server_ip, country) VALUES (%s, %s, %s)"
+                query = f"INSERT INTO {table_name} (link, server_ip, country) VALUES (%s, %s, %s)"
             else:
                 values = [
                     (link.lower(), server_assignments[idx])
                     for idx, link in enumerate(all_links)
                 ]
-                query = "INSERT INTO manualbot_link (link, server_ip) VALUES (%s, %s)"
+                query = f"INSERT INTO {table_name} (link, server_ip) VALUES (%s, %s)"
         else:
             if country and country.strip():
                 values = [(link.lower(), country.strip()) for link in all_links]
-                query = "INSERT INTO manualbot_link (link, country) VALUES (%s, %s)"
+                query = f"INSERT INTO {table_name} (link, country) VALUES (%s, %s)"
             else:
                 values = [(link.lower(),) for link in all_links]
-                query = "INSERT INTO manualbot_link (link) VALUES (%s)"
+                query = f"INSERT INTO {table_name} (link) VALUES (%s)"
 
         cursor.executemany(query, values)
         conn.commit()
         return (
             True,
-            f"manualbot_link replaced with {len(all_links)} generated subdomain(s).",
+            f"{table_name} replaced with {len(all_links)} generated subdomain(s).",
         )
     except Exception as exc:
         return False, str(exc)
@@ -4341,6 +4344,14 @@ def main():
         st.title("Manual Sender Content")
         st.markdown("---")
 
+        bot_type = st.radio(
+            "Bot type",
+            ["manualbot", "smtp_bot"],
+            index=0,
+            key="manualbot_or_smtp_bot",
+            horizontal=True,
+        )
+
         content_option = st.selectbox(
             "Content to replace",
             ["Email subject", "Email text", "Hyperlink text", "Link domain"],
@@ -4360,6 +4371,8 @@ def main():
             index=0,
             key="manualbot_content_country",
         )
+
+        table_prefix = "manualbot" if bot_type == "manualbot" else "smtp"
 
         input_mode = st.radio(
             "Input mode",
@@ -4474,9 +4487,9 @@ def main():
                                 server_assignments.extend([server] * count)
 
                             target_table = {
-                                "Email subject": "manualbot_subjects",
-                                "Email text": "manualbot_texts",
-                                "Hyperlink text": "manualbot_hyperlink_text",
+                                "Email subject": f"{table_prefix}_subjects",
+                                "Email text": f"{table_prefix}_texts",
+                                "Hyperlink text": f"{table_prefix}_hyperlink_text",
                             }[content_option]
                             country_param = (
                                 None if country_option == "All" else country_option
@@ -4564,7 +4577,9 @@ def main():
                             for server, count in zip(selected_servers, assigned_counts):
                                 server_assignments.extend([server] * count)
 
+                            target_link_table = f"{table_prefix}_link"
                             success, message = replace_sender_link_from_domain(
+                                target_link_table,
                                 "\n".join(values),
                                 None if country_option == "All" else country_option,
                                 server_assignments=server_assignments,
