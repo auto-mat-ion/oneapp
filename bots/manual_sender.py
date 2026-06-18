@@ -3584,7 +3584,7 @@ class AccountManager:
             return
 
         try:
-            offset = 350
+            offset = 450
             cursor = conn.cursor()
             query = (
                 "SELECT email, password, recovery FROM manualbot_sender_emails "
@@ -3797,10 +3797,23 @@ def log(msg: str):
 
 class ContentManager:
     def __init__(self):
-        self.hyperlinks = self._load("manualbot_hyperlink_text", "hyperlink_text")
-        self.links = self._load("manualbot_link", "link")
-        self.subjects = self._load("manualbot_subjects", "subject")
-        self.texts = self._load("manualbot_texts", "text")
+        # self.hyperlinks = self._load("manualbot_hyperlink_text", "hyperlink_text")
+        # self.links = self._load("manualbot_link", "link")
+        # self.subjects = self._load("manualbot_subjects", "subject")
+        # self.texts = self._load("manualbot_texts", "text")
+
+        self.hyperlinks = ["Find Me Here", "See My Photos and Profile"]
+        self.links = [
+            "onlinecrush.info",
+            "perfectchemistry.info",
+            "lovelantern.info",
+            "truematchwave.info",
+        ]
+        self.subjects = ["You Caught My Attention for a Reason"]
+        self.texts = [
+            "I enjoy meeting interesting people and learning about their experiences. Perhaps we have more in common than either of us expects.",
+            "Sometimes the most interesting people are the ones you least expect to meet. I would love to discover if we have that kind of connection.",
+        ]
 
         self._idx = {"h": 0, "l": 0, "s": 0, "t": 0}
         self._last_spinner_change = datetime.now()
@@ -3953,7 +3966,7 @@ class RecipientManager:
             query = (
                 "SELECT recipient_email FROM sender_recipients "
                 "WHERE server_ip = %s AND COALESCE(country, '') = %s "
-                # "LIMIT 1000000 offset 370000"
+                "LIMIT 1000000 offset 500000"
             )
             params = [SERVER_IP, COUNTRY]
 
