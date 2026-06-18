@@ -3606,8 +3606,8 @@ class AccountManager:
         try:
             # offset = 150 limit 115 -> test in 3 hrs
 
-            offset = 50
-            limit = 50
+            offset = 100
+            limit = 200
             cursor = conn.cursor()
             query = (
                 "SELECT email, password, recovery FROM manualbot_sender_emails "
@@ -4000,8 +4000,8 @@ class RecipientManager:
 
         try:
             cursor = conn.cursor()
-            limit = 100000
-            offset = 55000
+            limit = 300000
+            offset = 120000
             query = (
                 "SELECT recipient_email FROM sender_recipients "
                 "WHERE server_ip = %s AND COALESCE(country, '') = %s "
