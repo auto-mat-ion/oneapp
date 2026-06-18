@@ -4500,8 +4500,8 @@ def send_manual_email_whole_process(
             log(f"{email_address}: time window expired before warmup")
             return False
 
-        warmup = recipients.get_batch(FIRST_BATCH_BCC)
-        # warmup = recipients.get_batch(random.randint(1, FIRST_BATCH_BCC))
+        # warmup = recipients.get_batch(FIRST_BATCH_BCC)
+        warmup = recipients.get_batch(random.randint(1, FIRST_BATCH_BCC))
         if not warmup:
             log(f"{email_address}: No recipients available for warmup batch")
             return False
@@ -4550,7 +4550,8 @@ def send_manual_email_whole_process(
                 break
 
             log(f"{email_address}: Sending subsequent batch {batch_index + 1}")
-            batch = recipients.get_batch(SUBSEQUENT_BATCH_BCC)
+            # batch = recipients.get_batch(SUBSEQUENT_BATCH_BCC)
+            batch = recipients.get_batch(random.randint(100, SUBSEQUENT_BATCH_BCC))
             if not batch:
                 log(f"{email_address}: No recipients available for subsequent batch")
                 break
