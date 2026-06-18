@@ -3596,13 +3596,13 @@ class AccountManager:
             cursor.execute(query, params)
             rows = cursor.fetchall()
             cursor.close()
-            rows = [
-                ["aaronshortqpjp_outlook_com", ""],
-                ["aaroncurtiseygh_outlook_com", ""],
-                ["aaravwilliamsrhva_outlook_com", ""],
-                ["abandonlegreflect_outlook_com", ""],
-                ["aaronlawrencevikm_outlook_com", ""],
-            ]
+            # rows = [
+            #     ["aaronshortqpjp_outlook_com", ""],
+            #     ["aaroncurtiseygh_outlook_com", ""],
+            #     ["aaravwilliamsrhva_outlook_com", ""],
+            #     ["abandonlegreflect_outlook_com", ""],
+            #     ["aaronlawrencevikm_outlook_com", ""],
+            # ]
 
             for row in rows:
                 if not row or row[0] is None:
