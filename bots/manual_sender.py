@@ -3584,12 +3584,12 @@ class AccountManager:
             return
 
         try:
-            offset = 450
+            offset = 0
             cursor = conn.cursor()
             query = (
                 "SELECT email, password, recovery FROM manualbot_sender_emails "
                 "WHERE server_ip = %s "
-                "LIMIT 1000 offset %s"
+                "LIMIT 30 offset %s"
             )
             params = [SERVER_IP, offset]
 
