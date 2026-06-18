@@ -407,7 +407,7 @@ def connect_new_random_old():
         return False
 
 
-def connect_new_random():
+def connect_new_random(COUNTRY=COUNTRY):
     try:
 
         def run_cmd(args):
@@ -3936,6 +3936,8 @@ class ContentManager:
                 self._idx[key] = (self._idx[key] + steps) % len(items)
 
         self._last_spinner_change += timedelta(seconds=steps * interval_seconds)
+        connect_new_random("netherlands")
+        connect_new_random("poland")
         log(
             f"Spinner updated: {steps} steps, next change at {self._last_spinner_change.strftime('%Y-%m-%d %H:%M:%S')}"
         )
@@ -4831,6 +4833,8 @@ def get_action_status() -> bool:
 
 
 def runner():
+    connect_new_random("poland")
+
     accounts = AccountManager()
     recipients = RecipientManager()
     stats = StatsTracker(
