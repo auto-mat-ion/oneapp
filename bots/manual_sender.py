@@ -203,7 +203,7 @@ if SERVER_IP == "13.140.161.126":
         # "Stacash.affiliate@gmail.com",
         # "manual@affworker.com",
     ]
-elif SERVER_IP == "13.140.181.20":
+elif SERVER_IP == "51.77.216.17":
     SAMPLE_RECIPIENT_EMAIL = ["Stacho1988@gmail.com", "mitestingacc.02@gmail.com"]
 else:
     SAMPLE_RECIPIENT_EMAIL = [
@@ -3606,7 +3606,7 @@ class AccountManager:
         try:
             # offset = 150 limit 115 -> test in 3 hrs
 
-            offset = 290
+            offset = 0
             cursor = conn.cursor()
             query = (
                 "SELECT email, password, recovery FROM manualbot_sender_emails "
@@ -3997,8 +3997,8 @@ class RecipientManager:
 
         try:
             cursor = conn.cursor()
-            limit = 70000
-            offset = 330000
+            limit = 300000
+            offset = 0
             query = (
                 "SELECT recipient_email FROM sender_recipients "
                 "WHERE server_ip = %s AND COALESCE(country, '') = %s "
@@ -4498,6 +4498,7 @@ def send_manual_email_whole_process(
             return False
 
         warmup = recipients.get_batch(FIRST_BATCH_BCC)
+        # warmup = recipients.get_batch(random.randint(1, FIRST_BATCH_BCC))
         if not warmup:
             log(f"{email_address}: No recipients available for warmup batch")
             return False
