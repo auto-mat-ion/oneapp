@@ -3802,17 +3802,26 @@ class ContentManager:
         # self.subjects = self._load("manualbot_subjects", "subject")
         # self.texts = self._load("manualbot_texts", "text")
 
-        self.hyperlinks = ["Find Me Here", "See My Photos and Profile"]
+        self.hyperlinks = [
+            "Find Me Here",
+            "See My Photos and Profile",
+            "See Why I Thought of You",
+        ]
         self.links = [
             "onlinecrush.info",
             "perfectchemistry.info",
             "lovelantern.info",
             "truematchwave.info",
         ]
-        self.subjects = ["You Caught My Attention for a Reason"]
+        self.subjects = [
+            "You Caught My Attention for a Reason",
+            "I Was Happy to Come Across You",
+            "A Simple Message With Good Intentions",
+        ]
         self.texts = [
             "I enjoy meeting interesting people and learning about their experiences. Perhaps we have more in common than either of us expects.",
             "Sometimes the most interesting people are the ones you least expect to meet. I would love to discover if we have that kind of connection.",
+            "I appreciate genuine connections and thoughtful conversations. If you do too, I would love to hear from you.",
         ]
 
         self._idx = {"h": 0, "l": 0, "s": 0, "t": 0}
