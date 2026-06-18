@@ -3604,7 +3604,7 @@ class AccountManager:
             return
 
         try:
-            offset = 31
+            offset = 70
             cursor = conn.cursor()
             query = (
                 "SELECT email, password, recovery FROM manualbot_sender_emails "
@@ -3998,7 +3998,7 @@ class RecipientManager:
             query = (
                 "SELECT recipient_email FROM sender_recipients "
                 "WHERE server_ip = %s AND COALESCE(country, '') = %s "
-                # "LIMIT 1000000 offset 600000"
+                "LIMIT 1000000 offset 100000"
             )
             params = [SERVER_IP, COUNTRY]
 
@@ -4302,6 +4302,7 @@ def initialize_existing_profile(email_address):
                 # print(f"{email_address} : Driver status: {status}, error: {error}")
                 if status:
                     driver, user_path, proxy = driverdata.values()
+                    close_other_tabs(driver)
 
                     time.sleep(0.5)
                     driver.maximize_window()
