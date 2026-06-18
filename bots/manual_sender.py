@@ -195,12 +195,32 @@ SUBSEQUENT_BATCHES = int(get_setting("SUBSEQUENT_BATCHES", 3))
 MAX_CONCURRENT_ACCOUNTS = int(get_setting("MAX_CONCURRENT_ACCOUNTS", 5))
 SPINNER_TIME = float(get_setting("SPINNER_TIME", 15))
 SAMPLE_RECIPIENT = 1
-SAMPLE_RECIPIENT_EMAIL = [
-    "Stacho1988@gmail.com",
-    "mitestingacc.02@gmail.com",
-    # "Stacash.affiliate@gmail.com",
-    # "manual@affworker.com",
-]
+
+if SERVER_IP == "13.140.161.126":
+    SAMPLE_RECIPIENT_EMAIL = [
+        "Stacho1988@gmail.com",
+        "mitestingacc.01@gmail.com",
+        # "Stacash.affiliate@gmail.com",
+        # "manual@affworker.com",
+    ]
+elif SERVER_IP == "13.140.181.20":
+    SAMPLE_RECIPIENT_EMAIL = ["Stacho1988@gmail.com", "mitestingacc.02@gmail.com"]
+else:
+    SAMPLE_RECIPIENT_EMAIL = [
+        "Stacho1988@gmail.com",
+        "mitestingacc.03@gmail.com",
+    ]
+
+    #   "13.140.161.126",
+    #   "13.140.181.21",
+    #   "13.140.181.18",
+    #   "13.140.181.23",
+    #   "13.140.181.20",
+    #   "13.140.181.19",
+    #   "13.140.181.17",
+    #   "13.140.181.14",
+    #   "13.140.181.16"
+
 
 _deferred_account_updates: List[Tuple[str, datetime, str, str]] = []
 _deferred_failed_accounts: List[Tuple[str, str, str, str, str, str, datetime]] = []
@@ -3584,12 +3604,12 @@ class AccountManager:
             return
 
         try:
-            offset = 0
+            offset = 31
             cursor = conn.cursor()
             query = (
                 "SELECT email, password, recovery FROM manualbot_sender_emails "
                 "WHERE server_ip = %s "
-                "LIMIT 30 offset %s"
+                "LIMIT 1000 offset %s"
             )
             params = [SERVER_IP, offset]
 
@@ -3978,7 +3998,7 @@ class RecipientManager:
             query = (
                 "SELECT recipient_email FROM sender_recipients "
                 "WHERE server_ip = %s AND COALESCE(country, '') = %s "
-                "LIMIT 1000000 offset 600000"
+                # "LIMIT 1000000 offset 600000"
             )
             params = [SERVER_IP, COUNTRY]
 
