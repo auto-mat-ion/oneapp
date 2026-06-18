@@ -4834,6 +4834,7 @@ def get_action_status() -> bool:
 
 def runner():
     connect_new_random("poland")
+    time.sleep(5)
 
     accounts = AccountManager()
     recipients = RecipientManager()
