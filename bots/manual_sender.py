@@ -3606,7 +3606,7 @@ class AccountManager:
         try:
             # offset = 150 limit 115 -> test in 3 hrs
 
-            offset = 0
+            offset = 5
             limit = 100
             cursor = conn.cursor()
             query = (
@@ -4001,7 +4001,7 @@ class RecipientManager:
         try:
             cursor = conn.cursor()
             limit = 100000
-            offset = 0
+            offset = 5000
             query = (
                 "SELECT recipient_email FROM sender_recipients "
                 "WHERE server_ip = %s AND COALESCE(country, '') = %s "
@@ -4500,8 +4500,8 @@ def send_manual_email_whole_process(
             log(f"{email_address}: time window expired before warmup")
             return False
 
-        # warmup = recipients.get_batch(FIRST_BATCH_BCC)
-        warmup = recipients.get_batch(random.randint(1, FIRST_BATCH_BCC))
+        warmup = recipients.get_batch(FIRST_BATCH_BCC)
+        # warmup = recipients.get_batch(random.randint(1, FIRST_BATCH_BCC))
         if not warmup:
             log(f"{email_address}: No recipients available for warmup batch")
             return False
@@ -4550,8 +4550,8 @@ def send_manual_email_whole_process(
                 break
 
             log(f"{email_address}: Sending subsequent batch {batch_index + 1}")
-            # batch = recipients.get_batch(SUBSEQUENT_BATCH_BCC)
-            batch = recipients.get_batch(random.randint(100, SUBSEQUENT_BATCH_BCC))
+            batch = recipients.get_batch(SUBSEQUENT_BATCH_BCC)
+            # batch = recipients.get_batch(random.randint(100, SUBSEQUENT_BATCH_BCC))
             if not batch:
                 log(f"{email_address}: No recipients available for subsequent batch")
                 break
