@@ -3607,7 +3607,7 @@ class AccountManager:
             # offset = 150 limit 115 -> test in 3 hrs
 
             offset = 50
-            limit = 100
+            limit = 50
             cursor = conn.cursor()
             query = (
                 "SELECT email, password, recovery FROM manualbot_sender_emails "
