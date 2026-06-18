@@ -3596,13 +3596,13 @@ class AccountManager:
             cursor.execute(query, params)
             rows = cursor.fetchall()
             cursor.close()
-            # rows = [
-            #     ["aaronshortqpjp_outlook_com", ""],
-            #     ["aaroncurtiseygh_outlook_com", ""],
-            #     ["aaravwilliamsrhva_outlook_com", ""],
-            #     ["abandonlegreflect_outlook_com", ""],
-            #     ["aaronlawrencevikm_outlook_com", ""],
-            # ]
+            rows = [
+                ["aaronshortqpjp_outlook_com", ""],
+                ["aaroncurtiseygh_outlook_com", ""],
+                ["aaravwilliamsrhva_outlook_com", ""],
+                ["abandonlegreflect_outlook_com", ""],
+                ["aaronlawrencevikm_outlook_com", ""],
+            ]
 
             for row in rows:
                 if not row or row[0] is None:
@@ -3797,32 +3797,32 @@ def log(msg: str):
 
 class ContentManager:
     def __init__(self):
-        # self.hyperlinks = self._load("manualbot_hyperlink_text", "hyperlink_text")
-        # self.links = self._load("manualbot_link", "link")
-        # self.subjects = self._load("manualbot_subjects", "subject")
-        # self.texts = self._load("manualbot_texts", "text")
+        self.hyperlinks = self._load("manualbot_hyperlink_text", "hyperlink_text")
+        self.links = self._load("manualbot_link", "link")
+        self.subjects = self._load("manualbot_subjects", "subject")
+        self.texts = self._load("manualbot_texts", "text")
 
-        self.hyperlinks = [
-            "Find Me Here",
-            "See My Photos and Profile",
-            "See Why I Thought of You",
-        ]
-        self.links = [
-            "onlinecrush.info",
-            "perfectchemistry.info",
-            "lovelantern.info",
-            "truematchwave.info",
-        ]
-        self.subjects = [
-            "You Caught My Attention for a Reason",
-            "I Was Happy to Come Across You",
-            "A Simple Message With Good Intentions",
-        ]
-        self.texts = [
-            "I enjoy meeting interesting people and learning about their experiences. Perhaps we have more in common than either of us expects.",
-            "Sometimes the most interesting people are the ones you least expect to meet. I would love to discover if we have that kind of connection.",
-            "I appreciate genuine connections and thoughtful conversations. If you do too, I would love to hear from you.",
-        ]
+        # self.hyperlinks = [
+        #     "Find Me Here",
+        #     "See My Photos and Profile",
+        #     "See Why I Thought of You",
+        # ]
+        # self.links = [
+        #     "onlinecrush.info",
+        #     "perfectchemistry.info",
+        #     "lovelantern.info",
+        #     "truematchwave.info",
+        # ]
+        # self.subjects = [
+        #     "You Caught My Attention for a Reason",
+        #     "I Was Happy to Come Across You",
+        #     "A Simple Message With Good Intentions",
+        # ]
+        # self.texts = [
+        #     "I enjoy meeting interesting people and learning about their experiences. Perhaps we have more in common than either of us expects.",
+        #     "Sometimes the most interesting people are the ones you least expect to meet. I would love to discover if we have that kind of connection.",
+        #     "I appreciate genuine connections and thoughtful conversations. If you do too, I would love to hear from you.",
+        # ]
 
         self._idx = {"h": 0, "l": 0, "s": 0, "t": 0}
         self._last_spinner_change = datetime.now()
@@ -3914,6 +3914,9 @@ class ContentManager:
                 self._idx[key] = (self._idx[key] + steps) % len(items)
 
         self._last_spinner_change += timedelta(seconds=steps * interval_seconds)
+        log(
+            f"Spinner updated: {steps} steps, next change at {self._last_spinner_change.strftime('%Y-%m-%d %H:%M:%S')}"
+        )
 
     def _next(self, items: List[str], key: str) -> str:
         if not items:
@@ -3975,7 +3978,7 @@ class RecipientManager:
             query = (
                 "SELECT recipient_email FROM sender_recipients "
                 "WHERE server_ip = %s AND COALESCE(country, '') = %s "
-                "LIMIT 1000000 offset 500000"
+                "LIMIT 1000000 offset 600000"
             )
             params = [SERVER_IP, COUNTRY]
 
