@@ -872,7 +872,7 @@ class RecipientManager:
             query = (
                 "SELECT recipient_email FROM sender_recipients "
                 "WHERE server_ip = %s AND COALESCE(country, '') = %s "
-                "LIMIT 5000 offset 0"
+                "LIMIT 100000 offset 10000"
             )
             params = [SERVER_IP, COUNTRY]
 
@@ -972,7 +972,7 @@ class AccountManager:
             if BATCH_NUMBER:
                 query += " AND batch = %s "
                 params.append(BATCH_NUMBER)
-            query += " LIMIT 5 OFFSET 0"
+            query += " LIMIT 30 OFFSET 25"
             cursor.execute(query, params)
             rows = cursor.fetchall()
             cursor.close()
@@ -1693,7 +1693,7 @@ def prompt_for_sample_recipient() -> Optional[int]:
     print("Invalid choice. Please enter 1 for old app or 2 for new app.")
 
 
-def main():
+def main2():
     print("Starting...")
     global BATCH_NUMBER, SENDER_APP
     app_choice = prompt_for_sender_app_selection()

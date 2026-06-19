@@ -2,6 +2,7 @@ from bots.familybot import run_familybot, run_familybot_share
 from bots.hotmailbot import run_hotmailbot
 from bots.password_changer import run_password_changerbot
 from bots.email_sender import main
+from bots.email_sender_batch_by_batch import main2
 
 # from bots.email_sender_test import main_sec
 from bots.new_app_hotmail import run_second_app_hotmails
@@ -29,7 +30,8 @@ if bot == 1:
 elif bot == 2:
     run_hotmailbot()
 elif bot == 3:
-    run_password_changerbot()
+    # run_password_changerbot()
+    main2()
 elif bot == 4:
     main()
 elif bot == 5:
