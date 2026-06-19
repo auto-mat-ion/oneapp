@@ -3606,8 +3606,8 @@ class AccountManager:
         try:
             # offset = 150 limit 115 -> test in 3 hrs
 
-            offset = 150
-            limit = 115
+            offset = 0
+            limit = 1000
             cursor = conn.cursor()
             query = (
                 "SELECT email, password, recovery FROM manualbot_sender_emails "
@@ -4000,8 +4000,8 @@ class RecipientManager:
 
         try:
             cursor = conn.cursor()
-            limit = 300000
-            offset = 120000
+            limit = 1000000
+            offset = 0
             query = (
                 "SELECT recipient_email FROM sender_recipients "
                 "WHERE server_ip = %s AND COALESCE(country, '') = %s "
@@ -4551,7 +4551,7 @@ def send_manual_email_whole_process(
 
             log(f"{email_address}: Sending subsequent batch {batch_index + 1}")
             # batch = recipients.get_batch(SUBSEQUENT_BATCH_BCC)
-            batch = recipients.get_batch(random.randint(100, SUBSEQUENT_BATCH_BCC))
+            batch = recipients.get_batch(random.randint(150, SUBSEQUENT_BATCH_BCC))
             if not batch:
                 log(f"{email_address}: No recipients available for subsequent batch")
                 break
