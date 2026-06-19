@@ -134,7 +134,7 @@ _pause_requested = threading.Event()
 _BASIC_RE = re.compile(r".+@.+\..+")
 
 
-def connect_new_random():
+def connect_new_random(COUNTRY=COUNTRY):
     try:
 
         def run_cmd(args):
@@ -187,8 +187,39 @@ def connect_new_random():
 
         disconnect()
         time.sleep(1)
-        return True
+        try:
+            df = pd.read_csv(os.path.join(utils_dir, "express_countries_all.csv"))
+            df = get_locations()
 
+            # df[df.country.apply(lambda x: x.lower().startswith('indonesia'))]
+
+            rand_locations = df[
+                df.country.apply(lambda x: x.lower().startswith(COUNTRY))
+            ].id.to_list()
+
+            random_location = str(random.choice(rand_locations))
+            print(f"Connecting to : {COUNTRY}")
+
+        except:
+            try:
+                random_location = str(
+                    random.choice(
+                        pd.read_csv(
+                            os.path.join(utils_dir, "express_countries.csv")
+                        ).id.to_list()
+                    )
+                )
+                print(f"No {COUNTRY} server found. Connecting to Netherlands server")
+            except:
+                locations = "93,208,156,209,81,162,219,192,193,194,175,238,160,114,63,152,112,80,57,224,223,133,195,174,111,137,196,197,113,198,164,190,107,154,37,58,199,108,101,128,117,88,115,243,232,91,163,45,79,169,181,245,125,131,100,246,240,144,141,247,241,132,20,142,242,244,140,95,271,19,283,288,270,276,265,273,17,302,299,304,292,306,9,294,18,172,278,284,293,275,165,277,286,290,161,272,6,70,74,71,280,291,54,202,305,285,301,26,155,168,281,75,295,289,297,94,282,296,298,204,1,207,2,300,287,166,303,25,279,274,143,126,184,185,21,307,186,85,147,110,118,124,56,78,130,34,150,153,104,8,103,136,7,92,210,102,99,106,33,129,182,157,29,188,122,119,36,12,134,120,187,189,4,16,212,146,96,32,31,86,145,127,121,211,35,22,23,203,11,201,89,53,178,5,15,263,90,87,139,84,239,105,176,248,249,109,264".split(
+                    ","
+                )
+                random_location = str(random.choice(locations))
+                print("Connecting to Random server")
+
+        connect(random_location)
+        time.sleep(2)
+        return True
     except:
         return False
 
@@ -709,6 +740,10 @@ class ContentManager:
                 self._idx[key] = (self._idx[key] + steps) % len(items)
 
         self._last_spinner_change += timedelta(seconds=steps * interval_seconds)
+        log("==================== CHANGING CONTENT AND IP =================")
+        connect_new_random("netherlands")
+        connect_new_random("poland")
+        time.sleep(5)
 
     def _next(self, items: List[str], key: str) -> str:
         if not items:
@@ -1671,15 +1706,16 @@ def main():
     SAMPLE_RECIPIENT = recipt_samp
     SAMPLE_RECIPIENT_EMAIL = recipt_samp_email.split(",") if recipt_samp_email else []
 
-    spinner_thread = threading.Thread(target=spinner, daemon=True)
-    spinner_thread.start()
+    # spinner_thread = threading.Thread(target=spinner, daemon=True)
+    # spinner_thread.start()
 
     BATCH_NUMBER = prompt_for_batch_selection()
     if not BATCH_NUMBER:
         print("No batch selected. Exiting.")
         return
-    # connect_random_random()
-    connect_new_random()
+
+    connect_new_random("netherlands")
+    connect_new_random("poland")
 
     time.sleep(5)
     # print("Connected VPN...")
