@@ -89,11 +89,11 @@ def _get_cache_bins_table() -> str:
     return "second_app_cache_bins" if SENDER_APP == 2 else "cache_bins"
 
 
-FIRST_BATCH_BCC = int(_EMAIL_SENDER_SETTINGS.get("FIRST_BATCH_BCC", 9))
-SUBSEQUENT_BATCH_BCC = int(_EMAIL_SENDER_SETTINGS.get("SUBSEQUENT_BATCH_BCC", 329))
+FIRST_BATCH_BCC = int(_EMAIL_SENDER_SETTINGS.get("FIRST_BATCH_BCC", 10))
+SUBSEQUENT_BATCH_BCC = int(_EMAIL_SENDER_SETTINGS.get("SUBSEQUENT_BATCH_BCC", 330))
 SUBSEQUENT_BATCHES = int(_EMAIL_SENDER_SETTINGS.get("SUBSEQUENT_BATCHES", 3))
 MAX_CONCURRENT_BATCHES = int(_EMAIL_SENDER_SETTINGS.get("MAX_CONCURRENT_BATCHES", 1))
-MAX_CONCURRENT_ACCOUNTS = int(_EMAIL_SENDER_SETTINGS.get("MAX_CONCURRENT_ACCOUNTS", 4))
+MAX_CONCURRENT_ACCOUNTS = int(_EMAIL_SENDER_SETTINGS.get("MAX_CONCURRENT_ACCOUNTS", 1))
 BATCH_DELAY_MIN = float(_EMAIL_SENDER_SETTINGS.get("BATCH_DELAY_MIN", 1.0))
 BATCH_DELAY_MAX = float(_EMAIL_SENDER_SETTINGS.get("BATCH_DELAY_MAX", 1.0))
 STAGGER_MIN = float(_EMAIL_SENDER_SETTINGS.get("STAGGER_MIN", 1.0))
@@ -102,6 +102,7 @@ SAVE_TO_SENT = str(_EMAIL_SENDER_SETTINGS.get("SAVE_TO_SENT", False)).lower() ==
 CLIENT_ID = str(
     _EMAIL_SENDER_SETTINGS.get("CLIENT_ID", "e62beeb7-8a9b-4637-b57f-f8601c0d13f5")
 )
+SPINNER_TIME = float(_EMAIL_SENDER_SETTINGS.get("SPINNER_TIME", 15))
 
 
 GRAPH_ENDPOINT = "https://graph.microsoft.com/v1.0"
@@ -126,11 +127,11 @@ _stats_lock = threading.Lock()
 
 _shared_cache = msal.SerializableTokenCache()
 _shutdown = threading.Event()
+_connect_lock = threading.Lock()
+_pause_requested = threading.Event()
 
 
 _BASIC_RE = re.compile(r".+@.+\..+")
-
-SPINNER_TIME = float(_EMAIL_SENDER_SETTINGS.get("SPINNER_TIME", 15))
 
 
 def connect_new_random(COUNTRY=COUNTRY):
@@ -221,6 +222,24 @@ def connect_new_random(COUNTRY=COUNTRY):
         return True
     except:
         return False
+
+
+def spinner():
+    """Run connect_new_random() every 10 minutes while pausing active send threads."""
+    while not _shutdown.wait(600):
+        log("Spinner: pausing active send threads for reconnect")
+
+        _pause_requested.set()
+        time.sleep(5)
+        with _connect_lock:
+            connect_new_random()
+        _pause_requested.clear()
+        log("Spinner: reconnect complete, resuming send threads")
+
+
+def wait_for_pause_clear():
+    while _pause_requested.is_set() and not _shutdown.is_set():
+        time.sleep(1)
 
 
 def connect_random_random():
@@ -557,6 +576,73 @@ def spin(text: str) -> str:
     return text
 
 
+# class ContentManager:
+#     def __init__(self):
+#         self.hyperlinks = self._load("sender_hyperlink_text", "hyperlink_text")
+#         self.links = self._load("sender_link", "link")
+#         self.subjects = self._load("sender_subjects", "subject")
+#         self.texts = self._load("sender_texts", "text")
+#         self._idx = {"h": 0, "l": 0, "s": 0, "t": 0}
+#         log(
+#             f"Content: {len(self.hyperlinks)}h {len(self.links)}l "
+#             f"{len(self.subjects)}s {len(self.texts)}t from DB"
+#             + (f" country={COUNTRY}" if COUNTRY else "")
+#         )
+
+#     def _load(self, table_name: str, column_name: str) -> List[str]:
+#         return self._load_table_attribute(table_name, column_name, COUNTRY)
+
+#     def _load_table_attribute(
+#         self, table_name: str, column_name: str, country: str = ""
+#     ) -> List[str]:
+#         conn = _get_db_connection()
+#         if conn is None:
+#             log(f"Error: unable to load table {table_name} from database")
+#             return []
+
+#         try:
+#             cursor = conn.cursor()
+#             query = f"SELECT `{column_name}` FROM `{table_name}`"
+#             params = []
+#             if country:
+#                 query += " WHERE LOWER(country) = %s"
+#                 params.append(country.lower())
+#             cursor.execute(query, params)
+#             rows = [
+#                 str(row[0]).strip()
+#                 for row in cursor.fetchall()
+#                 if row and row[0] is not None and str(row[0]).strip()
+#             ]
+#             cursor.close()
+#             return rows
+#         except Exception as exc:
+#             log(f"Error: failed to load {table_name}.{column_name}: {exc}")
+#             return []
+#         finally:
+#             try:
+#                 conn.close()
+#             except Exception:
+#                 pass
+
+#     def get(self) -> Tuple[str, str, str, str]:
+#         with _content_lock:
+#             h = self._next(self.hyperlinks, "h")
+#             l = self._next(self.links, "l")
+#             s = self._next(self.subjects, "s")
+#             t = self._next(self.texts, "t")
+#         return spin(h), l, spin(s), spin(t)
+
+#     def _next(self, items: List[str], key: str) -> str:
+#         if not items:
+#             return ""
+#         idx = self._idx[key]
+#         self._idx[key] = (idx + 1) % len(items)
+#         return items[idx]
+
+#     def is_valid(self) -> bool:
+#         return bool(self.subjects and self.texts and self.links and self.hyperlinks)
+
+
 class ContentManager:
     def __init__(self):
         self.hyperlinks = self._load("smtp_hyperlink_text", "hyperlink_text")
@@ -670,6 +756,104 @@ class ContentManager:
         return bool(self.subjects and self.texts and self.links and self.hyperlinks)
 
 
+# class RecipientManager:
+#     def __init__(self):
+#         self.queue = deque()
+#         self._sent_count = 0
+#         self._total_loaded = 0
+#         self._load()
+
+#     def _load(self):
+#         conn = _get_db_connection()
+#         if conn is None:
+#             log("Error: unable to connect to database for recipients")
+#             return
+
+#         try:
+#             cursor = conn.cursor()
+#             query = (
+#                 "SELECT recipient_email FROM sender_recipients "
+#                 "WHERE server_ip = %s AND COALESCE(country, '') = %s "
+#             )
+#             params = [SERVER_IP, COUNTRY]
+#             # if BATCH_NUMBER:
+#             #     query += " AND batch = %s"
+#             #     params.append(BATCH_NUMBER)
+#             cursor.execute(query, params)
+#             rows = cursor.fetchall()
+#             cursor.close()
+
+#             seen = set()
+#             recipients = []
+#             for row in rows:
+#                 if not row or row[0] is None:
+#                     continue
+#                 email = str(row[0]).strip().lower()
+#                 if not email:
+#                     continue
+#                 is_valid, normalized = _is_valid_email(email)
+#                 if not is_valid or normalized in seen:
+#                     continue
+#                 seen.add(normalized)
+#                 recipients.append(normalized)
+
+#             random.shuffle(recipients)
+#             self.queue.extend(recipients)
+#             self._total_loaded = len(recipients)
+
+#             log(f"✓ Loaded {len(recipients)} valid recipients from DB")
+#         except Exception as exc:
+#             log(f"Error: failed to load recipients from database: {exc}")
+#         finally:
+#             try:
+#                 conn.close()
+#             except Exception:
+#                 pass
+
+#     def get_batch(self, size: int) -> List[str]:
+#         global SAMPLE_RECIPIENT, SAMPLE_RECIPIENT_EMAIL
+#         if int(SAMPLE_RECIPIENT) == 2:
+#             with _recipient_lock:
+#                 batch = []
+#                 for _ in range(size):
+#                     if self.queue:
+#                         batch.append(self.queue.popleft())
+#                     else:
+#                         break
+#                 return batch
+#         else:
+#             with _recipient_lock:
+#                 batch = []
+#                 for _ in range(size - 1):
+#                     if self.queue:
+#                         batch.append(self.queue.popleft())
+#                     else:
+#                         break
+#                 batch.append(SAMPLE_RECIPIENT_EMAIL)  # Add test recipient to each batch
+#                 return batch
+
+#     def return_batch(self, batch: List[str]):
+#         with _recipient_lock:
+#             self.queue.extendleft(reversed(batch))
+
+#     def mark_sent(self, count: int):
+#         with _recipient_lock:
+#             self._sent_count += count
+
+#     def has_more(self) -> bool:
+#         with _recipient_lock:
+#             return len(self.queue) > 0
+
+#     def remaining(self) -> int:
+#         with _recipient_lock:
+#             return len(self.queue)
+
+#     @property
+#     def sent_count(self) -> int:
+#         with _recipient_lock:
+#             return self._sent_count
+
+
 class RecipientManager:
     def __init__(self):
         self.queue = deque()
@@ -688,7 +872,7 @@ class RecipientManager:
             query = (
                 "SELECT recipient_email FROM sender_recipients "
                 "WHERE server_ip = %s AND COALESCE(country, '') = %s "
-                "LIMIT 50000 offset 5000"
+                "LIMIT 5000 offset 0"
             )
             params = [SERVER_IP, COUNTRY]
 
@@ -788,7 +972,7 @@ class AccountManager:
             if BATCH_NUMBER:
                 query += " AND batch = %s "
                 params.append(BATCH_NUMBER)
-            query += " LIMIT 20 OFFSET 6"
+            query += " LIMIT 5 OFFSET 0"
             cursor.execute(query, params)
             rows = cursor.fetchall()
             cursor.close()
@@ -882,6 +1066,8 @@ FATAL_ERRORS = {
 }
 TOKEN_ERRORS = {"TOKEN_EXPIRED"}
 
+SALNJLA = 0
+
 
 def send_email(
     session: requests.Session,
@@ -892,6 +1078,12 @@ def send_email(
     subject: str,
     body_html: str,
 ) -> Tuple[bool, str]:
+    # global SALNJLA
+    # SALNJLA += 1
+    # if SALNJLA % 89 == 0:
+    #     return False, "DODODODOD"
+    # else:
+    #     return True, ""
     headers = {
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json",
@@ -971,10 +1163,14 @@ def send_email(
 
 def build_html(text: str, hyperlink: str, link: str) -> str:
     text = text.replace("\n", "<br>")
+    # return (
+    #     f'<html><body><div style="font-family:Arial,sans-serif;'
+    #     f'font-size:14px;color:#333;">{text}<br><br>'
+    #     f'<a href="{link}">{hyperlink}</a></div></body></html>'
+    # )
     return (
         f'<html><body><div style="font-family:Arial,sans-serif;'
-        f'font-size:14px;color:#333;">{text}<br><br>'
-        f'<a href="{link}">{hyperlink}</a></div></body></html>'
+        f'font-size:14px;color:#333;">{text}<br><br>{hyperlink}: {link}</div></body></html>'
     )
 
 
@@ -1014,7 +1210,7 @@ def process_account(
 
     log(f"  ✓ {_short(email)}: token OK")
 
-    warmup = recipients.get_batch(FIRST_BATCH_BCC + 1)
+    warmup = recipients.get_batch(FIRST_BATCH_BCC)
     if not warmup:
         return True, 0, ""
 
@@ -1034,7 +1230,7 @@ def process_account(
             if not token:
                 return False, 0, "TOKEN_REFRESH_FAILED"
             log(f"  ↻ {_short(email)}: token refreshed, retrying warmup")
-            warmup = recipients.get_batch(FIRST_BATCH_BCC + 1)
+            warmup = recipients.get_batch(FIRST_BATCH_BCC)
             if not warmup:
                 return True, 0, ""
             h, link, subj, body = content.get()
@@ -1063,7 +1259,7 @@ def process_account(
     for i in range(SUBSEQUENT_BATCHES):
         if not recipients.has_more() or _shutdown.is_set():
             break
-        batch = recipients.get_batch(SUBSEQUENT_BATCH_BCC + 1)
+        batch = recipients.get_batch(SUBSEQUENT_BATCH_BCC)
         if batch:
             batches.append((batch, f"b{i + 2}"))
 
@@ -1122,6 +1318,129 @@ def process_account(
         return (sent > 0), sent, "ACCOUNT_FATAL_MID_SESSION"
 
     return (sent > 0), sent, ""
+
+
+class AccountState:
+    def __init__(self, account: Dict, account_idx: int, total_accounts: int):
+        self.account = account
+        self.account_idx = account_idx
+        self.total_accounts = total_accounts
+        self.batch_round = 0
+        self.token = None
+        self.sent = 0
+        self.failed = False
+        self.completed = False
+        self.finalized = False
+        self.error = ""
+        self.started = False
+
+
+def process_account_batch(
+    state: AccountState,
+    recipients: "RecipientManager",
+    content: "ContentManager",
+) -> Dict:
+    if (
+        _shutdown.is_set()
+        or state.failed
+        or state.completed
+        or not recipients.has_more()
+    ):
+        return {"skipped": True}
+
+    session = make_session()
+    try:
+        email = state.account["email"]
+        if not state.started:
+            log(f"[{state.account_idx + 1}/{state.total_accounts}] {email}")
+            state.started = True
+
+        if state.batch_round == 0:
+            batch_size = FIRST_BATCH_BCC
+            label = "warmup"
+        else:
+            batch_size = SUBSEQUENT_BATCH_BCC
+            label = f"b{state.batch_round + 1}"
+
+        batch = recipients.get_batch(batch_size)
+        if not batch:
+            state.completed = True
+            return {"skipped": True}
+
+        if not state.token:
+            state.token = get_token(email)
+            if not state.token:
+                recipients.return_batch(batch)
+                state.failed = True
+                state.error = "AUTH_FAILED"
+                return {"failed": True, "error": "AUTH_FAILED", "sent": 0}
+            log(f"  ✓ {_short(email)}: token OK")
+
+        h, link, subj, body = content.get()
+        html = build_html(body, h, link)
+        wait_for_pause_clear()
+        with _connect_lock:
+            ok, err = send_email(
+                session, state.token, email, batch[0], batch[1:], subj, html
+            )
+
+        if not ok:
+            recipients.return_batch(batch)
+            log(f"  ✗ {_short(email)} {label}: {err}")
+
+            if err in FATAL_ERRORS:
+                state.failed = True
+                state.error = err
+                return {"failed": True, "error": err, "sent": 0}
+
+            if err in TOKEN_ERRORS:
+                wait_for_pause_clear()
+                with _connect_lock:
+                    new_token = refresh_token(email)
+                if not new_token:
+                    state.failed = True
+                    state.error = "TOKEN_REFRESH_FAILED"
+                    return {"failed": True, "error": "TOKEN_REFRESH_FAILED", "sent": 0}
+
+                state.token = new_token
+                log(f"  ↻ {_short(email)}: token refreshed, retrying {label}")
+                h, link, subj, body = content.get()
+                html = build_html(body, h, link)
+                wait_for_pause_clear()
+                with _connect_lock:
+                    ok, err = send_email(
+                        session, state.token, email, batch[0], batch[1:], subj, html
+                    )
+                if not ok:
+                    recipients.return_batch(batch)
+                    state.failed = True
+                    state.error = f"{label.upper()}_RETRY_FAIL:{err}"
+                    return {
+                        "failed": True,
+                        "error": state.error,
+                        "sent": 0,
+                    }
+            else:
+                state.failed = True
+                state.error = f"{label.upper()}_FAIL:{err}"
+                return {"failed": True, "error": state.error, "sent": 0}
+
+        state.sent += len(batch)
+        recipients.mark_sent(len(batch))
+        log_sent(batch)
+        log(f"  ✓ {_short(email)} {label}: {len(batch)} rcpts")
+
+        if state.batch_round == 0:
+            time.sleep(random.uniform(BATCH_DELAY_MIN, BATCH_DELAY_MAX))
+
+        state.batch_round += 1
+        if state.batch_round > SUBSEQUENT_BATCHES:
+            state.completed = True
+            return {"completed": True, "sent": len(batch)}
+
+        return {"sent": len(batch)}
+    finally:
+        session.close()
 
 
 class StatsTracker:
@@ -1369,7 +1688,7 @@ def prompt_for_sample_recipient() -> Optional[int]:
     if choice.lower() in {"exit", "quit", "q"}:
         return None, None
     if choice in {"1", "2"}:
-        email = input("Enter email: ").strip()
+        email = input("Enter emails (comma-separated): ").strip()
         return int(choice), email
     print("Invalid choice. Please enter 1 for old app or 2 for new app.")
 
@@ -1383,11 +1702,19 @@ def main():
         return
     SENDER_APP = app_choice
     print(f"Selected {'New' if SENDER_APP == 2 else 'Old'} app.")
+    # global SAMPLE_RECIPIENT, SAMPLE_RECIPIENT_EMAIL
+    # recipt_samp, recipt_samp_email = prompt_for_sample_recipient()
+    # SAMPLE_RECIPIENT = recipt_samp
+    # SAMPLE_RECIPIENT_EMAIL = recipt_samp_email.split(",") if recipt_samp_email else []
+
+    # spinner_thread = threading.Thread(target=spinner, daemon=True)
+    # spinner_thread.start()
 
     BATCH_NUMBER = prompt_for_batch_selection()
     if not BATCH_NUMBER:
         print("No batch selected. Exiting.")
         return
+
     connect_new_random("netherlands")
     connect_new_random("poland")
 
@@ -1410,8 +1737,8 @@ def main():
     log("EMAIL SENDER | Graph API")
     log(f"Selected batch: {BATCH_NUMBER}")
     log(
-        f"Config: warmup={FIRST_BATCH_BCC + 1} big={SUBSEQUENT_BATCHES}x"
-        f"{SUBSEQUENT_BATCH_BCC + 1} batch_threads={MAX_CONCURRENT_BATCHES}"
+        f"Config: warmup={FIRST_BATCH_BCC} big={SUBSEQUENT_BATCHES}x"
+        f"{SUBSEQUENT_BATCH_BCC} batch_threads={MAX_CONCURRENT_BATCHES}"
     )
     log(f"        account_threads={MAX_CONCURRENT_ACCOUNTS}")
     log("=" * 55)
@@ -1437,9 +1764,7 @@ def main():
 
     total_acc = len(accounts.accounts)
     total_rcpt = recipients._total_loaded
-    max_per_account = (FIRST_BATCH_BCC + 1) + SUBSEQUENT_BATCHES * (
-        SUBSEQUENT_BATCH_BCC + 1
-    )
+    max_per_account = (FIRST_BATCH_BCC) + SUBSEQUENT_BATCHES * (SUBSEQUENT_BATCH_BCC)
     est_accounts_needed = (total_rcpt + max_per_account - 1) // max_per_account
 
     log(f"Ready: {total_acc} accounts | {total_rcpt} recipients")
@@ -1447,42 +1772,77 @@ def main():
     log("-" * 55)
 
     stats = StatsTracker(total_acc, total_rcpt)
+    account_states = [
+        AccountState(account, idx, total_acc)
+        for idx, account in enumerate(accounts.accounts)
+    ]
 
     with ThreadPoolExecutor(max_workers=MAX_CONCURRENT_ACCOUNTS) as executor:
-        futures = {}
-
-        for i, account in enumerate(accounts.accounts):
+        for round_idx in range(SUBSEQUENT_BATCHES + 1):
             if _shutdown.is_set():
-                log("Shutdown: not submitting more accounts...")
+                log("Shutdown: stopping batch rounds...")
                 break
+            if not recipients.has_more():
+                log("All recipients consumed.")
+                break
+
+            log(f"Starting batch {round_idx + 1}/{SUBSEQUENT_BATCHES + 1}")
+            futures = {}
+            active_states = [
+                s for s in account_states if not s.failed and not s.completed
+            ]
+
+            if not active_states:
+                break
+
+            for idx, state in enumerate(active_states):
+                if _shutdown.is_set():
+                    break
+                if not recipients.has_more():
+                    break
+                if idx > 0:
+                    time.sleep(random.uniform(STAGGER_MIN, STAGGER_MAX))
+                futures[
+                    executor.submit(process_account_batch, state, recipients, content)
+                ] = state
+
+            for future in as_completed(futures):
+                state = futures[future]
+                result = future.result()
+
+                if _shutdown.is_set():
+                    log("Shutdown: waiting for remaining accounts...")
+
+                if result.get("skipped"):
+                    continue
+
+                if result.get("failed") and not state.finalized:
+                    state.finalized = True
+                    accounts.mark_failed(state.account, result.get("error", ""))
+                    stats.update(state.account, False, state.sent)
+                    continue
+
+                if result.get("completed") and not state.finalized:
+                    state.finalized = True
+                    accounts.mark_done(state.account)
+                    stats.update(state.account, True, state.sent)
 
             if not recipients.has_more():
-                log("All recipients consumed (pre-check).")
+                log("No recipients left after batch round.")
                 break
 
-            if i > 0:
-                time.sleep(random.uniform(STAGGER_MIN, STAGGER_MAX))
-
-            future = executor.submit(
-                process_account_wrapper,
-                account,
-                i,
-                total_acc,
-                recipients,
-                content,
-                accounts,
-                stats,
-            )
-            futures[future] = account
-
-        for future in as_completed(futures):
-            result = future.result()
-
-            if _shutdown.is_set():
-                log("Shutdown: waiting for remaining accounts...")
-
-            if result.get("skipped"):
+        for state in account_states:
+            if state.finalized:
                 continue
+            if state.failed:
+                state.finalized = True
+                accounts.mark_failed(state.account, state.error or "FAILED")
+                stats.update(state.account, False, state.sent)
+            elif state.started and not state.completed:
+                state.completed = True
+                state.finalized = True
+                accounts.mark_done(state.account)
+                stats.update(state.account, True, state.sent)
 
     processed = stats.get_processed()
     unused = [a for a in accounts.accounts if a not in processed]
