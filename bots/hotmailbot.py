@@ -653,7 +653,7 @@ def read_input_emails_txt_data():
 
 
 def load_proxies():
-    with open(proxies_dir, "r") as f:
+    with open("proxies_dir", "r") as f:
         content = f.read().split("\n")
 
     proxy_data = [
@@ -2177,7 +2177,7 @@ def go_to_outlook(driver):
     """
     try:
         driver.get(OUTLOOK_URL)
-        click_inbox_button(driver)
+        # click_inbox_button(driver)
         return True
     except:
         return False
@@ -2188,7 +2188,7 @@ def get_bitly_code_from_email(driver):
     Gets the code from email
     """
     try:
-        click_inbox_button(driver)
+        # click_inbox_button(driver)
         retries = 0
         EMAIL_ELEMENTS = (By.CSS_SELECTOR, 'div[role="option"]')
 
@@ -2229,7 +2229,8 @@ def get_bitly_code_from_email(driver):
                 if retries % 2 == 0:
                     click_outlook_inbox_other(driver)
                 else:
-                    click_focused_button(driver)
+                    pass
+                    # click_focused_button(driver)
 
                 if retries % 10 == 0:
                     go_to_outlook(driver)
@@ -2280,7 +2281,7 @@ def bitly_click_verify_button(driver):
 
 def click_outlook_inbox_other(driver):
     try:
-        click_inbox_button(driver)
+        # click_inbox_button(driver)
         BUTTON_ELEMENT = (By.CSS_SELECTOR, 'button[name="Other"]')
 
         button = WebDriverWait(driver, wait_time).until(
@@ -2370,10 +2371,10 @@ def sign_up_to_bitly_and_verify_otp(driver, email_address, password):
 
         driver.switch_to.new_window("tab")
         driver.switch_to.window(driver.window_handles[1])
-        go_to_bitly(driver)
+        # go_to_bitly(driver)
 
-        signup_status = sign_up_to_bitly(driver, email_address, password)
-
+        # signup_status = sign_up_to_bitly(driver, email_address, password)
+        signup_status = True
         driver.switch_to.window(driver.window_handles[0])
 
         if signup_status:

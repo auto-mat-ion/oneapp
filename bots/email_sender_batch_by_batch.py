@@ -872,7 +872,7 @@ class RecipientManager:
             query = (
                 "SELECT recipient_email FROM sender_recipients "
                 "WHERE server_ip = %s AND COALESCE(country, '') = %s "
-                "LIMIT 1000000 offset 47000"
+                "LIMIT 1000000 offset 500000"
             )
             params = [SERVER_IP, COUNTRY]
 
