@@ -872,7 +872,7 @@ class RecipientManager:
             query = (
                 "SELECT recipient_email FROM sender_recipients "
                 "WHERE server_ip = %s AND COALESCE(country, '') = %s "
-                "LIMIT 100000 offset 10000"
+                "LIMIT 1000000 offset 47000"
             )
             params = [SERVER_IP, COUNTRY]
 
@@ -972,7 +972,7 @@ class AccountManager:
             if BATCH_NUMBER:
                 query += " AND batch = %s "
                 params.append(BATCH_NUMBER)
-            query += " LIMIT 30 OFFSET 25"
+            query += " LIMIT 1000 OFFSET 60"
             cursor.execute(query, params)
             rows = cursor.fetchall()
             cursor.close()
