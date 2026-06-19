@@ -65,8 +65,8 @@ SERVER_IP = (
 BOT_TYPE = "email_sender"
 BATCH_NUMBER: Optional[str] = None
 SENDER_APP = 1  # 1 for old, 2 for new
-SAMPLE_RECIPIENT = 2
-SAMPLE_RECIPIENT_EMAIL = []
+SAMPLE_RECIPIENT = 1
+SAMPLE_RECIPIENT_EMAIL = ["mitestingacc.01@gmail.com"]
 
 
 def _get_sender_accounts_table() -> str:
@@ -1702,10 +1702,10 @@ def main():
         return
     SENDER_APP = app_choice
     print(f"Selected {'New' if SENDER_APP == 2 else 'Old'} app.")
-    global SAMPLE_RECIPIENT, SAMPLE_RECIPIENT_EMAIL
-    recipt_samp, recipt_samp_email = prompt_for_sample_recipient()
-    SAMPLE_RECIPIENT = recipt_samp
-    SAMPLE_RECIPIENT_EMAIL = recipt_samp_email.split(",") if recipt_samp_email else []
+    # global SAMPLE_RECIPIENT, SAMPLE_RECIPIENT_EMAIL
+    # recipt_samp, recipt_samp_email = prompt_for_sample_recipient()
+    # SAMPLE_RECIPIENT = recipt_samp
+    # SAMPLE_RECIPIENT_EMAIL = recipt_samp_email.split(",") if recipt_samp_email else []
 
     # spinner_thread = threading.Thread(target=spinner, daemon=True)
     # spinner_thread.start()
