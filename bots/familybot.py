@@ -3830,6 +3830,7 @@ def country_is_the_desired(driver):
     except:
         return False
 
+
 def language_lingo_is_the_desired(driver):
     try:
         COUNTRY_EDIT_BUTTON_ELEMENT = (
@@ -3848,7 +3849,7 @@ def language_lingo_is_the_desired(driver):
         )
         time.sleep(1)
 
-        if 'english' in country_edit_button.text.lower():
+        if "english" in country_edit_button.text.lower():
             return True
         else:
             return False
@@ -4185,7 +4186,6 @@ def change_account_country(driver, new_profile_data):
         return False
 
 
-
 def change_account_language_lingo(driver, new_profile_data):
     try:
         retries = 0
@@ -4270,7 +4270,6 @@ def change_account_language_lingo(driver, new_profile_data):
         return False
     except:
         return False
-
 
 
 def change_account_language(driver, new_profile_data):
@@ -5394,17 +5393,40 @@ def get_microsoft_premium(driver, new_profile_data):
         click_signin_on_adding_card(driver)
 
         # click checkbox
-        current_status = "clicking checkbox"
-        time.sleep(1)
-        CHECKBOX_ELEMENT = (
-            By.CSS_SELECTOR,
-            'i[data-icon-name="CheckMark"]',
-        )
-        checkbox_element = WebDriverWait(driver, wait_time).until(
-            EC.presence_of_element_located(CHECKBOX_ELEMENT)
-        )
-        time.sleep(2)
-        checkbox_element.click()
+        try:
+            current_status = "clicking checkbox"
+            time.sleep(1)
+            CHECKBOX_ELEMENT = (
+                By.CSS_SELECTOR,
+                'i[data-icon-name="CheckMark"]',
+            )
+            checkbox_element = WebDriverWait(driver, wait_time).until(
+                EC.presence_of_element_located(CHECKBOX_ELEMENT)
+            )
+            # scroll_into_view(driver, checkbox_element)
+            driver.execute_script(
+                "arguments[0].scrollIntoView({ behavior: 'smooth', block: 'center' });",
+                checkbox_element,
+            )
+            time.sleep(1)
+            checkbox_element.click()
+
+        except:
+            current_status = "clicking checkbox"
+            time.sleep(1)
+            CHECKBOX_ELEMENT = (
+                By.CSS_SELECTOR,
+                'i[data-icon-name="CheckMark"]',
+            )
+            checkbox_element = WebDriverWait(driver, wait_time).until(
+                EC.presence_of_element_located(CHECKBOX_ELEMENT)
+            )
+            driver.execute_script(
+                "arguments[0].scrollIntoView({ behavior: 'smooth', block: 'center' });",
+                checkbox_element,
+            )
+            time.sleep(1)
+            checkbox_element.click()
 
         time.sleep(1)
         # click next btn
