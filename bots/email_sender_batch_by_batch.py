@@ -66,7 +66,7 @@ BOT_TYPE = "email_sender"
 BATCH_NUMBER: Optional[str] = None
 SENDER_APP = 1  # 1 for old, 2 for new
 SAMPLE_RECIPIENT = 1
-SAMPLE_RECIPIENT_EMAIL = ["mitestingacc.01@gmail.com"]
+SAMPLE_RECIPIENT_EMAIL = ["stacho1988@gmail.com"]
 
 
 def _get_sender_accounts_table() -> str:
