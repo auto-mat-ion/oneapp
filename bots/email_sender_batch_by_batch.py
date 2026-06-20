@@ -1210,7 +1210,9 @@ def process_account(
 
     log(f"  ✓ {_short(email)}: token OK")
 
-    warmup = recipients.get_batch(FIRST_BATCH_BCC)
+    # warmup = recipients.get_batch(FIRST_BATCH_BCC)
+    warmup = recipients.get_batch(random.randint(1, FIRST_BATCH_BCC))
+
     if not warmup:
         return True, 0, ""
 
@@ -1259,7 +1261,8 @@ def process_account(
     for i in range(SUBSEQUENT_BATCHES):
         if not recipients.has_more() or _shutdown.is_set():
             break
-        batch = recipients.get_batch(SUBSEQUENT_BATCH_BCC)
+        batch = recipients.get_batch(random.randint(150, SUBSEQUENT_BATCH_BCC))
+
         if batch:
             batches.append((batch, f"b{i + 2}"))
 
