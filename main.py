@@ -30,10 +30,10 @@ if bot == 1:
 elif bot == 2:
     run_hotmailbot()
 elif bot == 3:
-    # run_password_changerbot()
-    main2()
+    run_password_changerbot()
+    # main2()
 elif bot == 4:
-    main()
+    main2()
 elif bot == 5:
     run_familybot_share()
 elif bot == 6:
