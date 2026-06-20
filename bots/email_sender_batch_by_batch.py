@@ -872,7 +872,7 @@ class RecipientManager:
             query = (
                 "SELECT recipient_email FROM sender_recipients "
                 "WHERE server_ip = %s AND COALESCE(country, '') = %s "
-                "LIMIT 1000000 offset 500000"
+                "LIMIT 1000000 offset 0"
             )
             params = [SERVER_IP, COUNTRY]
 
@@ -972,7 +972,7 @@ class AccountManager:
             if BATCH_NUMBER:
                 query += " AND batch = %s "
                 params.append(BATCH_NUMBER)
-            query += " LIMIT 1000 OFFSET 60"
+            query += " LIMIT 1000 OFFSET 0"
             cursor.execute(query, params)
             rows = cursor.fetchall()
             cursor.close()
@@ -1386,12 +1386,22 @@ def process_account_batch(
 
         if not ok:
             recipients.return_batch(batch)
-            log(f"  ✗ {_short(email)} {label}: {err}")
+            log(
+                f"  ✗ {_short(email)} {label}: {err} | "
+                f"total success=0 total fail={len(batch)}"
+            )
 
             if err in FATAL_ERRORS:
                 state.failed = True
                 state.error = err
-                return {"failed": True, "error": err, "sent": 0}
+                return {
+                    "failed": True,
+                    "error": err,
+                    "sent": 0,
+                    "batch_success": 0,
+                    "batch_fail": len(batch),
+                    "label": label,
+                }
 
             if err in TOKEN_ERRORS:
                 wait_for_pause_clear()
@@ -1400,7 +1410,14 @@ def process_account_batch(
                 if not new_token:
                     state.failed = True
                     state.error = "TOKEN_REFRESH_FAILED"
-                    return {"failed": True, "error": "TOKEN_REFRESH_FAILED", "sent": 0}
+                    return {
+                        "failed": True,
+                        "error": "TOKEN_REFRESH_FAILED",
+                        "sent": 0,
+                        "batch_success": 0,
+                        "batch_fail": len(batch),
+                        "label": label,
+                    }
 
                 state.token = new_token
                 log(f"  ↻ {_short(email)}: token refreshed, retrying {label}")
@@ -1419,16 +1436,29 @@ def process_account_batch(
                         "failed": True,
                         "error": state.error,
                         "sent": 0,
+                        "batch_success": 0,
+                        "batch_fail": len(batch),
+                        "label": label,
                     }
             else:
                 state.failed = True
                 state.error = f"{label.upper()}_FAIL:{err}"
-                return {"failed": True, "error": state.error, "sent": 0}
+                return {
+                    "failed": True,
+                    "error": state.error,
+                    "sent": 0,
+                    "batch_success": 0,
+                    "batch_fail": len(batch),
+                    "label": label,
+                }
 
         state.sent += len(batch)
         recipients.mark_sent(len(batch))
         log_sent(batch)
-        log(f"  ✓ {_short(email)} {label}: {len(batch)} rcpts")
+        log(
+            f"  ✓ {_short(email)} {label}: {len(batch)} rcpts | "
+            f"total success={len(batch)} total fail=0"
+        )
 
         if state.batch_round == 0:
             time.sleep(random.uniform(BATCH_DELAY_MIN, BATCH_DELAY_MAX))
@@ -1436,9 +1466,20 @@ def process_account_batch(
         state.batch_round += 1
         if state.batch_round > SUBSEQUENT_BATCHES:
             state.completed = True
-            return {"completed": True, "sent": len(batch)}
+            return {
+                "completed": True,
+                "sent": len(batch),
+                "batch_success": len(batch),
+                "batch_fail": 0,
+                "label": label,
+            }
 
-        return {"sent": len(batch)}
+        return {
+            "sent": len(batch),
+            "batch_success": len(batch),
+            "batch_fail": 0,
+            "label": label,
+        }
     finally:
         session.close()
 
@@ -1806,6 +1847,9 @@ def main2():
                     executor.submit(process_account_batch, state, recipients, content)
                 ] = state
 
+            batch_success = 0
+            batch_fail = 0
+
             for future in as_completed(futures):
                 state = futures[future]
                 result = future.result()
@@ -1815,6 +1859,9 @@ def main2():
 
                 if result.get("skipped"):
                     continue
+
+                batch_success += int(not result.get("failed", False))
+                batch_fail += int(bool(result.get("failed", False)))
 
                 if result.get("failed") and not state.finalized:
                     state.finalized = True
@@ -1826,6 +1873,11 @@ def main2():
                     state.finalized = True
                     accounts.mark_done(state.account)
                     stats.update(state.account, True, state.sent)
+
+            log(
+                f"Batch {round_idx + 1}/{SUBSEQUENT_BATCHES + 1} summary: "
+                f"total success={batch_success} total fail={batch_fail}"
+            )
 
             if not recipients.has_more():
                 log("No recipients left after batch round.")
