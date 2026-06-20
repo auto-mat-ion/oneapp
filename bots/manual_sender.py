@@ -3561,26 +3561,12 @@ def email_sending_process(
             return False, "Error entering email subject"
         time.sleep(2)
 
-        if not click_send_button(driver):
-            print("Error clicking send button")
+        with _content_lock:
+            if not click_send_button(driver):
+                print("Error clicking send button")
 
-            return False, "Error clicking send button"
+                return False, "Error clicking send button"
         time.sleep(2)
-        # retries = 0
-        # while retries < 3:
-        #     if click_cancel_dialog_box(driver):
-        #         if not enter_subject(driver, subject):
-        #             print("Error entering email subject")
-        #             return False, "Error entering email subject"
-
-        #         if not click_send_button(driver):
-        #             print("Error clicking send button")
-        #             return False, "Error clicking send button"
-
-        #         if missing_subject_dialog_box(driver):
-        #             retries += 1
-        #     else:
-        #         break
 
         if not missing_subject_dialog_box(driver):
             return True, "Email sent successfully"
