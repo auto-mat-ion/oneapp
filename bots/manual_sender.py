@@ -194,6 +194,7 @@ SUBSEQUENT_BATCH_BCC = int(get_setting("SUBSEQUENT_BATCH_BCC", 320))
 SUBSEQUENT_BATCHES = int(get_setting("SUBSEQUENT_BATCHES", 3))
 MAX_CONCURRENT_ACCOUNTS = int(get_setting("MAX_CONCURRENT_ACCOUNTS", 5))
 SPINNER_TIME = float(get_setting("SPINNER_TIME", 15))
+VPN_COUNTRY = get_setting("VPN_COUNTRY", "poland").lower()
 SAMPLE_RECIPIENT = 1
 
 if SERVER_IP in ["51.77.216.17", "51.75.119.199"]:
@@ -409,7 +410,7 @@ def connect_new_random_old():
         return False
 
 
-def connect_new_random(COUNTRY=COUNTRY):
+def connect_new_random(COUNTRY=VPN_COUNTRY):
     try:
 
         def run_cmd(args):
@@ -3332,13 +3333,12 @@ def enter_subject(driver, subject):
 
         subject_input_element.clear()
 
-        # with _log_lock:
-        # pyperclip.copy(subject)
-        # subject_input_element.send_keys(Keys.CONTROL + "v")
+        with _log_lock:
+            pyperclip.copy(subject)
+            subject_input_element.send_keys(Keys.CONTROL + "v")
+            time.sleep(0.5)
 
-        subject_input_element.send_keys(subject)
-
-        # time.sleep(0.5)
+        # subject_input_element.send_keys(subject)
 
         return True
     except Exception as e:
@@ -3398,11 +3398,11 @@ def enter_email_body(driver, body, hyperlink, link):
         email_body_input_element.clear()
         # time.sleep(0.2)
 
-        # with _log_lock:
-        #     pyperclip.copy(body + "\n\n")
-        #     email_body_input_element.send_keys(Keys.CONTROL + "v")
+        with _log_lock:
+            pyperclip.copy(body + "\n\n")
+            email_body_input_element.send_keys(Keys.CONTROL + "v")
 
-        email_body_input_element.send_keys(body + "\n\n" + f"{hyperlink}: {link}")
+        # email_body_input_element.send_keys(body + "\n\n" + f"{hyperlink}: {link}")
         time.sleep(0.2)
 
         return True
@@ -3926,10 +3926,12 @@ class ContentManager:
 
         self._last_spinner_change += timedelta(seconds=steps * interval_seconds)
         connect_new_random("netherlands")
-        connect_new_random("poland")
+        connect_new_random(VPN_COUNTRY)
         log(
             f"Spinner updated: {steps} steps, next change at {self._last_spinner_change.strftime('%Y-%m-%d %H:%M:%S')}"
         )
+
+        time.sleep(5)
 
     def _next(self, items: List[str], key: str) -> str:
         if not items:
@@ -4117,7 +4119,6 @@ def initialize_new_profile(new_profile_data):
     """
     try:
         print("\n--------------------------------------\n")
-        # connect_new_random()
 
         email_address = new_profile_data.get("email")
         password = new_profile_data.get("pass")
@@ -4823,7 +4824,7 @@ def get_action_status() -> bool:
 
 
 def runner():
-    connect_new_random("poland")
+    connect_new_random(VPN_COUNTRY)
     time.sleep(5)
 
     accounts = AccountManager()

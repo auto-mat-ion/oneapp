@@ -4,10 +4,11 @@
     "DB_USER": "root",
     "DB_PASSWORD": "root101.",
     "DB_NAME": "oneapp",
-    "SERVER_IP": "13.140.181.21"
+    "SERVER_IP": "51.91.59.107"
   },
   "email_sender": {
     "COUNTRY": "Netherlands",
+    "VPN_COUNTRY": "Denmark",
     "FIRST_BATCH_BCC": 9,
     "SUBSEQUENT_BATCH_BCC": 319,
     "SUBSEQUENT_BATCHES": 3,
@@ -20,6 +21,7 @@
     "SAVE_TO_SENT": false,
     "CLIENT_ID": "e62beeb7-8a9b-4637-b57f-f8601c0d13f5",
     "SPINNER_TIME": 15,
+    "BATCH_WAIT_TIME": 30,
     "SERVER_IPS": [
       "51.91.59.107",
       "51.77.216.17",
@@ -135,6 +137,7 @@
     "OUTLOOK_URL": "https://outlook.live.com/",
     "MAX_SIGNIN_THREADS": 1,
     "COUNTRY": "Netherlands",
+    "VPN_COUNTRY": "Sweden",
     "EMAIL_WAIT_TIME": 120,
     "SAVE_COOKIES": "true",
     "EXPRESSVPN_CMD": "C:\\Program Files (x86)\\ExpressVPN\\services\\ExpressVPN.CLI.exe",
