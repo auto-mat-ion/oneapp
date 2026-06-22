@@ -197,14 +197,19 @@ SPINNER_TIME = float(get_setting("SPINNER_TIME", 15))
 VPN_COUNTRY = get_setting("VPN_COUNTRY", "poland").lower()
 SAMPLE_RECIPIENT = 1
 
-if SERVER_IP in ["51.77.216.17", "51.75.119.199"]:
-    SAMPLE_RECIPIENT_EMAIL = ["mitestingacc.01@gmail.com"]
-elif SERVER_IP in ["13.140.161.126", "13.140.181.21"]:
-    SAMPLE_RECIPIENT_EMAIL = ["mitestingacc.02@gmail.com"]
+if SERVER_IP in ["51.77.216.17"]:
+    SAMPLE_RECIPIENT_EMAIL = ["mitestingacc.01@gmail.com", "stacho1988@gmail.com"]
+elif SERVER_IP in ["13.140.161.126"]:
+    SAMPLE_RECIPIENT_EMAIL = [
+        "mitestingacc.02@gmail.com",
+        "stacash.affiliate@gmail.com",
+    ]
 elif SERVER_IP in ["13.140.181.14", "13.140.181.16"]:
     SAMPLE_RECIPIENT_EMAIL = ["mitestingacc.03@gmail.com"]
 else:
     SAMPLE_RECIPIENT_EMAIL = []
+
+
 # elif SERVER_IP == ["51.77.216.17"]:
 #     SAMPLE_RECIPIENT_EMAIL = ["mitestingacc.02@gmail.com"]
 # elif SERVER_IP == ["51.77.216.17"]:
