@@ -39,6 +39,8 @@
   },
 
   "manual_sender": {
+    "COUNTRY": "Netherlands",
+    "VPN_COUNTRY": "Poland",
     "PROFILES_DIR": "../profiles",
     "CHROMEDRIVER_LOCATION": "../utils/chromedriver/chrome.exe",
     "EXTENSION_DIR": "../utils/ezcaptcha",
@@ -46,8 +48,6 @@
     "TEMPMAIL_URL": "https://temp-mail.io/en",
     "OUTLOOK_URL": "https://outlook.live.com/",
     "MAX_SIGNIN_THREADS": 1,
-    "COUNTRY": "Netherlands",
-    "VPN_COUNTRY": "Poland",
     "EMAIL_WAIT_TIME": 120,
     "SAVE_COOKIES": "true",
     "EXPRESSVPN_CMD": "C:\\Program Files (x86)\\ExpressVPN\\services\\ExpressVPN.CLI.exe",
