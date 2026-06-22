@@ -4,7 +4,7 @@
     "DB_USER": "root",
     "DB_PASSWORD": "root101.",
     "DB_NAME": "oneapp",
-    "SERVER_IP": "51.91.59.107"
+    "SERVER_IP": "13.140.181."
   },
   "email_sender": {
     "COUNTRY": "Netherlands",
@@ -37,6 +37,28 @@
       "13.140.181.16"
     ]
   },
+
+  "manual_sender": {
+    "PROFILES_DIR": "../profiles",
+    "CHROMEDRIVER_LOCATION": "../utils/chromedriver/chrome.exe",
+    "EXTENSION_DIR": "../utils/ezcaptcha",
+    "MICROSOFT_LOGIN_URL": "https://login.microsoftonline.com/",
+    "TEMPMAIL_URL": "https://temp-mail.io/en",
+    "OUTLOOK_URL": "https://outlook.live.com/",
+    "MAX_SIGNIN_THREADS": 1,
+    "COUNTRY": "Netherlands",
+    "VPN_COUNTRY": "Poland",
+    "EMAIL_WAIT_TIME": 120,
+    "SAVE_COOKIES": "true",
+    "EXPRESSVPN_CMD": "C:\\Program Files (x86)\\ExpressVPN\\services\\ExpressVPN.CLI.exe",
+    "FIRST_BATCH_BCC": 10,
+    "SUBSEQUENT_BATCH_BCC": 330,
+    "SUBSEQUENT_BATCHES": 3,
+    "MAX_CONCURRENT_ACCOUNTS": 5,
+    "SPINNER_TIME": 10,
+    "RUNNER_SESSION_TIME": 240
+  },
+
   "new_app_email_sender": {
     "COUNTRY": "Netherlands",
     "FIRST_BATCH_BCC": 9,
@@ -127,26 +149,6 @@
     "EXPRESSVPN_CMD": "C:\\Program Files (x86)\\ExpressVPN\\services\\ExpressVPN.CLI.exe",
     "CLIENT_ID": "e62beeb7-8a9b-4637-b57f-f8601c0d13f5",
     "CACHE_PATH": "../utils/msal_cache.bin"
-  },
-  "manual_sender": {
-    "PROFILES_DIR": "../profiles",
-    "CHROMEDRIVER_LOCATION": "../utils/chromedriver/chrome.exe",
-    "EXTENSION_DIR": "../utils/ezcaptcha",
-    "MICROSOFT_LOGIN_URL": "https://login.microsoftonline.com/",
-    "TEMPMAIL_URL": "https://temp-mail.io/en",
-    "OUTLOOK_URL": "https://outlook.live.com/",
-    "MAX_SIGNIN_THREADS": 1,
-    "COUNTRY": "Netherlands",
-    "VPN_COUNTRY": "Sweden",
-    "EMAIL_WAIT_TIME": 120,
-    "SAVE_COOKIES": "true",
-    "EXPRESSVPN_CMD": "C:\\Program Files (x86)\\ExpressVPN\\services\\ExpressVPN.CLI.exe",
-    "FIRST_BATCH_BCC": 10,
-    "SUBSEQUENT_BATCH_BCC": 330,
-    "SUBSEQUENT_BATCHES": 3,
-    "MAX_CONCURRENT_ACCOUNTS": 5,
-    "SPINNER_TIME": 10,
-    "RUNNER_SESSION_TIME": 240
   },
   "second_app": {
     "CHROMEDRIVER_LOCATION": "../utils/chromedriver/chrome.exe",
