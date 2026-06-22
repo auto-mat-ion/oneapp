@@ -4,7 +4,7 @@
     "DB_USER": "root",
     "DB_PASSWORD": "root101.",
     "DB_NAME": "oneapp",
-    "SERVER_IP": "13.140.181."
+    "SERVER_IP": "51.91.59.107"
   },
   "email_sender": {
     "COUNTRY": "Netherlands",
@@ -20,8 +20,8 @@
     "STAGGER_MAX": 3.0,
     "SAVE_TO_SENT": false,
     "CLIENT_ID": "e62beeb7-8a9b-4637-b57f-f8601c0d13f5",
-    "SPINNER_TIME": 15,
-    "BATCH_WAIT_TIME": 30,
+    "SPINNER_TIME": 10,
+    "BATCH_WAIT_TIME": 1,
     "SERVER_IPS": [
       "51.91.59.107",
       "51.77.216.17",
