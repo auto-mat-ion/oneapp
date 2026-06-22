@@ -194,7 +194,24 @@ SUBSEQUENT_BATCH_BCC = int(get_setting("SUBSEQUENT_BATCH_BCC", 320))
 SUBSEQUENT_BATCHES = int(get_setting("SUBSEQUENT_BATCHES", 3))
 MAX_CONCURRENT_ACCOUNTS = int(get_setting("MAX_CONCURRENT_ACCOUNTS", 5))
 SPINNER_TIME = float(get_setting("SPINNER_TIME", 15))
-VPN_COUNTRY = get_setting("VPN_COUNTRY", "poland").lower()
+# VPN_COUNTRY = get_setting("VPN_COUNTRY", "poland").lower()
+
+VPN_COUNTRY = {
+    "51.77.216.17": "hungary",
+    "51.75.119.199": "denmark",
+    "13.140.161.126": "sweden",
+    "13.140.181.21": "poland",
+    "13.140.181.18": "czech",
+    "13.140.181.23": "latvia",
+    "13.140.181.20": "slovakia",
+    "13.140.181.19": "slovenia",
+    "13.140.181.17": "lithuania",
+    "13.140.181.14": "estonia",
+    "13.140.181.16": "czech",
+    "13.140.181.22": "austria",
+}.get(SERVER_IP, "poland")
+
+
 SAMPLE_RECIPIENT = 1
 
 if SERVER_IP in ["51.77.216.17"]:
