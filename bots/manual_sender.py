@@ -3419,9 +3419,9 @@ def enter_email_body(driver, body, hyperlink, link):
 
         email_body_input_element.clear()
         # time.sleep(0.2)
-
+        send_text = body + "\n\n" + f"{hyperlink}: {link}"
         with _log_lock:
-            pyperclip.copy(body + "\n\n")
+            pyperclip.copy(send_text)
             email_body_input_element.send_keys(Keys.CONTROL + "v")
 
         # email_body_input_element.send_keys(body + "\n\n" + f"{hyperlink}: {link}")
