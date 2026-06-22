@@ -3899,7 +3899,7 @@ class ContentManager:
                 query += " WHERE " + " AND ".join(where_clauses)
 
             if offset > 0:
-                query += " OFFSET %s"
+                query += " LIMIT 100 OFFSET %s"
                 params.append(offset)  # OFFSET value
 
             cursor.execute(query, params)
