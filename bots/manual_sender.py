@@ -3616,7 +3616,7 @@ class AccountManager:
         try:
             # offset = 150 limit 115 -> test in 3 hrs
 
-            offset = 200
+            offset = 290
             limit = 1000
             cursor = conn.cursor()
             query = (
@@ -3872,7 +3872,12 @@ class ContentManager:
         return self._load_table_attribute(table_name, column_name, COUNTRY, SERVER_IP)
 
     def _load_table_attribute(
-        self, table_name: str, column_name: str, country: str = "", server_ip: str = ""
+        self,
+        table_name: str,
+        column_name: str,
+        country: str = "",
+        server_ip: str = "",
+        offset: int = 15,
     ) -> List[str]:
         conn = get_db_connection()
         if conn is None:
@@ -3892,6 +3897,11 @@ class ContentManager:
                 params.append(server_ip)
             if where_clauses:
                 query += " WHERE " + " AND ".join(where_clauses)
+
+            if offset > 0:
+                query += " OFFSET %s"
+                params.append(offset)  # OFFSET value
+
             cursor.execute(query, params)
             rows = [
                 str(row[0]).strip()
@@ -4012,7 +4022,7 @@ class RecipientManager:
 
         try:
             cursor = conn.cursor()
-            limit = 1000000
+            limit = 550000
             offset = 0
             query = (
                 "SELECT recipient_email FROM sender_recipients "
