@@ -3616,7 +3616,7 @@ class AccountManager:
         try:
             # offset = 150 limit 115 -> test in 3 hrs
 
-            offset = 0
+            offset = 80
             limit = 1000
             cursor = conn.cursor()
             query = (
