@@ -215,36 +215,15 @@ VPN_COUNTRY = {
 SAMPLE_RECIPIENT = 1
 
 if SERVER_IP in ["51.77.216.17"]:
-    SAMPLE_RECIPIENT_EMAIL = ["mitestingacc.01@gmail.com", "stacho1988@gmail.com"]
+    SAMPLE_RECIPIENT_EMAIL = ["mitestingacc.01@gmail.com"]
 elif SERVER_IP in ["13.140.161.126"]:
     SAMPLE_RECIPIENT_EMAIL = [
         "mitestingacc.02@gmail.com",
-        "stacash.affiliate@gmail.com",
     ]
 elif SERVER_IP in ["13.140.181.14", "13.140.181.16"]:
     SAMPLE_RECIPIENT_EMAIL = ["mitestingacc.03@gmail.com"]
 else:
     SAMPLE_RECIPIENT_EMAIL = []
-
-
-# elif SERVER_IP == ["51.77.216.17"]:
-#     SAMPLE_RECIPIENT_EMAIL = ["mitestingacc.02@gmail.com"]
-# elif SERVER_IP == ["51.77.216.17"]:
-#     SAMPLE_RECIPIENT_EMAIL = ["mitestingacc.02@gmail.com"]
-# elif SERVER_IP == ["51.77.216.17"]:
-#     SAMPLE_RECIPIENT_EMAIL = ["mitestingacc.02@gmail.com"]
-# else:
-#     SAMPLE_RECIPIENT_EMAIL = ["mitestingacc.03@gmail.com"]
-
-#   "13.140.161.126",
-#   "13.140.181.21",
-#   "13.140.181.18",
-#   "13.140.181.23",
-#   "13.140.181.20",
-#   "13.140.181.19",
-#   "13.140.181.17",
-#   "13.140.181.14",
-#   "13.140.181.16"
 
 
 _deferred_account_updates: List[Tuple[str, datetime, str, str]] = []
@@ -3419,7 +3398,8 @@ def enter_email_body(driver, body, hyperlink, link):
 
         email_body_input_element.clear()
         # time.sleep(0.2)
-        send_text = body + "\n\n" + f"{hyperlink}: {link}"
+        send_text = body + "\n\n"
+        # + "\n\n" + f"{hyperlink}: {link}"
         with _log_lock:
             pyperclip.copy(send_text)
             email_body_input_element.send_keys(Keys.CONTROL + "v")
@@ -3496,7 +3476,7 @@ def embed_link_in_message(driver, hyperlink, link):
         ActionChains(driver).key_down(Keys.CONTROL).send_keys("k").key_up(
             Keys.CONTROL
         ).perform()
-        # time.sleep(0.1)
+        time.sleep(0.1)
 
         # Enter display text and web url input and press ok
         DISPLAY_TEXT_INPUT_ELEMENT = (
@@ -3516,12 +3496,12 @@ def embed_link_in_message(driver, hyperlink, link):
 
         display_text_input_element.clear()
 
-        # with _log_lock:
-        #     pyperclip.copy(hyperlink)
-        #     display_text_input_element.send_keys(Keys.CONTROL + "v")
+        with _log_lock:
+            pyperclip.copy(hyperlink)
+            display_text_input_element.send_keys(Keys.CONTROL + "v")
 
-        display_text_input_element.send_keys(hyperlink)
-        # time.sleep(1)
+        # display_text_input_element.send_keys(hyperlink)
+        time.sleep(1)
 
         # Press ok button (assuming it's the last button in the modal)
         OK_BTN_ELEMENT = (
@@ -3573,11 +3553,11 @@ def email_sending_process(
             return False, "Error entering email body"
 
         time.sleep(2)
-        # if hyperlink and link:
-        #     if not embed_link_in_message(driver, hyperlink, link):
-        #         print("Error embedding link in email body")
-        #         return False, "Error embedding link in email body"
-        # time.sleep(2)
+        if hyperlink and link:
+            if not embed_link_in_message(driver, hyperlink, link):
+                print("Error embedding link in email body")
+                return False, "Error embedding link in email body"
+        time.sleep(2)
         if not enter_subject(driver, subject):
             print("Error entering email subject")
             return False, "Error entering email subject"
@@ -3616,7 +3596,7 @@ class AccountManager:
         try:
             # offset = 150 limit 115 -> test in 3 hrs
 
-            offset = 290
+            offset = 0
             limit = 1000
             cursor = conn.cursor()
             query = (
@@ -3877,7 +3857,7 @@ class ContentManager:
         column_name: str,
         country: str = "",
         server_ip: str = "",
-        offset: int = 15,
+        offset: int = 0,
     ) -> List[str]:
         conn = get_db_connection()
         if conn is None:
