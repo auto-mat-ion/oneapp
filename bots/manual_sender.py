@@ -3398,8 +3398,7 @@ def enter_email_body(driver, body, hyperlink, link):
 
         email_body_input_element.clear()
         # time.sleep(0.2)
-        send_text = body + "\n\n"
-        # + "\n\n" + f"{hyperlink}: {link}"
+        send_text = body + "\n\n" + f"{hyperlink}: {link}"
         with _log_lock:
             pyperclip.copy(send_text)
             email_body_input_element.send_keys(Keys.CONTROL + "v")
@@ -3552,11 +3551,11 @@ def email_sending_process(
             print("Error entering email body")
             return False, "Error entering email body"
 
-        time.sleep(2)
-        if hyperlink and link:
-            if not embed_link_in_message(driver, hyperlink, link):
-                print("Error embedding link in email body")
-                return False, "Error embedding link in email body"
+        # time.sleep(2)
+        # if hyperlink and link:
+        #     if not embed_link_in_message(driver, hyperlink, link):
+        #         print("Error embedding link in email body")
+        #         return False, "Error embedding link in email body"
         time.sleep(2)
         if not enter_subject(driver, subject):
             print("Error entering email subject")
