@@ -3595,7 +3595,7 @@ class AccountManager:
         try:
             # offset = 150 limit 115 -> test in 3 hrs
 
-            offset = 0
+            offset = 50
             limit = 1000
             cursor = conn.cursor()
             query = (
@@ -3856,7 +3856,7 @@ class ContentManager:
         column_name: str,
         country: str = "",
         server_ip: str = "",
-        offset: int = 0,
+        offset: int = 5,
     ) -> List[str]:
         conn = get_db_connection()
         if conn is None:
