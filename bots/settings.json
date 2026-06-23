@@ -9,8 +9,8 @@
   "email_sender": {
     "COUNTRY": "Netherlands",
     "VPN_COUNTRY": "Denmark",
-    "FIRST_BATCH_BCC": 9,
-    "SUBSEQUENT_BATCH_BCC": 319,
+    "FIRST_BATCH_BCC": 10,
+    "SUBSEQUENT_BATCH_BCC": 320,
     "SUBSEQUENT_BATCHES": 3,
     "MAX_CONCURRENT_BATCHES": 1,
     "MAX_CONCURRENT_ACCOUNTS": 1,
@@ -21,23 +21,18 @@
     "SAVE_TO_SENT": false,
     "CLIENT_ID": "e62beeb7-8a9b-4637-b57f-f8601c0d13f5",
     "SPINNER_TIME": 10,
-    "BATCH_WAIT_TIME": 1,
+    "BATCH_WAIT_TIME": 30,
     "SERVER_IPS": [
       "51.91.59.107",
-      "51.77.216.17",
-      "51.75.119.199",
-      "13.140.161.126",
-      "13.140.181.21",
-      "13.140.181.18",
-      "13.140.181.23",
-      "13.140.181.20",
-      "13.140.181.19",
-      "13.140.181.17",
-      "13.140.181.14",
-      "13.140.181.16"
+      "79.137.75.57",
+      "51.91.56.36",
+      "193.70.86.209",
+      "51.161.34.220",
+      "51.77.195.218",
+      "51.91.97.55",
+      "162.19.220.105"
     ]
   },
-
   "manual_sender": {
     "COUNTRY": "Netherlands",
     "VPN_COUNTRY": "Poland",
@@ -58,7 +53,6 @@
     "SPINNER_TIME": 10,
     "RUNNER_SESSION_TIME": 240
   },
-
   "new_app_email_sender": {
     "COUNTRY": "Netherlands",
     "FIRST_BATCH_BCC": 9,

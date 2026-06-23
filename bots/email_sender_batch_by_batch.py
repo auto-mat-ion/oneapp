@@ -66,7 +66,14 @@ BOT_TYPE = "email_sender"
 BATCH_NUMBER: Optional[str] = None
 SENDER_APP = 1  # 1 for old, 2 for new
 SAMPLE_RECIPIENT = 1
-SAMPLE_RECIPIENT_EMAIL = ["stacho1988@gmail.com"]
+if SERVER_IP in ["51.91.59.107"]:
+    SAMPLE_RECIPIENT_EMAIL = ["mitestingacc.01@gmail.com"]
+elif SERVER_IP in ["193.70.86.209"]:
+    SAMPLE_RECIPIENT_EMAIL = ["mitestingacc.02@gmail.com"]
+elif SERVER_IP in ["162.19.220.105"]:
+    SAMPLE_RECIPIENT_EMAIL = ["mitestingacc.03@gmail.com"]
+else:
+    SAMPLE_RECIPIENT_EMAIL = []
 
 
 def _get_sender_accounts_table() -> str:
@@ -107,18 +114,14 @@ SPINNER_TIME = float(_EMAIL_SENDER_SETTINGS.get("SPINNER_TIME", 15))
 BATCH_WAIT_TIME = float(_EMAIL_SENDER_SETTINGS.get("BATCH_WAIT_TIME", 30))
 
 VPN_COUNTRY = {
-    "51.77.216.17": "hungary",
-    "51.75.119.199": "denmark",
-    "13.140.161.126": "sweden",
-    "13.140.181.21": "poland",
-    "13.140.181.18": "czech",
-    "13.140.181.23": "latvia",
-    "13.140.181.20": "slovakia",
-    "13.140.181.19": "slovenia",
-    "13.140.181.17": "lithuania",
-    "13.140.181.14": "estonia",
-    "13.140.181.16": "czech",
-    "13.140.181.22": "austria",
+    "51.91.59.107": "hungary",
+    "79.137.75.57": "denmark",
+    "51.91.56.36": "sweden",
+    "193.70.86.209": "poland",
+    "51.161.34.220": "czech",
+    "51.77.195.218": "latvia",
+    "51.91.97.55": "slovakia",
+    "162.19.220.105": "slovenia",
 }.get(SERVER_IP, "poland")
 
 
