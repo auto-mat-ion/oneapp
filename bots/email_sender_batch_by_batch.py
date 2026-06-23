@@ -1349,7 +1349,7 @@ def process_account_batch(
         state.batch_round += 1
         if state.batch_round > SUBSEQUENT_BATCHES:
             state.completed = True
-            _log_account_status(True)
+            # _log_account_status(True)
             return {
                 "completed": True,
                 "sent": len(batch),
@@ -1755,7 +1755,7 @@ def main2():
                     accounts.mark_done(state.account)
                     stats.update(state.account, True, state.sent)
 
-            log(f"Batch {round_idx + 1}/{SUBSEQUENT_BATCHES + 1} summary: ")
+            # log(f"Batch {round_idx + 1}/{SUBSEQUENT_BATCHES + 1} summary: ")
 
             if not recipients.has_more():
                 log("No recipients left after batch round.")
@@ -1793,7 +1793,7 @@ def main2():
     log(f"  Time:       {final_stats['elapsed']:.1f}s ({final_stats['rate']:.1f}/s)")
     log(f"  Remaining:  {recipients.remaining()} recipients")
     log("=" * 55)
-    # flush_db_operations()
+    flush_db_operations()
     log("=" * 55)
 
 
