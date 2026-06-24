@@ -66,11 +66,11 @@ BOT_TYPE = "email_sender"
 BATCH_NUMBER: Optional[str] = None
 SENDER_APP = 1  # 1 for old, 2 for new
 SAMPLE_RECIPIENT = 1
-if SERVER_IP in ["51.91.59.107"]:
+if SERVER_IP in ["13.140.161.126"]:
     SAMPLE_RECIPIENT_EMAIL = ["mitestingacc.01@gmail.com"]
-elif SERVER_IP in ["193.70.86.209"]:
+elif SERVER_IP in ["13.140.181.23"]:
     SAMPLE_RECIPIENT_EMAIL = ["mitestingacc.02@gmail.com"]
-elif SERVER_IP in ["162.19.220.105"]:
+elif SERVER_IP in ["13.140.181.14"]:
     SAMPLE_RECIPIENT_EMAIL = ["mitestingacc.03@gmail.com"]
 else:
     SAMPLE_RECIPIENT_EMAIL = []
@@ -115,23 +115,41 @@ CLIENT_ID = str(
 
 
 FIRST_BATCH_BCC = 45
-SUBSEQUENT_BATCH_BCC = 45
-SUBSEQUENT_BATCHES = 15
 FIRST_BATCH_BCC_UPPER = 30
+
+SUBSEQUENT_BATCH_BCC = 45
 SUBSEQUENT_BATCH_BCC_UPPER = 30
+
+SUBSEQUENT_BATCHES_LOWER = 17
+SUBSEQUENT_BATCHES_UPPER = 22
+
 SPINNER_TIME = 10
-MAX_CONCURRENT_ACCOUNTS = 4
+MAX_CONCURRENT_ACCOUNTS = 8
 
 
+# VPN_COUNTRY = {
+#     "51.91.59.107": "hungary",
+#     "79.137.75.57": "denmark",
+#     "51.91.56.36": "sweden",
+#     "193.70.86.209": "poland",
+#     "51.161.34.220": "czech",
+#     "51.77.195.218": "latvia",
+#     "51.91.97.55": "slovakia",
+#     "162.19.220.105": "slovenia",
+# }.get(SERVER_IP, "poland")
 VPN_COUNTRY = {
-    "51.91.59.107": "hungary",
-    "79.137.75.57": "denmark",
-    "51.91.56.36": "sweden",
-    "193.70.86.209": "poland",
-    "51.161.34.220": "czech",
-    "51.77.195.218": "latvia",
-    "51.91.97.55": "slovakia",
-    "162.19.220.105": "slovenia",
+    "51.77.216.17": "hungary",
+    "51.75.119.199": "denmark",
+    "13.140.161.126": "sweden",
+    "13.140.181.21": "poland",
+    "13.140.181.18": "czech",
+    "13.140.181.23": "latvia",
+    "13.140.181.20": "slovakia",
+    "13.140.181.19": "slovenia",
+    "13.140.181.17": "lithuania",
+    "13.140.181.14": "estonia",
+    "13.140.181.16": "czech",
+    "13.140.181.22": "austria",
 }.get(SERVER_IP, "poland")
 
 GRAPH_ENDPOINT = "https://graph.microsoft.com/v1.0"
@@ -620,7 +638,7 @@ def spin(text: str) -> str:
 class ContentManager:
     def __init__(self):
         self.hyperlinks = self._load("sender_hyperlink_text", "hyperlink_text")
-        self.links = self._load("sender_link", "link", limit=300, offset=3)
+        self.links = self._load("sender_link", "link", limit=300, offset=0)
         self.subjects = self._load("sender_subjects", "subject")
         self.texts = self._load("sender_texts", "text")
 
@@ -854,13 +872,13 @@ class AccountManager:
         try:
             cursor = conn.cursor()
             query = (
-                f"SELECT email, pass, recovery FROM {_get_sender_accounts_table()} "
-                "WHERE server_ip = %s AND COALESCE(country, '') = %s "
+                "SELECT email, password, recovery FROM manualbot_sender_emails "
+                "WHERE server_ip = %s "
             )
-            params = [SERVER_IP, COUNTRY]
-            if BATCH_NUMBER:
-                query += " AND batch = %s "
-                params.append(BATCH_NUMBER)
+            params = [SERVER_IP]
+            # if BATCH_NUMBER:
+            #     query += " AND batch = %s "
+            #     params.append(BATCH_NUMBER)
             query += " LIMIT 1000 OFFSET 0"
             cursor.execute(query, params)
             rows = cursor.fetchall()
@@ -1148,7 +1166,7 @@ def process_account(
     time.sleep(random.uniform(BATCH_DELAY_MIN, BATCH_DELAY_MAX))
 
     batches = []
-    for i in range(SUBSEQUENT_BATCHES):
+    for i in range(random.randint(SUBSEQUENT_BATCHES_LOWER, SUBSEQUENT_BATCHES_UPPER)):
         if not recipients.has_more() or _shutdown.is_set():
             break
         batch = recipients.get_batch(
@@ -1277,11 +1295,12 @@ def flush_db_operations():
                 total_recipients = len(_deferred_sent_recipients)
 
                 with engine.begin() as conn:
+                    done_acc_update = True
                     if _deferred_account_updates and not done_acc_update:
                         print(
                             f"Updating sender accounts ({total_account_updates} rows)"
                         )
-                        account_table = _get_sender_accounts_table()
+                        account_table = "manualbot_sender_emails"
                         update_sql = text(
                             f"UPDATE {account_table} "
                             "SET times_used = COALESCE(times_used, 0) + 1, last_used = :last_used "
@@ -1311,7 +1330,7 @@ def flush_db_operations():
                         done_acc_update = True
 
                     if _deferred_failed_accounts and not done_failed_update:
-                        account_table = _get_sender_accounts_table()
+                        account_table = "manualbot_sender_emails"
                         failed_accounts_table = _get_sender2_failed_accounts_table()
                         print(
                             f"Inserting failed accounts and removing them from {account_table} ({total_failed} rows)"
@@ -1324,7 +1343,6 @@ def flush_db_operations():
                         delete_sql = text(
                             f"DELETE FROM {account_table} "
                             "WHERE email = :email AND server_ip = :server_ip "
-                            "AND COALESCE(country, '') = :country"
                         )
                         for batch_idx in range(0, total_failed, batch_size):
                             batch = _deferred_failed_accounts[
@@ -1468,7 +1486,7 @@ def prompt_for_sample_recipient() -> Optional[int]:
     print("Invalid choice. Please enter 1 for old app or 2 for new app.")
 
 
-def main():
+def em_main():
     print("Starting...")
     global BATCH_NUMBER, SENDER_APP
     app_choice = prompt_for_sender_app_selection()
@@ -1478,10 +1496,10 @@ def main():
     SENDER_APP = app_choice
     print(f"Selected {'New' if SENDER_APP == 2 else 'Old'} app.")
 
-    BATCH_NUMBER = prompt_for_batch_selection()
-    if not BATCH_NUMBER:
-        print("No batch selected. Exiting.")
-        return
+    # BATCH_NUMBER = prompt_for_batch_selection()
+    # if not BATCH_NUMBER:
+    #     print("No batch selected. Exiting.")
+    #     return
     connect_new_random("netherlands")
     connect_new_random(VPN_COUNTRY)
 

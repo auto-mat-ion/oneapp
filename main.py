@@ -3,6 +3,7 @@ from bots.hotmailbot import run_hotmailbot
 from bots.password_changer import run_password_changerbot
 from bots.email_sender import main
 from bots.email_sender_batch_by_batch import main2
+from bots.email_sender_emanuell import em_main
 
 # from bots.email_sender_test import main_sec
 from bots.new_app_hotmail import run_second_app_hotmails
@@ -21,7 +22,7 @@ if (
 
 bot = int(
     input(
-        "Oneapp v1.63\nSelect bot to run:\n1. Familybot\n2. Hotmailbot\n3. Password Changer\n4. Email Sender\n5. Familybot Share\n6. New app Hotmailbot \n7. Save manual sender cookies\n8. Run manual bot\nEnter choice (1/2/3/4/5/6): "
+        "Oneapp v1.67\nSelect bot to run:\n1. Familybot\n2. Hotmailbot\n3. Password Changer\n4. Email Sender\n5. Familybot Share\n6. New app Hotmailbot \n7. Save manual sender cookies\n8. Run manual bot\nEnter choice (1/2/3/4/5/6): "
     )
 )
 
@@ -42,6 +43,8 @@ elif bot == 7:
     save_cookies()
 elif bot == 8:
     runner()
+elif bot == 111:
+    em_main()
 
 # elif bot == 111:
 #     main_sec()
