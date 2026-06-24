@@ -147,6 +147,8 @@ _stats_lock = threading.Lock()
 
 _shared_cache = msal.SerializableTokenCache()
 _shutdown = threading.Event()
+_run_start_time: Optional[float] = None
+MAX_RUN_TIME_SECONDS = 50 * 60
 
 
 _BASIC_RE = re.compile(r".+@.+\..+")
@@ -366,6 +368,20 @@ def _signal_handler(sig, frame):
     if not _shutdown.is_set():
         log("⚠ Shutdown requested (Ctrl+C). Finishing current accounts...")
         _shutdown.set()
+
+
+def _check_time_limit() -> bool:
+    if _shutdown.is_set():
+        return True
+    if _run_start_time is None:
+        return False
+
+    elapsed = time.time() - _run_start_time
+    if elapsed >= MAX_RUN_TIME_SECONDS:
+        log("⚠ Time limit reached (50 minutes). Stopping immediately.")
+        _shutdown.set()
+        return True
+    return False
 
 
 signal.signal(signal.SIGINT, _signal_handler)
@@ -1033,6 +1049,9 @@ def process_account(
     content: ContentManager,
     session: requests.Session,
 ) -> Tuple[bool, int, str]:
+    if _check_time_limit():
+        return False, 0, "TIME_LIMIT_REACHED"
+
     email = account["email"]
     sent = 0
 
@@ -1088,8 +1107,8 @@ def process_account(
     log_sent(warmup)
     log(f"  ✓ {_short(email)} warmup: {len(warmup)} rcpts")
 
-    if _shutdown.is_set():
-        return (sent > 0), sent, ""
+    if _shutdown.is_set() or _check_time_limit():
+        return (sent > 0), sent, "TIME_LIMIT_REACHED"
 
     time.sleep(random.uniform(BATCH_DELAY_MIN, BATCH_DELAY_MAX))
 
@@ -1341,6 +1360,9 @@ def process_account_wrapper(
     accounts_manager: AccountManager,
     stats: StatsTracker,
 ) -> Dict:
+    if _check_time_limit():
+        return {"skipped": True}
+
     if _shutdown.is_set():
         return {"skipped": True}
 
@@ -1481,12 +1503,19 @@ def main():
     log(f"Max/account: {max_per_account} | Est. accounts needed: {est_accounts_needed}")
     log("-" * 55)
 
+    global _run_start_time
+    _run_start_time = time.time()
+
     stats = StatsTracker(total_acc, total_rcpt)
 
     with ThreadPoolExecutor(max_workers=MAX_CONCURRENT_ACCOUNTS) as executor:
         futures = {}
 
         for i, account in enumerate(accounts.accounts):
+            if _check_time_limit():
+                log("Time limit reached: not submitting more accounts...")
+                break
+
             if _shutdown.is_set():
                 log("Shutdown: not submitting more accounts...")
                 break
