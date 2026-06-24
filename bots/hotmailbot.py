@@ -1254,7 +1254,15 @@ def select_alternate_email_option(driver):
         Select(options_element).select_by_value("Email")
         return True
     except:
-        return False
+        try:
+            PROTECTION_OPTIONS_ELEMENT = (By.CSS_SELECTOR, 'input[type="email"]')
+
+            options_element = WebDriverWait(driver, wait_time).until(
+                EC.visibility_of_element_located(PROTECTION_OPTIONS_ELEMENT)
+            )
+            return True
+        except:
+            return False
 
 
 def accept_tempmail_consent(driver):
@@ -4200,6 +4208,7 @@ def initialize_new_profile(new_profile_data):
             print(f"{email_address}: Protect your account page")
             if not select_alternate_email_option(driver=driver):
                 print(f"{email_address}: Error selecting an alternate email option")
+                # return driver
                 new_profile_logger(
                     email_address,
                     "FAIL",
@@ -4386,6 +4395,7 @@ def initialize_new_profile(new_profile_data):
             # time.sleep(3)
             driver.quit()
             processed_email(new_profile_data_original)
+            pass
         except:
             pass
 

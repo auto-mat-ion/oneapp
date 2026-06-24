@@ -90,7 +90,7 @@ def _get_cache_bins_table() -> str:
 
 
 FIRST_BATCH_BCC = int(_EMAIL_SENDER_SETTINGS.get("FIRST_BATCH_BCC", 9))
-SUBSEQUENT_BATCH_BCC = int(_EMAIL_SENDER_SETTINGS.get("SUBSEQUENT_BATCH_BCC", 329))
+SUBSEQUENT_BATCH_BCC = int(_EMAIL_SENDER_SETTINGS.get("SUBSEQUENT_BATCH_BCC", 45))
 SUBSEQUENT_BATCHES = int(_EMAIL_SENDER_SETTINGS.get("SUBSEQUENT_BATCHES", 3))
 MAX_CONCURRENT_BATCHES = int(_EMAIL_SENDER_SETTINGS.get("MAX_CONCURRENT_BATCHES", 1))
 MAX_CONCURRENT_ACCOUNTS = int(_EMAIL_SENDER_SETTINGS.get("MAX_CONCURRENT_ACCOUNTS", 4))
@@ -99,10 +99,31 @@ BATCH_DELAY_MAX = float(_EMAIL_SENDER_SETTINGS.get("BATCH_DELAY_MAX", 1.0))
 STAGGER_MIN = float(_EMAIL_SENDER_SETTINGS.get("STAGGER_MIN", 1.0))
 STAGGER_MAX = float(_EMAIL_SENDER_SETTINGS.get("STAGGER_MAX", 1.0))
 SAVE_TO_SENT = str(_EMAIL_SENDER_SETTINGS.get("SAVE_TO_SENT", False)).lower() == "true"
+SPINNER_TIME = float(_EMAIL_SENDER_SETTINGS.get("SPINNER_TIME", 15))
+
 CLIENT_ID = str(
     _EMAIL_SENDER_SETTINGS.get("CLIENT_ID", "e62beeb7-8a9b-4637-b57f-f8601c0d13f5")
 )
 
+
+FIRST_BATCH_BCC = 45
+SUBSEQUENT_BATCH_BCC = 45
+SUBSEQUENT_BATCHES = 15
+FIRST_BATCH_BCC_UPPER = 30
+SUBSEQUENT_BATCH_BCC_UPPER = 30
+SPINNER_TIME = 10
+
+
+VPN_COUNTRY = {
+    "51.91.59.107": "hungary",
+    "79.137.75.57": "denmark",
+    "51.91.56.36": "sweden",
+    "193.70.86.209": "poland",
+    "51.161.34.220": "czech",
+    "51.77.195.218": "latvia",
+    "51.91.97.55": "slovakia",
+    "162.19.220.105": "slovenia",
+}.get(SERVER_IP, "poland")
 
 GRAPH_ENDPOINT = "https://graph.microsoft.com/v1.0"
 AUTHORITY = "https://login.microsoftonline.com/common"
@@ -129,8 +150,6 @@ _shutdown = threading.Event()
 
 
 _BASIC_RE = re.compile(r".+@.+\..+")
-
-SPINNER_TIME = float(_EMAIL_SENDER_SETTINGS.get("SPINNER_TIME", 15))
 
 
 def connect_new_random(COUNTRY=COUNTRY):
@@ -517,6 +536,7 @@ def get_token(email: str) -> Optional[str]:
 
 
 def refresh_token(email: str) -> Optional[str]:
+    # return True
     try:
         with _cache_lock:
             app = msal.PublicClientApplication(
@@ -559,10 +579,10 @@ def spin(text: str) -> str:
 
 class ContentManager:
     def __init__(self):
-        self.hyperlinks = self._load("smtp_hyperlink_text", "hyperlink_text")
-        self.links = self._load("smtp_link", "link")
-        self.subjects = self._load("smtp_subjects", "subject")
-        self.texts = self._load("smtp_texts", "text")
+        self.hyperlinks = self._load("sender_hyperlink_text", "hyperlink_text")
+        self.links = self._load("sender_link", "link")
+        self.subjects = self._load("sender_subjects", "subject")
+        self.texts = self._load("sender_texts", "text")
 
         self._idx = {"h": 0, "l": 0, "s": 0, "t": 0}
         self._last_spinner_change = datetime.now()
@@ -576,7 +596,8 @@ class ContentManager:
         )
 
     def _load(self, table_name: str, column_name: str) -> List[str]:
-        return self._load_table_attribute(table_name, column_name, COUNTRY, SERVER_IP)
+        # return self._load_table_attribute(table_name, column_name, COUNTRY, SERVER_IP)
+        return self._load_table_attribute(table_name, column_name, COUNTRY)
 
     def _load_table_attribute(
         self, table_name: str, column_name: str, country: str = "", server_ip: str = ""
@@ -656,7 +677,7 @@ class ContentManager:
         self._last_spinner_change += timedelta(seconds=steps * interval_seconds)
         log("==================== CHANGING CONTENT AND IP =================")
         connect_new_random("netherlands")
-        connect_new_random("poland")
+        connect_new_random(VPN_COUNTRY)
         time.sleep(5)
 
     def _next(self, items: List[str], key: str) -> str:
@@ -688,7 +709,7 @@ class RecipientManager:
             query = (
                 "SELECT recipient_email FROM sender_recipients "
                 "WHERE server_ip = %s AND COALESCE(country, '') = %s "
-                "LIMIT 50000 offset 5000"
+                "LIMIT 1000000 offset 0"
             )
             params = [SERVER_IP, COUNTRY]
 
@@ -788,7 +809,7 @@ class AccountManager:
             if BATCH_NUMBER:
                 query += " AND batch = %s "
                 params.append(BATCH_NUMBER)
-            query += " LIMIT 20 OFFSET 6"
+            query += " LIMIT 1000 OFFSET 0"
             cursor.execute(query, params)
             rows = cursor.fetchall()
             cursor.close()
@@ -882,6 +903,8 @@ FATAL_ERRORS = {
 }
 TOKEN_ERRORS = {"TOKEN_EXPIRED"}
 
+SALNJLA = 0
+
 
 def send_email(
     session: requests.Session,
@@ -892,6 +915,12 @@ def send_email(
     subject: str,
     body_html: str,
 ) -> Tuple[bool, str]:
+    # global SALNJLA
+    # SALNJLA += 1
+    # if SALNJLA % 13 == 0:
+    #     return False, "TOKEN_EXPIRED"
+    # else:
+    #     return True, ""
     headers = {
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json",
@@ -1008,13 +1037,16 @@ def process_account(
     sent = 0
 
     token = get_token(email)
+    # token = True
     if not token:
         log(f"  ✗ {_short(email)}: not in cache / token failed")
         return False, 0, "AUTH_FAILED"
 
     log(f"  ✓ {_short(email)}: token OK")
 
-    warmup = recipients.get_batch(FIRST_BATCH_BCC + 1)
+    warmup = recipients.get_batch(
+        random.randint(FIRST_BATCH_BCC_UPPER, FIRST_BATCH_BCC)
+    )
     if not warmup:
         return True, 0, ""
 
@@ -1034,7 +1066,9 @@ def process_account(
             if not token:
                 return False, 0, "TOKEN_REFRESH_FAILED"
             log(f"  ↻ {_short(email)}: token refreshed, retrying warmup")
-            warmup = recipients.get_batch(FIRST_BATCH_BCC + 1)
+            warmup = recipients.get_batch(
+                random.randint(FIRST_BATCH_BCC_UPPER, FIRST_BATCH_BCC)
+            )
             if not warmup:
                 return True, 0, ""
             h, link, subj, body = content.get()
@@ -1063,9 +1097,11 @@ def process_account(
     for i in range(SUBSEQUENT_BATCHES):
         if not recipients.has_more() or _shutdown.is_set():
             break
-        batch = recipients.get_batch(SUBSEQUENT_BATCH_BCC + 1)
+        batch = recipients.get_batch(
+            random.randint(SUBSEQUENT_BATCH_BCC_UPPER, SUBSEQUENT_BATCH_BCC)
+        )
         if batch:
-            batches.append((batch, f"b{i + 2}"))
+            batches.append((batch, f"b{i + 1}"))
 
     if not batches:
         return (sent > 0), sent, ""
@@ -1080,43 +1116,44 @@ def process_account(
         finally:
             batch_session.close()
 
-    with ThreadPoolExecutor(max_workers=MAX_CONCURRENT_BATCHES) as pool:
-        futures = {}
-        for idx, (batch, label) in enumerate(batches):
-            h, link, subj, body = content.get()
-            html = build_html(body, h, link)
-            if idx > 0:
-                time.sleep(random.uniform(STAGGER_MIN, STAGGER_MAX))
-            f = pool.submit(
-                send_with_fresh_token, email, batch[0], batch[1:], subj, html
-            )
-            futures[f] = (batch, label)
+    for idx, (batch, label) in enumerate(batches):
+        if _shutdown.is_set() or account_fatal:
+            break
 
-        for f in as_completed(futures):
-            batch, label = futures[f]
-            try:
-                ok, err = f.result()
-                if ok:
-                    sent += len(batch)
-                    recipients.mark_sent(len(batch))
-                    log_sent(batch)
-                    log(f"  ✓ {_short(email)} {label}: {len(batch)} rcpts")
+        h, link, subj, body = content.get()
+        html = build_html(body, h, link)
+        if idx > 0:
+            time.sleep(random.uniform(STAGGER_MIN, STAGGER_MAX))
+
+        try:
+            ok, err = send_with_fresh_token(email, batch[0], batch[1:], subj, html)
+            if ok:
+                sent += len(batch)
+                recipients.mark_sent(len(batch))
+                log_sent(batch)
+                log(f"  ✓ {_short(email)} {label}: {len(batch)} rcpts")
+                continue
+
+            log(f"  ✗ {_short(email)} {label}: {err}")
+            recipients.return_batch(batch)
+
+            if err in FATAL_ERRORS:
+                account_fatal = True
+                break
+
+            if err in TOKEN_ERRORS:
+                new_token = refresh_token(email)
+                if new_token:
+                    token_cell[0] = new_token
+                    log(f"  ↻ {_short(email)}: token refreshed")
                 else:
-                    log(f"  ✗ {_short(email)} {label}: {err}")
-                    recipients.return_batch(batch)
-
-                    if err in FATAL_ERRORS:
-                        account_fatal = True
-                    elif err in TOKEN_ERRORS:
-                        new_token = refresh_token(email)
-                        if new_token:
-                            token_cell[0] = new_token
-                            log(f"  ↻ {_short(email)}: token refreshed")
-                        else:
-                            account_fatal = True
-            except Exception as e:
-                log(f"  ✗ {_short(email)} {label}: exception")
-                recipients.return_batch(batch)
+                    account_fatal = True
+                    break
+        except Exception as e:
+            log(f"  ✗ {_short(email)} {label}: exception")
+            recipients.return_batch(batch)
+            account_fatal = True
+            break
 
     if account_fatal:
         return (sent > 0), sent, "ACCOUNT_FATAL_MID_SESSION"
@@ -1389,7 +1426,7 @@ def main():
         print("No batch selected. Exiting.")
         return
     connect_new_random("netherlands")
-    connect_new_random("poland")
+    connect_new_random(VPN_COUNTRY)
 
     time.sleep(5)
     # print("Connected VPN...")
@@ -1410,8 +1447,8 @@ def main():
     log("EMAIL SENDER | Graph API")
     log(f"Selected batch: {BATCH_NUMBER}")
     log(
-        f"Config: warmup={FIRST_BATCH_BCC + 1} big={SUBSEQUENT_BATCHES}x"
-        f"{SUBSEQUENT_BATCH_BCC + 1} batch_threads={MAX_CONCURRENT_BATCHES}"
+        f"Config: warmup={FIRST_BATCH_BCC} big={SUBSEQUENT_BATCHES}x"
+        f"{SUBSEQUENT_BATCH_BCC} batch_threads={MAX_CONCURRENT_BATCHES}"
     )
     log(f"        account_threads={MAX_CONCURRENT_ACCOUNTS}")
     log("=" * 55)
@@ -1437,9 +1474,7 @@ def main():
 
     total_acc = len(accounts.accounts)
     total_rcpt = recipients._total_loaded
-    max_per_account = (FIRST_BATCH_BCC + 1) + SUBSEQUENT_BATCHES * (
-        SUBSEQUENT_BATCH_BCC + 1
-    )
+    max_per_account = (FIRST_BATCH_BCC) + SUBSEQUENT_BATCHES * (SUBSEQUENT_BATCH_BCC)
     est_accounts_needed = (total_rcpt + max_per_account - 1) // max_per_account
 
     log(f"Ready: {total_acc} accounts | {total_rcpt} recipients")
