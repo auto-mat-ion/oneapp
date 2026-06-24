@@ -604,7 +604,7 @@ def spin(text: str) -> str:
 class ContentManager:
     def __init__(self):
         self.hyperlinks = self._load("sender_hyperlink_text", "hyperlink_text")
-        self.links = self._load("sender_link", "link", limit=3)
+        self.links = self._load("sender_link", "link", limit=300, offset=3)
         self.subjects = self._load("sender_subjects", "subject")
         self.texts = self._load("sender_texts", "text")
 
@@ -745,7 +745,7 @@ class RecipientManager:
             query = (
                 "SELECT recipient_email FROM sender_recipients "
                 "WHERE server_ip = %s AND COALESCE(country, '') = %s "
-                "LIMIT 35000 offset 0"
+                "LIMIT 1000000 offset 35000"
             )
             params = [SERVER_IP, COUNTRY]
 
@@ -845,7 +845,7 @@ class AccountManager:
             if BATCH_NUMBER:
                 query += " AND batch = %s "
                 params.append(BATCH_NUMBER)
-            query += " LIMIT 30 OFFSET 0"
+            query += " LIMIT 1000 OFFSET 31"
             cursor.execute(query, params)
             rows = cursor.fetchall()
             cursor.close()
