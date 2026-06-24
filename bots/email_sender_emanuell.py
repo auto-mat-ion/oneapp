@@ -172,7 +172,7 @@ _file_lock = threading.Lock()
 _cache_lock = threading.Lock()
 _stats_lock = threading.Lock()
 
-# _shared_cache = msal.SerializableTokenCache()
+_shared_cache = msal.SerializableTokenCache()
 _shutdown = threading.Event()
 _run_start_time: Optional[float] = None
 MAX_RUN_TIME_SECONDS = 50 * 60
@@ -562,12 +562,6 @@ def get_token(email: str) -> Optional[str]:
 
             app = msal.PublicClientApplication(
                 client_id="e62beeb7-8a9b-4637-b57f-f8601c0d13f5",
-                authority=AUTHORITY,
-                token_cache=_shared_cache,
-            )
-
-            app = msal.PublicClientApplication(
-                client_id="fe61e5b1-479a-480d-b45e-636e075bc1d3",
                 authority=AUTHORITY,
                 token_cache=_shared_cache,
             )
