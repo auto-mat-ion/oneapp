@@ -1076,7 +1076,6 @@ def process_account(
     sent = 0
 
     token = get_token(email)
-    # token = True
     if not token:
         log(f"  ✗ {_short(email)}: not in cache / token failed")
         return False, 0, "AUTH_FAILED"
@@ -1502,7 +1501,9 @@ def main():
     log("Loading recipients. Please wait...")
     recipients = RecipientManager()
 
+    log("Loading cache. Please wait...")
     load_cache()
+    log("Loaded cache. Please wait...")
 
     if not accounts.accounts:
         log("✗ No accounts. Exiting.")
