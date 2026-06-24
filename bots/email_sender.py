@@ -66,7 +66,14 @@ BOT_TYPE = "email_sender"
 BATCH_NUMBER: Optional[str] = None
 SENDER_APP = 1  # 1 for old, 2 for new
 SAMPLE_RECIPIENT = 1
-SAMPLE_RECIPIENT_EMAIL = ["mitestingacc.01@gmail.com"]
+if SERVER_IP in ["51.91.59.107"]:
+    SAMPLE_RECIPIENT_EMAIL = ["mitestingacc.01@gmail.com"]
+elif SERVER_IP in ["193.70.86.209"]:
+    SAMPLE_RECIPIENT_EMAIL = ["mitestingacc.02@gmail.com"]
+elif SERVER_IP in ["162.19.220.105"]:
+    SAMPLE_RECIPIENT_EMAIL = ["mitestingacc.03@gmail.com"]
+else:
+    SAMPLE_RECIPIENT_EMAIL = []
 
 
 def _get_sender_accounts_table() -> str:
@@ -112,6 +119,7 @@ SUBSEQUENT_BATCHES = 15
 FIRST_BATCH_BCC_UPPER = 30
 SUBSEQUENT_BATCH_BCC_UPPER = 30
 SPINNER_TIME = 10
+MAX_CONCURRENT_ACCOUNTS = 4
 
 
 VPN_COUNTRY = {
@@ -596,7 +604,7 @@ def spin(text: str) -> str:
 class ContentManager:
     def __init__(self):
         self.hyperlinks = self._load("sender_hyperlink_text", "hyperlink_text")
-        self.links = self._load("sender_link", "link")
+        self.links = self._load("sender_link", "link", limit=3)
         self.subjects = self._load("sender_subjects", "subject")
         self.texts = self._load("sender_texts", "text")
 
@@ -611,12 +619,21 @@ class ContentManager:
             + (f" spinner={SPINNER_TIME} min")
         )
 
-    def _load(self, table_name: str, column_name: str) -> List[str]:
+    def _load(
+        self, table_name: str, column_name: str, limit: int = 0, offset: int = 0
+    ) -> List[str]:
         # return self._load_table_attribute(table_name, column_name, COUNTRY, SERVER_IP)
-        return self._load_table_attribute(table_name, column_name, COUNTRY)
+        return self._load_table_attribute(
+            table_name, column_name, COUNTRY, limit, offset
+        )
 
     def _load_table_attribute(
-        self, table_name: str, column_name: str, country: str = "", server_ip: str = ""
+        self,
+        table_name: str,
+        column_name: str,
+        country: str = "",
+        limit: int = 0,
+        offset: int = 0,
     ) -> List[str]:
         conn = _get_db_connection()
         if conn is None:
@@ -631,11 +648,14 @@ class ContentManager:
             if country:
                 where_clauses.append("LOWER(country) = %s")
                 params.append(country.lower())
-            if server_ip:
-                where_clauses.append("server_ip = %s")
-                params.append(server_ip)
             if where_clauses:
                 query += " WHERE " + " AND ".join(where_clauses)
+            if limit > 0:
+                query += " LIMIT %s"
+                params.append(limit)
+            if offset > 0:
+                query += " OFFSET %s"
+                params.append(offset)
             cursor.execute(query, params)
             rows = [
                 str(row[0]).strip()
@@ -656,10 +676,10 @@ class ContentManager:
     def get(self) -> Tuple[str, str, str, str]:
         with _content_lock:
             self._update_spinner_indexes()
-            h = self._current(self.hyperlinks, "h")
-            l = self._current(self.links, "l")
-            s = self._current(self.subjects, "s")
-            t = self._current(self.texts, "t")
+            h = self._next(self.hyperlinks, "h")
+            l = self._next(self.links, "l")
+            s = self._next(self.subjects, "s")
+            t = self._next(self.texts, "t")
         return spin(h), l, spin(s), spin(t)
 
     def _current(self, items: List[str], key: str) -> str:
@@ -725,7 +745,7 @@ class RecipientManager:
             query = (
                 "SELECT recipient_email FROM sender_recipients "
                 "WHERE server_ip = %s AND COALESCE(country, '') = %s "
-                "LIMIT 1000000 offset 0"
+                "LIMIT 35000 offset 0"
             )
             params = [SERVER_IP, COUNTRY]
 
@@ -825,7 +845,7 @@ class AccountManager:
             if BATCH_NUMBER:
                 query += " AND batch = %s "
                 params.append(BATCH_NUMBER)
-            query += " LIMIT 1000 OFFSET 0"
+            query += " LIMIT 30 OFFSET 0"
             cursor.execute(query, params)
             rows = cursor.fetchall()
             cursor.close()
