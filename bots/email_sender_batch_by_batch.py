@@ -623,10 +623,10 @@ def spin(text: str) -> str:
 
 class ContentManager:
     def __init__(self):
-        self.hyperlinks = self._load("sender_hyperlink_text", "hyperlink_text")
-        self.links = self._load("sender_links", "link")
-        self.subjects = self._load("sender_subjects", "subject")
-        self.texts = self._load("sender_texts", "text")
+        self.hyperlinks = self._load("smtp_hyperlink_text", "hyperlink_text")
+        self.links = self._load("smtp_link", "link")
+        self.subjects = self._load("smtp_subjects", "subject")
+        self.texts = self._load("smtp_texts", "text")
 
         self._idx = {"h": 0, "l": 0, "s": 0, "t": 0}
         self._last_spinner_change = datetime.now()
@@ -640,8 +640,7 @@ class ContentManager:
         )
 
     def _load(self, table_name: str, column_name: str) -> List[str]:
-        # return self._load_table_attribute(table_name, column_name, COUNTRY, SERVER_IP)
-        return self._load_table_attribute(table_name, column_name, COUNTRY)
+        return self._load_table_attribute(table_name, column_name, COUNTRY, SERVER_IP)
 
     def _load_table_attribute(
         self, table_name: str, column_name: str, country: str = "", server_ip: str = ""
@@ -753,7 +752,7 @@ class RecipientManager:
             query = (
                 "SELECT recipient_email FROM sender_recipients "
                 "WHERE server_ip = %s AND COALESCE(country, '') = %s "
-                "LIMIT 50000 offset 0"
+                "LIMIT 1000000 offset 0"
             )
             params = [SERVER_IP, COUNTRY]
 
