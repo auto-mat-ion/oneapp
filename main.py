@@ -21,7 +21,7 @@ if (
 
 bot = int(
     input(
-        "Oneapp v1.61\nSelect bot to run:\n1. Familybot\n2. Hotmailbot\n3. Password Changer\n4. Email Sender\n5. Familybot Share\n6. New app Hotmailbot \n7. Save manual sender cookies\n8. Run manual bot\nEnter choice (1/2/3/4/5/6): "
+        "Oneapp v1.62\nSelect bot to run:\n1. Familybot\n2. Hotmailbot\n3. Password Changer\n4. Email Sender\n5. Familybot Share\n6. New app Hotmailbot \n7. Save manual sender cookies\n8. Run manual bot\nEnter choice (1/2/3/4/5/6): "
     )
 )
 
@@ -32,7 +32,8 @@ elif bot == 2:
 elif bot == 3:
     run_password_changerbot()
 elif bot == 4:
-    main2()
+    main()
+    # main2()
 elif bot == 5:
     run_familybot_share()
 elif bot == 6:
