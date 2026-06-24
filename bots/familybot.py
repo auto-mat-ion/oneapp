@@ -1334,7 +1334,15 @@ def select_alternate_email_option(driver):
         Select(options_element).select_by_value("Email")
         return True
     except:
-        return False
+        try:
+            PROTECTION_OPTIONS_ELEMENT = (By.CSS_SELECTOR, 'input[type="email"]')
+
+            options_element = WebDriverWait(driver, wait_time).until(
+                EC.visibility_of_element_located(PROTECTION_OPTIONS_ELEMENT)
+            )
+            return True
+        except:
+            return False
 
 
 def accept_tempmail_consent(driver):
