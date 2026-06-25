@@ -67,7 +67,7 @@ BATCH_NUMBER: Optional[str] = None
 SENDER_APP = 1  # 1 for old, 2 for new
 SAMPLE_RECIPIENT = 1
 if SERVER_IP in ["51.91.59.107"]:
-    SAMPLE_RECIPIENT_EMAIL = ["mitestingacc.01@gmail.com"]
+    SAMPLE_RECIPIENT_EMAIL = ["mitestingacc.01@gmail.com", "shshhs@affworker.com"]
 elif SERVER_IP in ["193.70.86.209"]:
     SAMPLE_RECIPIENT_EMAIL = ["mitestingacc.02@gmail.com"]
 elif SERVER_IP in ["162.19.220.105"]:
@@ -120,7 +120,13 @@ SUBSEQUENT_BATCHES = 15
 FIRST_BATCH_BCC_UPPER = 30
 SUBSEQUENT_BATCH_BCC_UPPER = 30
 SPINNER_TIME = 10
-MAX_CONCURRENT_ACCOUNTS = 4
+MAX_CONCURRENT_ACCOUNTS = 20
+
+BATCH_DELAY_MIN = 3
+BATCH_DELAY_MAX = 3.5
+STAGGER_MIN = 3
+STAGGER_MAX = 3.5
+SAVE_TO_SENT = True
 
 
 VPN_COUNTRY = {
@@ -154,7 +160,7 @@ _file_lock = threading.Lock()
 _cache_lock = threading.Lock()
 _stats_lock = threading.Lock()
 
-# _shared_cache = msal.SerializableTokenCache()
+_shared_cache = msal.SerializableTokenCache()
 _shutdown = threading.Event()
 _run_start_time: Optional[float] = None
 MAX_RUN_TIME_SECONDS = 50 * 60
@@ -536,20 +542,8 @@ def prompt_for_batch_selection() -> Optional[str]:
 def get_token(email: str) -> Optional[str]:
     try:
         with _cache_lock:
-            # app = msal.PublicClientApplication(
-            #     client_id=_get_client_id(),
-            #     authority=AUTHORITY,
-            #     token_cache=_shared_cache,
-            # )
-
             app = msal.PublicClientApplication(
-                client_id="e62beeb7-8a9b-4637-b57f-f8601c0d13f5",
-                authority=AUTHORITY,
-                token_cache=_shared_cache,
-            )
-
-            app = msal.PublicClientApplication(
-                client_id="fe61e5b1-479a-480d-b45e-636e075bc1d3",
+                client_id=_get_client_id(),
                 authority=AUTHORITY,
                 token_cache=_shared_cache,
             )
