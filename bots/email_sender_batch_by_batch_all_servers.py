@@ -1692,6 +1692,44 @@ def prompt_for_sample_recipient() -> Optional[int]:
     print("Invalid choice. Please enter 1 for old app or 2 for new app.")
 
 
+def get_action_status() -> bool:
+    # return True
+    conn = _get_db_connection()
+    if conn is None:
+        return False
+
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT action, status, date_time FROM manualbot_actions_tracker "
+            "ORDER BY action_id DESC LIMIT 1"
+        )
+        row = cursor.fetchone()
+        cursor.close()
+        if not row:
+            return False
+
+        action = str(row[0]).strip().lower() if row[0] is not None else ""
+        status = str(row[1]).strip().lower() if row[1] is not None else ""
+        timestamp = row[2].replace(tzinfo=timezone.utc)
+
+        if not timestamp or not isinstance(timestamp, datetime):
+            return False
+
+        if datetime.now(UTC) - timestamp > timedelta(minutes=10):
+            return False
+
+        return action == "run_bots" and status == "true"
+    except Exception as exc:
+        log(f"Error checking action status: {exc}")
+        return False
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
 def main_batches():
     print("Starting...")
     _start_runtime_watchdog()
@@ -1763,6 +1801,12 @@ def main_batches():
     log(f"Ready: {total_acc} accounts | {total_rcpt} recipients")
     log(f"Max/account: {max_per_account} | Est. accounts needed: {est_accounts_needed}")
     log("-" * 55)
+    while True:
+        if not get_action_status():
+            time.sleep(5)
+            continue
+        else:
+            break
 
     stats = StatsTracker(total_acc, total_rcpt)
     account_states = [
