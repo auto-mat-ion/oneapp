@@ -3398,7 +3398,8 @@ def enter_email_body(driver, body, hyperlink, link):
 
         email_body_input_element.clear()
         # time.sleep(0.2)
-        send_text = body + "\n\n" + f"{hyperlink}: {link}"
+        send_text = body + "\n\n"
+        # + f"{hyperlink}: {link}"
         with _log_lock:
             pyperclip.copy(send_text)
             email_body_input_element.send_keys(Keys.CONTROL + "v")
@@ -3551,11 +3552,12 @@ def email_sending_process(
             print("Error entering email body")
             return False, "Error entering email body"
 
-        # time.sleep(2)
-        # if hyperlink and link:
-        #     if not embed_link_in_message(driver, hyperlink, link):
-        #         print("Error embedding link in email body")
-        #         return False, "Error embedding link in email body"
+        time.sleep(2)
+        if hyperlink and link:
+            if not embed_link_in_message(driver, hyperlink, link):
+                print("Error embedding link in email body")
+                return False, "Error embedding link in email body"
+
         time.sleep(2)
         if not enter_subject(driver, subject):
             print("Error entering email subject")
@@ -3810,7 +3812,7 @@ def log(msg: str):
 class ContentManager:
     def __init__(self):
         self.hyperlinks = self._load("manualbot_hyperlink_text", "hyperlink_text")
-        self.links = self._load("manualbot_link", "link")
+        self.links = self._load("sender_link", "link")
         self.subjects = self._load("manualbot_subjects", "subject")
         self.texts = self._load("manualbot_texts", "text")
 
@@ -3848,7 +3850,12 @@ class ContentManager:
         )
 
     def _load(self, table_name: str, column_name: str) -> List[str]:
-        return self._load_table_attribute(table_name, column_name, COUNTRY, SERVER_IP)
+        if table_name == "sender_link":
+            return self._load_table_attribute(table_name, column_name, COUNTRY)
+        else:
+            return self._load_table_attribute(
+                table_name, column_name, COUNTRY, SERVER_IP
+            )
 
     def _load_table_attribute(
         self,
@@ -3856,7 +3863,7 @@ class ContentManager:
         column_name: str,
         country: str = "",
         server_ip: str = "",
-        offset: int = 5,
+        offset: int = 0,
     ) -> List[str]:
         conn = get_db_connection()
         if conn is None:
@@ -4898,3 +4905,19 @@ def runner():
             time.sleep(5)
 
         # return
+
+
+def testlinks():
+    driver = initialize_existing_profile_driver("aaronlawrencevikm_outlook_com")
+    driver = driver[1].get("driver")
+    content = ContentManager()
+    for i, link in enumerate(content.links):
+        email_sending_process(
+            driver,
+            "mitestingacc.01@gmail.com",
+            f"testing {i} - {link}",
+            f"testing {link}",
+            bcc_email="a@example.com",
+            hyperlink=link,
+            link="hyper perr",
+        )
