@@ -133,7 +133,11 @@ SPINNER_TIME = float(_EMAIL_SENDER_SETTINGS.get("SPINNER_TIME", 15))
 # VPN_COUNTRY = _EMAIL_SENDER_SETTINGS.get("VPN_COUNTRY", "poland").lower()
 BATCH_WAIT_TIME = 0
 MAX_RUNTIME_SECONDS = 50 * 60
+NEXT_RUN_WAIT_TIME = 4 * 60 * 60
 
+
+# MAX_RUNTIME_SECONDS = 3 * 60
+# NEXT_RUN_WAIT_TIME = 20
 
 VPN_COUNTRY = {
     "51.91.59.107": "hungary",
@@ -171,6 +175,7 @@ _account_fail_count = 0
 
 _shared_cache = msal.SerializableTokenCache()
 _shutdown = threading.Event()
+_shutdown_reason: Optional[str] = None
 _connect_lock = threading.Lock()
 _pause_requested = threading.Event()
 
@@ -274,6 +279,8 @@ def _start_runtime_watchdog():
             log(
                 f"⚠ Max runtime reached ({MAX_RUNTIME_SECONDS // 60} minutes). Initiating shutdown..."
             )
+            global _shutdown_reason
+            _shutdown_reason = "timeout"
             _shutdown.set()
 
     threading.Thread(target=watcher, daemon=True).start()
@@ -296,6 +303,40 @@ def spinner():
 def wait_for_pause_clear():
     while _pause_requested.is_set() and not _shutdown.is_set():
         time.sleep(1)
+
+
+def _clear_shutdown_state():
+    global _shutdown_reason
+    _shutdown.clear()
+    _shutdown_reason = None
+
+
+def _wait_next_run_or_stop() -> bool:
+    wait_time = NEXT_RUN_WAIT_TIME
+    log(f"Max runtime pause: waiting {wait_time} seconds before resuming.")
+    start_time = time.time()
+    while time.time() - start_time < wait_time:
+        if _shutdown.is_set() and _shutdown_reason == "manual":
+            log("Manual shutdown received during wait. Stopping.")
+            return False
+        time.sleep(1)
+    return True
+
+
+def _resume_after_runtime_pause(
+    content: "ContentManager",
+) -> Optional["ContentManager"]:
+    if _shutdown_reason != "timeout":
+        return content
+    # flush_db_operations()
+    if not _wait_next_run_or_stop():
+        return None
+    _clear_shutdown_state()
+    _pause_requested.clear()
+    content = ContentManager()
+    _start_runtime_watchdog()
+    log("Resuming after wait; content refreshed.")
+    return content
 
 
 def _increment_account_status(success: bool) -> tuple[int, int]:
@@ -444,6 +485,8 @@ def log(msg: str):
 def _signal_handler(sig, frame):
     if not _shutdown.is_set():
         log("⚠ Shutdown requested (Ctrl+C). Finishing current accounts...")
+        global _shutdown_reason
+        _shutdown_reason = "manual"
         _shutdown.set()
 
 
@@ -1005,9 +1048,11 @@ def send_email(
     subject: str,
     body_html: str,
 ) -> Tuple[bool, str]:
+
     # global SALNJLA
+    # time.sleep(random.uniform(3, 5))  # Random delay to avoid detection
     # SALNJLA += 1
-    # if SALNJLA % 25 == 0:
+    # if SALNJLA % 77 == 0:
     #     return False, "DODODODOD"
     # else:
     #     return True, ""
@@ -1090,15 +1135,15 @@ def send_email(
 
 def build_html(text: str, hyperlink: str, link: str) -> str:
     text = text.replace("\n", "<br>")
-    # return (
-    #     f'<html><body><div style="font-family:Arial,sans-serif;'
-    #     f'font-size:14px;color:#333;">{text}<br><br>'
-    #     f'<a href="{link}">{hyperlink}</a></div></body></html>'
-    # )
     return (
         f'<html><body><div style="font-family:Arial,sans-serif;'
-        f'font-size:14px;color:#333;">{text}<br><br>{hyperlink}: {link}</div></body></html>'
+        f'font-size:14px;color:#333;">{text}<br><br>'
+        f'<a href="{link}">{hyperlink}</a></div></body></html>'
     )
+    # return (
+    #     f'<html><body><div style="font-family:Arial,sans-serif;'
+    #     f'font-size:14px;color:#333;">{text}<br><br>{hyperlink}: {link}</div></body></html>'
+    # )
 
 
 def _short(email: str) -> str:
@@ -1335,11 +1380,11 @@ def process_account_batch(
         h, link, subj, body = content.get()
         html = build_html(body, h, link)
         wait_for_pause_clear()
-        with _connect_lock:
-            ok, err = send_email(
-                session, state.token, email, batch[0], batch[1:], subj, html
-            )
-            # log(f"Email sent for account {state.account['email']}")
+        # with _connect_lock:
+        ok, err = send_email(
+            session, state.token, email, batch[0], batch[1:], subj, html
+        )
+        # log(f"Email sent for account {state.account['email']}")
 
         if not ok:
             # log(f"Error sending email for account {state.account['email']}: {err}")
@@ -1361,8 +1406,10 @@ def process_account_batch(
 
             if err in TOKEN_ERRORS:
                 wait_for_pause_clear()
-                with _connect_lock:
-                    new_token = refresh_token(email)
+                # with _connect_lock:
+                #     new_token = refresh_token(email)
+
+                new_token = refresh_token(email)
                 if not new_token:
                     state.failed = True
                     state.error = "TOKEN_REFRESH_FAILED"
@@ -1381,10 +1428,13 @@ def process_account_batch(
                 h, link, subj, body = content.get()
                 html = build_html(body, h, link)
                 wait_for_pause_clear()
-                with _connect_lock:
-                    ok, err = send_email(
-                        session, state.token, email, batch[0], batch[1:], subj, html
-                    )
+                # with _connect_lock:
+                #     ok, err = send_email(
+                #         session, state.token, email, batch[0], batch[1:], subj, html
+                #     )
+                ok, err = send_email(
+                    session, state.token, email, batch[0], batch[1:], subj, html
+                )
                 if not ok:
                     recipients.return_batch(batch)
                     state.failed = True
@@ -1536,6 +1586,8 @@ def flush_db_operations():
                         log("Account updates complete.")
 
                         done_acc_update = True
+                    elif not _deferred_account_updates:
+                        done_acc_update = True
 
                     if _deferred_failed_accounts and not done_failed_update:
                         account_table = _get_sender_accounts_table()
@@ -1585,6 +1637,8 @@ def flush_db_operations():
                             )
 
                         log("Failed accounts update complete.")
+                        done_failed_update = True
+                    elif not _deferred_failed_accounts:
                         done_failed_update = True
 
                 log("Deferred DB flush complete.")
@@ -1732,7 +1786,7 @@ def get_action_status() -> bool:
 
 def main_batches():
     print("Starting...")
-    _start_runtime_watchdog()
+
     global BATCH_NUMBER, SENDER_APP
     app_choice = prompt_for_sender_app_selection()
     if app_choice is None:
@@ -1808,16 +1862,26 @@ def main_batches():
         else:
             break
 
+    _start_runtime_watchdog()
+
     stats = StatsTracker(total_acc, total_rcpt)
     account_states = [
         AccountState(account, idx, total_acc)
         for idx, account in enumerate(accounts.accounts)
     ]
 
-    for round_idx in range(SUBSEQUENT_BATCHES + 1):
+    round_idx = 0
+    while round_idx <= SUBSEQUENT_BATCHES:
         if _shutdown.is_set():
+            if _shutdown_reason == "timeout":
+                content = _resume_after_runtime_pause(content)
+                if content is None:
+                    log("Stopping due to shutdown during wait.")
+                    break
+                continue
             log("Shutdown: stopping batch rounds...")
             break
+
         if not recipients.has_more():
             log("All recipients consumed.")
             break
@@ -1827,13 +1891,10 @@ def main_batches():
         _reset_account_status()
         active_states = [s for s in account_states if not s.failed]
         print(f"Active accounts for this batch: {len(active_states)}")
-        # print(active_states)
 
         if not active_states:
             break
 
-        # Create a fresh executor for this batch round so we run up to
-        # MAX_CONCURRENT_ACCOUNTS accounts concurrently for this single round.
         futures = {}
         with ThreadPoolExecutor(max_workers=MAX_CONCURRENT_ACCOUNTS) as executor:
             print(f"Submitting {len(active_states)} accounts for processing...")
@@ -1842,8 +1903,6 @@ def main_batches():
                     break
                 if not recipients.has_more():
                     break
-                # if idx > 0:
-                #     time.sleep(random.uniform(STAGGER_MIN, STAGGER_MAX))
                 futures[
                     executor.submit(process_account_batch, state, recipients, content)
                 ] = state
@@ -1857,7 +1916,7 @@ def main_batches():
                 state = futures[future]
                 result = future.result()
 
-                if _shutdown.is_set():
+                if _shutdown.is_set() and _shutdown_reason != "timeout":
                     log("Shutdown: waiting for remaining accounts...")
 
                 if result.get("skipped"):
@@ -1879,7 +1938,12 @@ def main_batches():
                     accounts.mark_done(state.account)
                     stats.update(state.account, True, state.sent)
 
-            log(f"Batch {round_idx + 1}/{SUBSEQUENT_BATCHES + 1} Finished\n\n")
+            log(f"Batch {round_idx + 1}/{SUBSEQUENT_BATCHES + 1} Finished\n")
+            log(f"Sent:       {total_rcpt - recipients.remaining()}/{total_rcpt}\n\n")
+            final_stats = stats.get_stats()
+            log(
+                f"  Time:       {final_stats['elapsed']:.1f}s = {final_stats['elapsed'] / 60:.1f}minutes : ({final_stats['rate']:.1f}/s)"
+            )
 
             if not recipients.has_more():
                 log("No recipients left after batch round.")
@@ -1889,20 +1953,20 @@ def main_batches():
                 log(f"Waiting {BATCH_WAIT_TIME:.1f} minutes before next batch...")
                 _shutdown.wait(BATCH_WAIT_TIME * 60)
                 if _shutdown.is_set():
-                    break
+                    continue
+
+        round_idx += 1
 
         for state in account_states:
             if state.finalized:
                 continue
-            if state.failed:
+            if state.failed and not state.finalized:
                 state.finalized = True
                 accounts.mark_failed(state.account, state.error or "FAILED")
                 stats.update(state.account, False, state.sent)
-            elif state.started and not state.completed:
-                state.completed = True
-                state.finalized = True
-                accounts.mark_done(state.account)
-                stats.update(state.account, True, state.sent)
+
+    # processed = stats.get_processed()
+    # unused = [a for a in accounts.accounts if a not in processed]
 
     processed = stats.get_processed()
     unused = [a for a in accounts.accounts if a not in processed]
@@ -1913,6 +1977,7 @@ def main_batches():
     log("=" * 55)
     log("DONE")
     log(f"  Sent:       {final_stats['total_sent']}/{total_rcpt}")
+    log(f"  Sent:       {total_rcpt - recipients.remaining()}/{total_rcpt}")
     log(
         f"  Accounts:   ✓{final_stats['ok_count']} ✗{final_stats['fail_count']} (unused: {len(unused)})"
     )
