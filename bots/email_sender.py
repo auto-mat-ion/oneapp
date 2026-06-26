@@ -122,6 +122,9 @@ SUBSEQUENT_BATCH_BCC_UPPER = 30
 SPINNER_TIME = 10
 MAX_CONCURRENT_ACCOUNTS = 20
 
+SUBSEQUENT_BATCHES_LOWER = 17
+SUBSEQUENT_BATCHES_UPPER = 22
+
 BATCH_DELAY_MIN = 3
 BATCH_DELAY_MAX = 3.5
 STAGGER_MIN = 3
@@ -1142,7 +1145,7 @@ def process_account(
     time.sleep(random.uniform(BATCH_DELAY_MIN, BATCH_DELAY_MAX))
 
     batches = []
-    for i in range(SUBSEQUENT_BATCHES):
+    for i in range(random.randint(SUBSEQUENT_BATCHES_LOWER, SUBSEQUENT_BATCHES_UPPER)):
         if not recipients.has_more() or _shutdown.is_set():
             break
         batch = recipients.get_batch(
