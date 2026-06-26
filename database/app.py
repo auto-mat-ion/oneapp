@@ -400,11 +400,10 @@ def random_subdomain(length=6):
 
 
 def generate_subdomains(domain, count=1000):
-    return [domain]
     subs = set()
     while len(subs) < count:
         subs.add(f"http://{random_subdomain()}.{domain}")
-    return subs
+    return list(subs)
 
 
 def replace_sender_link_from_domain(
@@ -435,9 +434,6 @@ def replace_sender_link_from_domain(
     if not all_links:
         return False, "No subdomains were generated from the provided domains."
 
-    if server_assignments is not None and len(server_assignments) != len(all_links):
-        return False, "Server assignment count does not match generated link count."
-
     success, error = truncate_table(table_name)
     if not success:
         return False, f"Unable to clear {table_name}: {error}"
@@ -448,26 +444,12 @@ def replace_sender_link_from_domain(
 
     try:
         cursor = conn.cursor()
-        if server_assignments is not None:
-            if country and country.strip():
-                values = [
-                    (link.lower(), server_assignments[idx], country.strip())
-                    for idx, link in enumerate(all_links)
-                ]
-                query = f"INSERT INTO {table_name} (link, server_ip, country) VALUES (%s, %s, %s)"
-            else:
-                values = [
-                    (link.lower(), server_assignments[idx])
-                    for idx, link in enumerate(all_links)
-                ]
-                query = f"INSERT INTO {table_name} (link, server_ip) VALUES (%s, %s)"
+        if country and country.strip():
+            values = [(link.lower(), country.strip()) for link in all_links]
+            query = f"INSERT INTO {table_name} (link, country) VALUES (%s, %s)"
         else:
-            if country and country.strip():
-                values = [(link.lower(), country.strip()) for link in all_links]
-                query = f"INSERT INTO {table_name} (link, country) VALUES (%s, %s)"
-            else:
-                values = [(link.lower(),) for link in all_links]
-                query = f"INSERT INTO {table_name} (link) VALUES (%s)"
+            values = [(link.lower(),) for link in all_links]
+            query = f"INSERT INTO {table_name} (link) VALUES (%s)"
 
         cursor.executemany(query, values)
         conn.commit()
@@ -4315,7 +4297,7 @@ def main():
 
     st.sidebar.markdown("---")
     st.sidebar.subheader("Manual Sender Bot")
-    if st.sidebar.button("Run Manual Sender Bot", width="stretch"):
+    if st.sidebar.button("Run SMTP Sender Bot on all servers", width="stretch"):
         with st.spinner("Writing manual sender action..."):
             success, message = insert_manual_sender_action()
             if success:
@@ -4349,7 +4331,7 @@ def main():
 
         bot_type = st.radio(
             "Bot type",
-            ["manualbot", "smtp_bot"],
+            ["manualbot", "smtp"],
             index=0,
             key="manualbot_or_smtp_bot",
             horizontal=True,
@@ -4509,88 +4491,24 @@ def main():
                             else:
                                 st.error(message)
             else:
-                server_ips = get_email_sender_server_ips()
-                if not server_ips:
-                    st.warning(
-                        "No SERVER_IPS configured in bots/settings.json under email_sender."
+                # target_link_table = f"{table_prefix}_link"
+                target_link_table = "sender_link"
+                st.info(
+                    f"Link domain upload will generate 1000 subdomains per domain and save all links to the {target_link_table} table."
+                )
+                if st.button(
+                    "Save sender links",
+                    key="manualbot_save_links",
+                ):
+                    success, message = replace_sender_link_from_domain(
+                        target_link_table,
+                        "\n".join(values),
+                        None if country_option == "All" else country_option,
                     )
-                else:
-                    selected_servers = st.multiselect(
-                        "Select servers to assign links",
-                        server_ips,
-                        default=server_ips,
-                        key="manualbot_link_selected_servers",
-                    )
-                    if not selected_servers:
-                        st.warning("Select at least one server to distribute links.")
+                    if success:
+                        st.success(message)
                     else:
-                        dist_method = st.radio(
-                            "Link server distribution method",
-                            ["Equal", "Manual"],
-                            index=0,
-                            key="manualbot_link_distribution_method",
-                            horizontal=True,
-                        )
-
-                        total_rows = len(values)
-                        assigned_counts = []
-                        if dist_method == "Equal":
-                            base, remainder = divmod(total_rows, len(selected_servers))
-                            assigned_counts = [
-                                base + (1 if i < remainder else 0)
-                                for i in range(len(selected_servers))
-                            ]
-                            st.write("### Link server assignments")
-                            st.table(
-                                pd.DataFrame(
-                                    {
-                                        "server_ip": selected_servers,
-                                        "assigned_rows": assigned_counts,
-                                    }
-                                )
-                            )
-                        else:
-                            st.write("### Manual link server assignment")
-                            for server in selected_servers:
-                                key = (
-                                    f"manualbot_link_count_{sanitize_state_key(server)}"
-                                )
-                                count = st.number_input(
-                                    f"Links for {server}",
-                                    min_value=0,
-                                    max_value=total_rows,
-                                    value=0,
-                                    step=1,
-                                    key=key,
-                                )
-                                assigned_counts.append(count)
-
-                        total_assigned = sum(assigned_counts)
-                    if total_assigned != total_rows:
-                        st.warning(
-                            f"Total assigned links ({total_assigned}) must equal uploaded links ({total_rows})."
-                        )
-
-                    if total_assigned == total_rows:
-                        if st.button(
-                            "Save sender links with server assignment",
-                            key="manualbot_save_links",
-                        ):
-                            server_assignments = []
-                            for server, count in zip(selected_servers, assigned_counts):
-                                server_assignments.extend([server] * count)
-
-                            target_link_table = f"{table_prefix}_link"
-                            success, message = replace_sender_link_from_domain(
-                                target_link_table,
-                                "\n".join(values),
-                                None if country_option == "All" else country_option,
-                                server_assignments=server_assignments,
-                            )
-                            if success:
-                                st.success(message)
-                            else:
-                                st.error(message)
+                        st.error(message)
         else:
             st.info("Upload a file or paste content to enable distribution and save.")
     else:
