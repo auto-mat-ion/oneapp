@@ -1855,12 +1855,15 @@ def main_batches():
     log(f"Ready: {total_acc} accounts | {total_rcpt} recipients")
     log(f"Max/account: {max_per_account} | Est. accounts needed: {est_accounts_needed}")
     log("-" * 55)
+    log("Waiting for run signal...")
     while True:
         if not get_action_status():
             time.sleep(5)
             continue
         else:
             break
+
+    log("Run signal received. Starting batch processing...")
 
     _start_runtime_watchdog()
 
