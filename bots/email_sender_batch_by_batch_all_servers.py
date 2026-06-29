@@ -1084,10 +1084,14 @@ def send_email(
         body = r.text[:300] if r.text else ""
 
         if r.status_code == 429:
-            for attempt in range(1):
-                wait = min(
-                    int(r.headers.get("Retry-After", str(5 * (attempt + 1)))), 60
-                )
+            for attempt in range(2):
+                try:
+                    wait = min(
+                        int(r.headers.get("Retry-After", str(5 * (attempt + 1)))), 60
+                    )
+                    wait = 45
+                except:
+                    wait = 45
                 log(f"    ⏳ throttled, wait {wait}s (retry {attempt + 1}/1)")
                 time.sleep(wait)
                 r = session.post(
@@ -1100,6 +1104,7 @@ def send_email(
                     return True, ""
                 if r.status_code != 429:
                     break
+
             return False, f"THROTTLE_FAIL:{r.status_code}"
 
         if r.status_code == 401:
@@ -1689,8 +1694,10 @@ def process_account_wrapper(
     try:
         success, sent, error = process_account(account, recipients, content, session)
     except Exception as e:
-        log(f"  ✗ CRASH: {str(e)[:80]}")
-        success, sent, error = False, 0, f"CRASH:{str(e)[:80]}"
+        # log(f"  ✗ CRASH: {str(e)[:80]}")
+        # success, sent, error = False, 0, f"CRASH:{str(e)[:80]}"
+        log("  ✗ CRASH: ")
+        success, sent, error = False, 0, "CRASH"
     finally:
         session.close()
 
