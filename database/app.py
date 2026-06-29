@@ -4491,7 +4491,6 @@ def main():
                             else:
                                 st.error(message)
             else:
-                # target_link_table = f"{table_prefix}_link"
                 target_link_table = "sender_link"
                 st.info(
                     f"Link domain upload will generate 1000 subdomains per domain and save all links to the {target_link_table} table."

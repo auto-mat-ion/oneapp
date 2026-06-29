@@ -701,7 +701,7 @@ def spin(text: str) -> str:
 class ContentManager:
     def __init__(self):
         self.hyperlinks = self._load("sender_hyperlink_text", "hyperlink_text")
-        self.links = self._load("sender_link", "link", limit=300, offset=0)
+        self.links = self._load("sender_link", "link", limit=3000, offset=0)
         self.subjects = self._load("sender_subjects", "subject")
         self.texts = self._load("sender_texts", "text")
 
