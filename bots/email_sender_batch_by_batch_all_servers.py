@@ -66,14 +66,8 @@ BOT_TYPE = "email_sender"
 BATCH_NUMBER: Optional[str] = None
 SENDER_APP = 1  # 1 for old, 2 for new
 SAMPLE_RECIPIENT = 1
-if SERVER_IP in ["79.137.75.57"]:
-    SAMPLE_RECIPIENT_EMAIL = ["mitestingacc.01@gmail.com"]
-elif SERVER_IP in ["51.178.51.6"]:
-    SAMPLE_RECIPIENT_EMAIL = ["mitestingacc.02@gmail.com"]
-elif SERVER_IP in ["13.140.181.19"]:
-    SAMPLE_RECIPIENT_EMAIL = ["mitestingacc.03@gmail.com"]
-else:
-    SAMPLE_RECIPIENT_EMAIL = []
+
+SAMPLE_RECIPIENT_EMAIL = []
 
 
 def _get_sender_accounts_table() -> str:
