@@ -2,9 +2,6 @@ from bots.email_sender_batch_by_batch_all_servers import main_batches
 from bots.familybot import run_familybot, run_familybot_share
 from bots.hotmailbot import run_hotmailbot
 from bots.password_changer import run_password_changerbot
-from bots.email_sender import main
-from bots.email_sender_batch_by_batch import main2
-from bots.email_sender_emanuell import em_main
 
 
 # from bots.email_sender_test import main_sec
@@ -24,7 +21,7 @@ if (
 
 bot = int(
     input(
-        f"Oneapp v1.72\n\nSERVER IP: {json.loads(open('bots/settings.json', 'r').read()).get('app').get('SERVER_IP')}\n\nSelect bot to run:\n1. Familybot\n2. Hotmailbot\n3. Password Changer\n4. Email Sender\n5. Familybot Share\n6. New app Hotmailbot \n7. Save manual sender cookies\n8. Run manual bot\nEnter choice (1/2/3/4/5/6): ".format()
+        f"Oneapp v1.75\n\nSERVER IP: {json.loads(open('bots/settings.json', 'r').read()).get('app').get('SERVER_IP')}\n\nSelect bot to run:\n1. Familybot\n2. Hotmailbot\n3. Password Changer\n4. Email Sender\n5. Familybot Share\n6. New app Hotmailbot \n7. Save manual sender cookies\n8. Run manual bot\nEnter choice (1/2/3/4/5/6): ".format()
     )
 )
 
@@ -35,8 +32,6 @@ elif bot == 2:
 elif bot == 3:
     run_password_changerbot()
 elif bot == 4:
-    # main()
-    # main2()
     main_batches()
 elif bot == 5:
     run_familybot_share()
