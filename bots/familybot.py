@@ -780,6 +780,19 @@ def click_next_button(driver):
         return False
 
 
+def enter_email_and_click_next(driver, email_address):
+    try:
+        """
+        Enters the email address in the email input box
+        """
+        if enter_email(driver, email_address):
+            click_next_button(driver)
+            return True
+        return False
+    except:
+        return False
+
+
 def click_next_button_rec_email(driver):
     """
     Clicks the next button
@@ -3653,6 +3666,8 @@ def change_acc_pass(driver, new_profile_data):
     try:
         password = new_profile_data.get("pass")
         email = new_profile_data.get("email")
+        recovery = new_profile_data.get("recovery_email")
+
         print(f"{email} : Initializing change password")
 
         bring_to_front(driver)
@@ -3703,10 +3718,18 @@ def change_acc_pass(driver, new_profile_data):
             print(f"{email}: Reloging in with NEW password")
             click_existing_account_smtp(driver)
 
-            click_use_your_password_button(driver)
+            # click_use_your_password_button(driver)
+            # if enter_password(driver=driver, password=new_pass):
+            #     click_password_next_button(driver=driver)
+            click_send_code_to_recovery_email_button(driver)
+            enter_recovery_email_2(driver, recovery)
+            click_password_next_button(driver)
+            status, code = wait_for_code_by_recovery_mail(recovery)
+            if not status:
+                print(f"{email} : Code not sent to recovery email!")
+                return False, new_pass
+            enter_code_and_click_next_after_pass_change(driver, code)
 
-            if enter_password(driver=driver, password=new_pass):
-                click_password_next_button(driver=driver)
         except:
             pass
 
@@ -3718,17 +3741,31 @@ def change_acc_pass(driver, new_profile_data):
         return False, f"Exception during changing password: {str(e)}"
 
 
-def re_login_existing_acc(driver, password):
+def re_login_existing_acc(driver, new_profile_data):
     try:
-        if click_existing_account_smtp(driver, wait_time=2) or enter_password(
-            driver, password, 2
-        ):
-            click_use_your_password_button(driver)
-            time.sleep(2)
-            if enter_password(driver=driver, password=password):
-                click_password_next_button(driver=driver)
-                return True
+        email = new_profile_data.get("email")
+        password = new_profile_data.get("pass")
+        recovery = new_profile_data.get("recovery_email")
 
+        if click_existing_account_smtp(
+            driver, wait_time=2
+        ) or enter_email_and_click_next(driver, email):
+            # click_use_your_password_button(driver)
+
+            # time.sleep(2)
+            # if enter_password(driver=driver, password=password):
+            #     click_password_next_button(driver=driver)
+            #     return True
+
+            click_send_code_to_recovery_email_button(driver)
+            enter_recovery_email_2(driver, recovery)
+            click_password_next_button(driver)
+            status, code = wait_for_code_by_recovery_mail(recovery)
+            if not status:
+                print("Code not sent to recovery email!")
+                return False
+            enter_code_and_click_next_after_pass_change(driver, code)
+            click_stay_signed_in_button(driver)
         return False
     except:
         return False
@@ -4097,11 +4134,12 @@ def login_on_country_page(driver, new_profile_data):
         #     driver, new_profile_data=new_profile_data
         # )
         print(f"{email} : Reloging in with NEW password")
-        click_existing_account_smtp(driver)
-        click_use_your_password_button(driver)
-        time.sleep(2)
-        if enter_password(driver=driver, password=password):
-            click_password_next_button(driver=driver)
+        # click_existing_account_smtp(driver)
+        # click_use_your_password_button(driver)
+        # time.sleep(2)
+        # if enter_password(driver=driver, password=password):
+        #     click_password_next_button(driver=driver)
+        if re_login_existing_acc(driver, new_profile_data):
             driver.get("https://account.microsoft.com/profile")
             return True
     except:
@@ -4116,6 +4154,7 @@ def change_account_country(driver, new_profile_data):
             try:
                 email = new_profile_data.get("email")
                 password = new_profile_data.get("pass")
+                recovery = new_profile_data.get("recovery_email")
                 bring_to_front(driver)
 
                 driver.get("https://account.microsoft.com/profile")
@@ -4154,7 +4193,7 @@ def change_account_country(driver, new_profile_data):
 
                 # data[0]
                 country_input_element.click()
-                re_login_existing_acc(driver, password)
+                re_login_existing_acc(driver, new_profile_data=new_profile_data)
                 time.sleep(0.5)
                 country_input_element.send_keys(Keys.BACK_SPACE * 50)
                 time.sleep(0.5)
@@ -4202,6 +4241,7 @@ def change_account_language_lingo(driver, new_profile_data):
             try:
                 email = new_profile_data.get("email")
                 password = new_profile_data.get("pass")
+                recovery = new_profile_data.get("recovery_email")
                 bring_to_front(driver)
 
                 driver.get("https://account.microsoft.com/profile")
@@ -4240,7 +4280,7 @@ def change_account_language_lingo(driver, new_profile_data):
 
                 # data[0]
                 country_input_element.click()
-                re_login_existing_acc(driver, password)
+                re_login_existing_acc(driver, new_profile_data)
                 time.sleep(0.5)
                 country_input_element.send_keys(Keys.BACK_SPACE * 50)
                 time.sleep(0.5)
@@ -6587,7 +6627,7 @@ def share_premium(new_profile_data):
         try:
             driver.quit()
             pass
-            # processed_email(new_profile_data)
+            processed_email(new_profile_data)
         except:
             pass
 
@@ -6923,14 +6963,9 @@ def initialize_new_profile(new_profile_data):
             update_accounts_data(email=email_address, password=error)
             new_profile_data["pass"] = error
 
-        # print(f"{email_address}: Joining microsoft premium")
         # return driver
 
-        # time.sleep(40)
         status = change_account_country(driver, new_profile_data)
-        # if not status:
-        #     status_ = change_account_country_specified(driver, new_profile_data)
-        #     status = change_account_country(driver, new_profile_data)
 
         if not status:
             new_profile_logger(
@@ -7048,14 +7083,5 @@ def run_familybot_share():
             break
 
 
-# dta = "socialtilt_sad@outlook.com	058cLIdc4XIb.!Ze8	dociqng181@mailfrid.com"
-# new_profile_data = {
-#     "email": dta.split("\t")[0],
-#     "pass": dta.split("\t")[1],
-#     "recovery": dta.split("\t")[2],
-# }
-
-
-# driver = share_premium(new_profile_data)
-
-# num_available_cards()
+# status, new_profile_data = get_new_profile_data()
+# driver = initialize_new_profile(new_profile_data)
