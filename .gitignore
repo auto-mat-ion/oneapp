@@ -14,3 +14,4 @@ sender_logs/
 *profiles
 domains.txt
 subdomains.txt
+utils/server_ip.txt
