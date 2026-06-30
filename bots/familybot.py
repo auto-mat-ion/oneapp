@@ -391,7 +391,7 @@ def wait_for_code_by_recovery_mail(recovery_email, timeout=120, poll_interval=1)
                     last_message["subject"].lower()
                     in ["your single-use code", "你的一次性代码"]
                 )
-                and (((current_time - message_send_time).total_seconds()) < 30)
+                and (((current_time - message_send_time).total_seconds()) < 4)
             ):
                 plain = re.sub(
                     r"<[^>]+>", " ", last_message.get("content")
@@ -3718,9 +3718,6 @@ def change_acc_pass(driver, new_profile_data):
             print(f"{email}: Reloging in with NEW password")
             click_existing_account_smtp(driver)
 
-            # click_use_your_password_button(driver)
-            # if enter_password(driver=driver, password=new_pass):
-            #     click_password_next_button(driver=driver)
             click_send_code_to_recovery_email_button(driver)
             enter_recovery_email_2(driver, recovery)
             click_password_next_button(driver)
