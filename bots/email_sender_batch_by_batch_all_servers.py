@@ -67,8 +67,6 @@ BATCH_NUMBER: Optional[str] = None
 SENDER_APP = 1  # 1 for old, 2 for new
 SAMPLE_RECIPIENT = 1
 
-SAMPLE_RECIPIENT_EMAIL = []
-
 
 def _get_sender_accounts_table() -> str:
     return "sender2_input_accounts" if SENDER_APP == 2 else "sender_input_accounts"
@@ -114,7 +112,7 @@ SUBSEQUENT_BATCH_BCC = 49
 SUBSEQUENT_BATCH_BCC_LOWER = 40
 SUBSEQUENT_BATCHES = random.randint(17, 20)
 MAX_CONCURRENT_BATCHES = int(_EMAIL_SENDER_SETTINGS.get("MAX_CONCURRENT_BATCHES", 1))
-MAX_CONCURRENT_ACCOUNTS = 20
+
 BATCH_DELAY_MIN = float(_EMAIL_SENDER_SETTINGS.get("BATCH_DELAY_MIN", 1.0))
 BATCH_DELAY_MAX = float(_EMAIL_SENDER_SETTINGS.get("BATCH_DELAY_MAX", 1.0))
 STAGGER_MIN = float(_EMAIL_SENDER_SETTINGS.get("STAGGER_MIN", 1.0))
@@ -129,9 +127,31 @@ BATCH_WAIT_TIME = 0
 MAX_RUNTIME_SECONDS = 50 * 60
 NEXT_RUN_WAIT_TIME = 4 * 60 * 60
 
+if SERVER_IP in [
+    "51.77.216.17",
+    "51.75.119.199",
+    "13.140.161.126",
+    "13.140.181.21",
+    "13.140.181.18",
+    "13.140.181.23",
+    "13.140.181.20",
+    "13.140.181.19",
+    "13.140.181.17",
+    "13.140.181.14",
+    "13.140.181.16",
+    "13.140.181.22",
+]:
+    MAX_CONCURRENT_ACCOUNTS = 8
+else:
+    MAX_CONCURRENT_ACCOUNTS = 20
 
-# MAX_RUNTIME_SECONDS = 3 * 60
-# NEXT_RUN_WAIT_TIME = 20
+if SERVER_IP in ["13.140.181.14"]:
+    SAMPLE_RECIPIENT_EMAIL = [
+        "mitestingacc.01@gmail.com",
+        "stacash.affiliate@gmail.com",
+    ]
+elif SERVER_IP in ["13.140.161.126"]:
+    SAMPLE_RECIPIENT_EMAIL = ["mitestingacc.02@gmail.com", "stacho1988@gmail.com"]
 
 VPN_COUNTRY = {
     "51.91.59.107": "hungary",
