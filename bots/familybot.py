@@ -1,6 +1,7 @@
 import time
 from datetime import timedelta, datetime, timezone
 import os
+import sys
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import Select
 from selenium.webdriver.common.keys import Keys
@@ -8,6 +9,8 @@ from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.common.action_chains import ActionChains
 
 from selenium.webdriver.support import expected_conditions as EC
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+from utils.server_ip_helper import get_server_ip
 
 from seleniumbase import Driver
 import pandas as pd
@@ -191,7 +194,7 @@ DB_HOST = APP_SETTINGS.get("DB_HOST")
 DB_USER = APP_SETTINGS.get("DB_USER")
 DB_PASSWORD = APP_SETTINGS.get("DB_PASSWORD")
 DB_NAME = APP_SETTINGS.get("DB_NAME")
-SERVER_IP = APP_SETTINGS.get("SERVER_IP", "0.0.0.0")
+SERVER_IP = get_server_ip()
 
 
 def get_setting(key, default=None):
