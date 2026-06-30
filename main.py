@@ -19,7 +19,7 @@ if get_server_ip() == "test_ip":
 
 bot = int(
     input(
-        f"Oneapp v1.75\n\nSERVER IP: {get_server_ip()}\n\nSelect bot to run:\n1. Familybot\n2. Hotmailbot\n3. Password Changer\n4. Email Sender\n5. Familybot Share\n6. New app Hotmailbot \n7. Save manual sender cookies\n8. Run manual bot\nEnter choice (1/2/3/4/5/6): ".format()
+        f"Oneapp v1.8\n\nSERVER IP: {get_server_ip()}\n\nSelect bot to run:\n1. Familybot\n2. Hotmailbot\n3. Password Changer\n4. Email Sender\n5. Familybot Share\n6. New app Hotmailbot \n7. Save manual sender cookies\n8. Run manual bot\nEnter choice (1/2/3/4/5/6): ".format()
     )
 )
 
@@ -39,10 +39,5 @@ elif bot == 7:
     save_cookies()
 elif bot == 8:
     runner()
-elif bot == 111:
-    em_main()
-
-# elif bot == 111:
-#     main_sec()
 else:
     print("Invalid choice. Please select 1, 2, 3, 4, or 5.")
