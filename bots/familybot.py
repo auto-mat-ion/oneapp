@@ -4189,7 +4189,7 @@ def change_account_country(driver, new_profile_data):
 
                 # data[0]
                 country_input_element.click()
-                re_login_existing_acc(driver, new_profile_data=new_profile_data)
+                # re_login_existing_acc(driver, new_profile_data=new_profile_data)
                 time.sleep(0.5)
                 country_input_element.send_keys(Keys.BACK_SPACE * 50)
                 time.sleep(0.5)
