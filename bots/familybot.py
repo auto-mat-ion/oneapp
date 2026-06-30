@@ -391,7 +391,7 @@ def wait_for_code_by_recovery_mail(recovery_email, timeout=120, poll_interval=1)
                     last_message["subject"].lower()
                     in ["your single-use code", "你的一次性代码"]
                 )
-                and (((current_time - message_send_time).total_seconds()) < 4)
+                and (((current_time - message_send_time).total_seconds()) < 15)
             ):
                 plain = re.sub(
                     r"<[^>]+>", " ", last_message.get("content")
@@ -3678,7 +3678,6 @@ def change_acc_pass(driver, new_profile_data):
         time.sleep(2)
 
         new_pass = password + ".!Ze8"
-        # new_pass = password + "."
 
         retries = 0
         while retries < 3:
@@ -6658,7 +6657,6 @@ def initialize_new_profile(new_profile_data):
 
         email_address = new_profile_data.get("email").strip()
         password = new_profile_data.get("pass").strip()
-
         new_profile_data_original = new_profile_data.copy()
 
         retries = 0
