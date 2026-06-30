@@ -8,20 +8,18 @@ from bots.password_changer import run_password_changerbot
 from bots.new_app_hotmail import run_second_app_hotmails
 from bots.manual_sender import save_cookies, runner
 import json
+from utils.server_ip_helper import get_server_ip
 
-if (
-    json.loads(open("bots/settings.json", "r").read()).get("app").get("SERVER_IP")
-    == "test_ip"
-):
+if get_server_ip() == "test_ip":
     print(
-        "Please set the SERVER_IP in bots/settings.json before running the application."
+        "Please set the SERVER_IP in utils/server_ip file before running the application."
     )
     exit(1)
 
 
 bot = int(
     input(
-        f"Oneapp v1.75\n\nSERVER IP: {json.loads(open('bots/settings.json', 'r').read()).get('app').get('SERVER_IP')}\n\nSelect bot to run:\n1. Familybot\n2. Hotmailbot\n3. Password Changer\n4. Email Sender\n5. Familybot Share\n6. New app Hotmailbot \n7. Save manual sender cookies\n8. Run manual bot\nEnter choice (1/2/3/4/5/6): ".format()
+        f"Oneapp v1.75\n\nSERVER IP: {get_server_ip()}\n\nSelect bot to run:\n1. Familybot\n2. Hotmailbot\n3. Password Changer\n4. Email Sender\n5. Familybot Share\n6. New app Hotmailbot \n7. Save manual sender cookies\n8. Run manual bot\nEnter choice (1/2/3/4/5/6): ".format()
     )
 )
 

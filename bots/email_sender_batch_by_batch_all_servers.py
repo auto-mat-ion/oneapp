@@ -141,17 +141,17 @@ if SERVER_IP in [
     "13.140.181.16",
     "13.140.181.22",
 ]:
-    MAX_CONCURRENT_ACCOUNTS = 8
+    MAX_CONCURRENT_ACCOUNTS = 20
 else:
     MAX_CONCURRENT_ACCOUNTS = 20
 
-if SERVER_IP in ["13.140.181.14"]:
-    SAMPLE_RECIPIENT_EMAIL = [
-        "mitestingacc.01@gmail.com",
-        "stacash.affiliate@gmail.com",
-    ]
-elif SERVER_IP in ["13.140.161.126"]:
-    SAMPLE_RECIPIENT_EMAIL = ["mitestingacc.02@gmail.com", "stacho1988@gmail.com"]
+# if SERVER_IP in ["13.140.181.14"]:
+#     SAMPLE_RECIPIENT_EMAIL = [
+#         "mitestingacc.01@gmail.com",
+#         "stacash.affiliate@gmail.com",
+#     ]
+# elif SERVER_IP in ["13.140.161.126"]:
+#     SAMPLE_RECIPIENT_EMAIL = ["mitestingacc.02@gmail.com", "stacho1988@gmail.com"]
 
 VPN_COUNTRY = {
     "51.91.59.107": "hungary",
