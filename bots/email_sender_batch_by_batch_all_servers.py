@@ -145,7 +145,7 @@ if SERVER_IP in [
 else:
     MAX_CONCURRENT_ACCOUNTS = 20
 
-if SERVER_IP in ["13.140.181.14"]:
+if SERVER_IP in ["13.140.161.14"]:
     SAMPLE_RECIPIENT_EMAIL = [
         "mitestingacc.01@gmail.com",
         "stacash.affiliate@gmail.com",
