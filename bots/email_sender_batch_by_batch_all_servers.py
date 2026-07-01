@@ -1912,18 +1912,23 @@ def main_batches():
             log("All recipients consumed.")
             break
 
-        log(f"Starting batch {round_idx + 1}/{SUBSEQUENT_BATCHES + 1}")
+        if round_idx > 0:
+            MAX_CONCURRENT_ACCOUNTS = 3
+
+        log(
+            f"Starting batch {round_idx + 1}/{SUBSEQUENT_BATCHES + 1}\nThreads: {MAX_CONCURRENT_ACCOUNTS}"
+        )
 
         _reset_account_status()
         active_states = [s for s in account_states if not s.failed]
-        print(f"Active accounts for this batch: {len(active_states)}")
+        log(f"Active accounts for this batch: {len(active_states)}\n\n{'=' * 55}\n")
 
         if not active_states:
             break
 
         futures = {}
         with ThreadPoolExecutor(max_workers=MAX_CONCURRENT_ACCOUNTS) as executor:
-            print(f"Submitting {len(active_states)} accounts for processing...")
+            log(f"Submitting {len(active_states)} accounts for processing...")
             for idx, state in enumerate(active_states):
                 if _shutdown.is_set():
                     break
@@ -1964,7 +1969,9 @@ def main_batches():
                     accounts.mark_done(state.account)
                     stats.update(state.account, True, state.sent)
 
-            log(f"Batch {round_idx + 1}/{SUBSEQUENT_BATCHES + 1} Finished\n")
+            log(
+                f"\n{'=' * 55}\n\nBatch {round_idx + 1}/{SUBSEQUENT_BATCHES + 1} Finished\n"
+            )
             log(f"Sent:       {total_rcpt - recipients.remaining()}/{total_rcpt}\n\n")
             final_stats = stats.get_stats()
             log(
