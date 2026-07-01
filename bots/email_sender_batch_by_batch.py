@@ -17,6 +17,12 @@ from urllib3.util.retry import Retry
 from email_validator import validate_email, EmailNotValidError
 from urllib.parse import quote_plus
 
+import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+from utils.server_ip_helper import get_server_ip
+
+
 try:
     from sqlalchemy import create_engine, text
 except ImportError:  # fallback if SQLAlchemy is unavailable
@@ -57,11 +63,7 @@ _EMAIL_SENDER_SETTINGS = _get_email_sender_settings()
 COUNTRY = str(_EMAIL_SENDER_SETTINGS.get("COUNTRY", "")).strip()
 
 APP_SETTINGS = _load_settings().get("app")
-SERVER_IP = (
-    APP_SETTINGS.get("SERVER_IP", "test_ip")
-    if isinstance(APP_SETTINGS, dict)
-    else "test_ip"
-)
+SERVER_IP = get_server_ip()
 BOT_TYPE = "email_sender"
 BATCH_NUMBER: Optional[str] = None
 SENDER_APP = 1  # 1 for old, 2 for new
