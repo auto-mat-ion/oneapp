@@ -153,8 +153,8 @@ if SERVER_IP in ["51.91.56.36"]:
     ]
 elif SERVER_IP in ["51.77.195.218"]:
     SAMPLE_RECIPIENT_EMAIL = ["mitestingacc.02@gmail.com", "stacho1988@gmail.com"]
-
-# SAMPLE_RECIPIENT_EMAIL = []
+else:
+    SAMPLE_RECIPIENT_EMAIL = []
 VPN_COUNTRY = {
     "51.91.59.107": "hungary",
     "79.137.75.57": "denmark",
