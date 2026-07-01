@@ -66,7 +66,7 @@ SERVER_IP = get_server_ip()
 BOT_TYPE = "email_sender"
 BATCH_NUMBER: Optional[str] = None
 SENDER_APP = 1  # 1 for old, 2 for new
-SAMPLE_RECIPIENT = 2
+SAMPLE_RECIPIENT = 1
 
 
 def _get_sender_accounts_table() -> str:
@@ -142,17 +142,18 @@ if SERVER_IP in [
     "13.140.181.16",
     "13.140.181.22",
 ]:
-    MAX_CONCURRENT_ACCOUNTS = 20
+    MAX_CONCURRENT_ACCOUNTS = 8
 else:
-    MAX_CONCURRENT_ACCOUNTS = 20
+    MAX_CONCURRENT_ACCOUNTS = 8
 
-# if SERVER_IP in ["13.140.181.14"]:
-#     SAMPLE_RECIPIENT_EMAIL = [
-#         "mitestingacc.01@gmail.com",
-#         "stacash.affiliate@gmail.com",
-#     ]
-# elif SERVER_IP in ["13.140.161.126"]:
-#     SAMPLE_RECIPIENT_EMAIL = ["mitestingacc.02@gmail.com", "stacho1988@gmail.com"]
+if SERVER_IP in ["51.91.56.36"]:
+    SAMPLE_RECIPIENT_EMAIL = [
+        "mitestingacc.01@gmail.com",
+        "stacash.affiliate@gmail.com",
+    ]
+elif SERVER_IP in ["51.77.195.218"]:
+    SAMPLE_RECIPIENT_EMAIL = ["mitestingacc.02@gmail.com", "stacho1988@gmail.com"]
+
 SAMPLE_RECIPIENT_EMAIL = []
 VPN_COUNTRY = {
     "51.91.59.107": "hungary",
