@@ -146,15 +146,16 @@ if SERVER_IP in [
 else:
     MAX_CONCURRENT_ACCOUNTS = 8
 
-if SERVER_IP in ["51.91.56.36"]:
+if SERVER_IP in ["162.19.229.213"]:
     SAMPLE_RECIPIENT_EMAIL = [
         "mitestingacc.01@gmail.com",
         "stacash.affiliate@gmail.com",
     ]
-elif SERVER_IP in ["51.77.195.218"]:
+elif SERVER_IP in ["51.255.193.28"]:
     SAMPLE_RECIPIENT_EMAIL = ["mitestingacc.02@gmail.com", "stacho1988@gmail.com"]
 else:
     SAMPLE_RECIPIENT_EMAIL = []
+
 VPN_COUNTRY = {
     "51.91.59.107": "hungary",
     "79.137.75.57": "denmark",
