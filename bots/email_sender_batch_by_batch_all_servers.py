@@ -146,12 +146,12 @@ if SERVER_IP in [
 else:
     MAX_CONCURRENT_ACCOUNTS = 8
 
-if SERVER_IP in ["51.178.51.6"]:
+if SERVER_IP in ["158.69.197.228"]:
     SAMPLE_RECIPIENT_EMAIL = [
         "mitestingacc.01@gmail.com",
         "stacash.affiliate@gmail.com",
     ]
-elif SERVER_IP in ["162.19.229.114"]:
+elif SERVER_IP in ["137.74.115.164"]:
     SAMPLE_RECIPIENT_EMAIL = ["mitestingacc.02@gmail.com", "stacho1988@gmail.com"]
 else:
     SAMPLE_RECIPIENT_EMAIL = []
@@ -1914,7 +1914,7 @@ def main_batches():
             break
 
         if round_idx > 0:
-            MAX_CONCURRENT_ACCOUNTS = 2
+            MAX_CONCURRENT_ACCOUNTS = 1
 
         log(
             f"Starting batch {round_idx + 1}/{SUBSEQUENT_BATCHES + 1}\nThreads: {MAX_CONCURRENT_ACCOUNTS}"
