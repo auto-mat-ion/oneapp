@@ -1811,7 +1811,7 @@ def get_action_status() -> bool:
 def main_batches():
     print("Starting...")
 
-    global BATCH_NUMBER, SENDER_APP
+    global BATCH_NUMBER, SENDER_APP, MAX_CONCURRENT_ACCOUNTS
     app_choice = prompt_for_sender_app_selection()
     if app_choice is None:
         print("No app selection made. Exiting.")
