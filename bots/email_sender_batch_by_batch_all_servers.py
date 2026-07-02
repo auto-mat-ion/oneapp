@@ -295,6 +295,50 @@ def connect_new_random(COUNTRY=VPN_COUNTRY):
         return False
 
 
+def disconnect_vpn():
+    try:
+
+        def run_cmd(args):
+            result = subprocess.run(
+                [EXPRESSVPN_CMD] + args,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            return result.stdout.strip(), result.stderr.strip()
+
+        def connect(location=None):
+            if location:
+                out, err = run_cmd(["connect", location])
+            else:
+                out, err = run_cmd(["connect"])
+            print(f"Express vpn: {out or err}")
+
+        def disconnect():
+            out, err = run_cmd(["disconnect"])
+            print(f"Express vpn: {out or err}")
+
+        def try_int(x):
+            try:
+                int(x[-1])
+
+                return True
+            except:
+                return False
+
+        def parse_country(x):
+            try:
+                d = x.split(" ")
+                return x.replace(d[-1], ""), d[-1]
+            except:
+                return "DADADADAD", "101"
+
+        disconnect()
+        return True
+    except:
+        return False
+
+
 def _start_runtime_watchdog():
     def watcher():
         if not _shutdown.wait(MAX_RUNTIME_SECONDS):
@@ -1841,6 +1885,7 @@ def main_batches():
 
     # connect_new_random("netherlands")
     # connect_new_random(VPN_COUNTRY)
+    disconnect_vpn()
 
     time.sleep(5)
     # print("Connected VPN...")
