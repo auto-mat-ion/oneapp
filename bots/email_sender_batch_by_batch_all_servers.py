@@ -146,10 +146,9 @@ if SERVER_IP in [
 else:
     MAX_CONCURRENT_ACCOUNTS = 4
 
-    SAMPLE_RECIPIENT_EMAIL = []
+SAMPLE_RECIPIENT_EMAIL = []
 
-
-if SERVER_IP in ["158.69.197.228"]:
+if SERVER_IP in ["51.91.56.36"]:
     SAMPLE_RECIPIENT_EMAIL = [
         "mitestingacc.01@gmail.com",
         # "stacash.affiliate@gmail.com",
@@ -157,7 +156,7 @@ if SERVER_IP in ["158.69.197.228"]:
 elif SERVER_IP in ["137.74.115.164"]:
     # SAMPLE_RECIPIENT_EMAIL = ["mitestingacc.02@gmail.com", "stacho1988@gmail.com"]
     SAMPLE_RECIPIENT_EMAIL = ["mitestingacc.02@gmail.com"]
-elif SERVER_IP in ["193.70.87.230"]:
+elif SERVER_IP in ["13.140.181.17"]:
     SAMPLE_RECIPIENT_EMAIL = ["mitestingacc.03@gmail.com"]
 else:
     SAMPLE_RECIPIENT_EMAIL = []
