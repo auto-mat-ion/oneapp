@@ -345,7 +345,7 @@ def _wait_next_run_or_stop() -> bool:
     return True
 
 
-def _resume_after_runtime_pause(
+def _resume_after_runtime_pause_old(
     content: "ContentManager",
 ) -> Optional["ContentManager"]:
     if _shutdown_reason != "timeout":
@@ -359,6 +359,16 @@ def _resume_after_runtime_pause(
     _start_runtime_watchdog()
     log("Resuming after wait; content refreshed.")
     return content
+
+
+def _resume_after_runtime_pause(
+    content: "ContentManager",
+) -> Optional["ContentManager"]:
+    if _shutdown_reason != "timeout":
+        return content
+    # Stop immediately after max runtime instead of waiting for NEXT_RUN_WAIT_TIME
+    log("Max runtime reached. Stopping immediately.")
+    return None
 
 
 def _increment_account_status(success: bool) -> tuple[int, int]:
