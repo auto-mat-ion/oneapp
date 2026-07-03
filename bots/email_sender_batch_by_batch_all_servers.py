@@ -148,15 +148,15 @@ else:
 
 SAMPLE_RECIPIENT_EMAIL = []
 
-if SERVER_IP in ["51.91.56.36"]:
+if SERVER_IP in ["193.70.86.209"]:
     SAMPLE_RECIPIENT_EMAIL = [
         "mitestingacc.01@gmail.com",
-        # "stacash.affiliate@gmail.com",
+        "stacash.affiliate@gmail.com",
     ]
-elif SERVER_IP in ["137.74.115.164"]:
-    # SAMPLE_RECIPIENT_EMAIL = ["mitestingacc.02@gmail.com", "stacho1988@gmail.com"]
-    SAMPLE_RECIPIENT_EMAIL = ["mitestingacc.02@gmail.com"]
-elif SERVER_IP in ["13.140.181.17"]:
+elif SERVER_IP in ["162.19.229.114"]:
+    SAMPLE_RECIPIENT_EMAIL = ["mitestingacc.02@gmail.com", "stacho1988@gmail.com"]
+    # SAMPLE_RECIPIENT_EMAIL = ["mitestingacc.02@gmail.com"]
+elif SERVER_IP in ["13.140.181.23"]:
     SAMPLE_RECIPIENT_EMAIL = ["mitestingacc.03@gmail.com"]
 else:
     SAMPLE_RECIPIENT_EMAIL = []
