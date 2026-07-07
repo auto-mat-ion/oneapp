@@ -1672,7 +1672,7 @@ def get_action_status() -> tuple[bool, dict]:
         if not timestamp or not isinstance(timestamp, datetime):
             return False, {"batch_number": batch_number}
 
-        if datetime.now(UTC) - timestamp > timedelta(minutes=10):
+        if datetime.now(UTC) - timestamp > timedelta(minutes=3):
             return False, {"batch_number": batch_number}
 
         return action == "run_bots" and status == "true", {"batch_number": batch_number}
@@ -1761,7 +1761,7 @@ def main_batches(
 
     if signal_timestamp is not None:
         elapsed = datetime.now(UTC) - signal_timestamp
-        wait_seconds = max(0, 4 * 60 - elapsed.total_seconds())
+        wait_seconds = max(0, 2 * 60 - elapsed.total_seconds())
         # wait_seconds = max(0, 2 * 60 - elapsed.total_seconds())
         if wait_seconds > 0:
             log(
@@ -1910,11 +1910,15 @@ def main_batches(
 
 def run_smtp_bot(app_choice: int = 1):
     print("Starting SMTP bot runner.")
-    while not _shutdown.is_set():
+    while True:
+        if _shutdown.is_set():
+            log("Clearing shutdown state and waiting for next signal.")
+            _clear_shutdown_state()
+
         log("Waiting for SMTP run signal...")
         batch_number = 1
         signal_time = None
-        while not _shutdown.is_set():
+        while True:
             active, data = get_action_status()
             if active:
                 batch_value = data.get("batch_number")
@@ -1925,11 +1929,7 @@ def run_smtp_bot(app_choice: int = 1):
                         batch_number = 1
                 signal_time = datetime.now(UTC)
                 break
-            if _shutdown.wait(5):
-                break
-
-        if _shutdown.is_set():
-            break
+            time.sleep(5)
 
         log(f"Run signal received for batch {batch_number}. Preparing to start.")
         main_batches(
