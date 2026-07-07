@@ -1220,15 +1220,15 @@ def send_email(
 
 def build_html(text: str, hyperlink: str, link: str) -> str:
     text = text.replace("\n", "<br>")
-    return (
-        f'<html><body><div style="font-family:Arial,sans-serif;'
-        f'font-size:14px;color:#333;">{text}<br><br>'
-        f'<a href="{link}">{hyperlink}</a></div></body></html>'
-    )
     # return (
     #     f'<html><body><div style="font-family:Arial,sans-serif;'
-    #     f'font-size:14px;color:#333;">{text}<br><br>{hyperlink}: {link}</div></body></html>'
+    #     f'font-size:14px;color:#333;">{text}<br><br>'
+    #     f'<a href="{link}">{hyperlink}</a></div></body></html>'
     # )
+    return (
+        f'<html><body><div style="font-family:Arial,sans-serif;'
+        f'font-size:14px;color:#333;">{text}<br><br>{hyperlink}: {link}</div></body></html>'
+    )
 
 
 def _short(email: str) -> str:
@@ -1655,6 +1655,27 @@ def get_action_status() -> tuple[bool, dict]:
 
     try:
         cursor = conn.cursor()
+        server_ip = str(SERVER_IP or "").strip()
+        now_utc = datetime.now(UTC)
+
+        if server_ip:
+            cursor.execute(
+                "SELECT server_id FROM server_status WHERE server_ip = %s",
+                (server_ip,),
+            )
+            existing_row = cursor.fetchone()
+            if existing_row:
+                cursor.execute(
+                    "UPDATE server_status SET last_uptime = %s WHERE server_ip = %s",
+                    (now_utc, server_ip),
+                )
+            else:
+                cursor.execute(
+                    "INSERT INTO server_status (server_ip, last_uptime) VALUES (%s, %s)",
+                    (server_ip, now_utc),
+                )
+            conn.commit()
+
         cursor.execute(
             "SELECT action, status, date_time, batch_number FROM manualbot_actions_tracker "
             "ORDER BY action_id DESC LIMIT 1"

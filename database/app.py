@@ -204,6 +204,99 @@ def get_current_server_ip():
     return settings.get("SERVER_IP", "")
 
 
+def get_server_uptime_status_df():
+    conn = get_db_connection()
+    if conn is None:
+        return pd.DataFrame(
+            columns=[
+                "server_ip",
+                "last_update_time_utc",
+                "last_update_seconds",
+                "status",
+                "server_type",
+            ]
+        )
+
+    try:
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(
+            """
+            SELECT
+                ss.server_ip,
+                ss.last_uptime AS last_update_time_utc,
+                TIMESTAMPDIFF(SECOND, ss.last_uptime, UTC_TIMESTAMP()) AS last_update_seconds,
+                COALESCE(sd.server_type, 'undefined') AS server_type
+            FROM server_status ss
+            LEFT JOIN servers_details sd ON sd.server_ip = ss.server_ip
+            ORDER BY ss.server_ip
+            """
+        )
+        rows = cursor.fetchall()
+        cursor.close()
+
+        if not rows:
+            return pd.DataFrame(
+                columns=[
+                    "server_ip",
+                    "last_update_time_utc",
+                    "last_update_seconds",
+                    "status",
+                    "server_type",
+                ]
+            )
+
+        df = pd.DataFrame(rows)
+        df["server_ip"] = df["server_ip"].fillna("")
+        df["last_update_time_utc"] = pd.to_datetime(
+            df["last_update_time_utc"], errors="coerce"
+        )
+        df["last_update_seconds"] = pd.to_numeric(
+            df["last_update_seconds"], errors="coerce"
+        ).fillna(0)
+        df["server_type"] = (
+            df["server_type"].fillna("undefined").replace({"": "undefined"})
+        )
+
+        def get_status(seconds):
+            if pd.isna(seconds):
+                return "offline"
+            if seconds < 15:
+                return "good"
+            if seconds <= 45:
+                return "mid"
+            return "offline"
+
+        df["status"] = df["last_update_seconds"].apply(get_status)
+        df["last_update_time_utc"] = df["last_update_time_utc"].dt.strftime(
+            "%Y-%m-%d %H:%M:%S"
+        )
+        return df[
+            [
+                "server_ip",
+                "last_update_time_utc",
+                "last_update_seconds",
+                "status",
+                "server_type",
+            ]
+        ]
+    except Exception as exc:
+        st.error(f"Unable to load server uptime status: {exc}")
+        return pd.DataFrame(
+            columns=[
+                "server_ip",
+                "last_update_time_utc",
+                "last_update_seconds",
+                "status",
+                "server_type",
+            ]
+        )
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
 def insert_manual_sender_action(batch_number=None):
     """Insert an action row into manualbot_actions_tracker.
 
@@ -4540,6 +4633,7 @@ def main():
             database_management()
         elif st.session_state.selected_page == "SMTP":
             st.title("SMTP")
+
             st.markdown("---")
             batch_option = st.selectbox(
                 "Batch number:", ["batch_1", "batch_2", "batch_3"], index=0
@@ -4555,6 +4649,31 @@ def main():
                         st.success(message)
                     else:
                         st.error(message)
+            st.markdown("---")
+
+            st.subheader("Server Uptime Status")
+            col_refresh, _ = st.columns([1, 4])
+            with col_refresh:
+                if st.button("Refresh", key="refresh_server_uptime_status"):
+                    st.session_state["server_uptime_status_refresh"] = True
+                    st.rerun()
+
+            if st.session_state.get("server_uptime_status_refresh"):
+                st.session_state["server_uptime_status_refresh"] = False
+
+            uptime_df = get_server_uptime_status_df()
+            if uptime_df.empty:
+                st.info("No server uptime data available yet.")
+            else:
+                display_df = uptime_df.copy()
+                display_df["status"] = display_df["status"].map(
+                    {
+                        "good": "🟢 good",
+                        "mid": "🟡 mid",
+                        "offline": "🔴 offline",
+                    }
+                )
+                st.dataframe(display_df, use_container_width=True, hide_index=True)
 
 
 if __name__ == "__main__":
