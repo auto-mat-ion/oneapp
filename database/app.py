@@ -204,17 +204,35 @@ def get_current_server_ip():
     return settings.get("SERVER_IP", "")
 
 
-def insert_manual_sender_action():
+def insert_manual_sender_action(batch_number=None):
+    """Insert an action row into manualbot_actions_tracker.
+
+    batch_number: optional int. If provided, will be stored in the batch_number column.
+    """
     conn = get_db_connection()
     if conn is None:
         return False, "Unable to connect to database"
     try:
         cursor = conn.cursor()
-        cursor.execute(
-            "INSERT INTO manualbot_actions_tracker "
-            "(server_ip, date_time, action, status) VALUES (%s, %s, %s, %s)",
-            (get_current_server_ip(), datetime.now(UTC), "run_bots", "True"),
-        )
+        if batch_number is None:
+            cursor.execute(
+                "INSERT INTO manualbot_actions_tracker "
+                "(server_ip, date_time, action, status) VALUES (%s, %s, %s, %s)",
+                (get_current_server_ip(), datetime.now(UTC), "run_bots", "True"),
+            )
+        else:
+            cursor.execute(
+                "INSERT INTO manualbot_actions_tracker "
+                "(server_ip, date_time, action, batch_number, status) VALUES (%s, %s, %s, %s, %s)",
+                (
+                    get_current_server_ip(),
+                    datetime.now(UTC),
+                    "run_bots",
+                    int(batch_number),
+                    "True",
+                ),
+            )
+
         conn.commit()
         return True, "Signal sent.."
     except Exception as exc:
@@ -4297,13 +4315,8 @@ def main():
 
     st.sidebar.markdown("---")
     st.sidebar.subheader("Manual Sender Bot")
-    if st.sidebar.button("Run SMTP Sender Bot on all servers", width="stretch"):
-        with st.spinner("Writing manual sender action..."):
-            success, message = insert_manual_sender_action()
-            if success:
-                st.sidebar.success(message)
-            else:
-                st.sidebar.error(message)
+    if st.sidebar.button("SMTP", width="stretch"):
+        st.session_state.selected_page = "SMTP"
 
     if "manualbot_editor_open" not in st.session_state:
         st.session_state.manualbot_editor_open = False
@@ -4525,6 +4538,23 @@ def main():
             stats_page()
         elif st.session_state.selected_page == "Database Management":
             database_management()
+        elif st.session_state.selected_page == "SMTP":
+            st.title("SMTP")
+            st.markdown("---")
+            batch_option = st.selectbox(
+                "Batch number:", ["batch_1", "batch_2", "batch_3"], index=0
+            )
+            if st.button("Run SMTP", key="run_smtp_button"):
+                mapping = {"batch_1": 1, "batch_2": 2, "batch_3": 3}
+                batch_num = mapping.get(batch_option, None)
+                with st.spinner("Writing manual sender action..."):
+                    success, message = insert_manual_sender_action(
+                        batch_number=batch_num
+                    )
+                    if success:
+                        st.success(message)
+                    else:
+                        st.error(message)
 
 
 if __name__ == "__main__":

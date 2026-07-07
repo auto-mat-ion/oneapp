@@ -111,7 +111,6 @@ FIRST_BATCH_BCC = 49
 FIRST_BATCH_BCC_LOWER = 40
 SUBSEQUENT_BATCH_BCC = 49
 SUBSEQUENT_BATCH_BCC_LOWER = 40
-SUBSEQUENT_BATCHES = random.randint(17, 20)
 MAX_CONCURRENT_BATCHES = int(_EMAIL_SENDER_SETTINGS.get("MAX_CONCURRENT_BATCHES", 1))
 
 BATCH_DELAY_MIN = float(_EMAIL_SENDER_SETTINGS.get("BATCH_DELAY_MIN", 1.0))
@@ -148,16 +147,19 @@ else:
 
 SAMPLE_RECIPIENT_EMAIL = []
 
-if SERVER_IP in ["193.70.86.209"]:
+
+if SERVER_IP in ["51.91.59.107"]:
     SAMPLE_RECIPIENT_EMAIL = [
         "mitestingacc.01@gmail.com",
-        "stacash.affiliate@gmail.com",
     ]
 elif SERVER_IP in ["162.19.229.114"]:
     SAMPLE_RECIPIENT_EMAIL = ["mitestingacc.02@gmail.com", "stacho1988@gmail.com"]
-    # SAMPLE_RECIPIENT_EMAIL = ["mitestingacc.02@gmail.com"]
+
 elif SERVER_IP in ["13.140.181.23"]:
-    SAMPLE_RECIPIENT_EMAIL = ["mitestingacc.03@gmail.com"]
+    SAMPLE_RECIPIENT_EMAIL = [
+        "mitestingacc.03@gmail.com",
+        "stacash.affiliate@gmail.com",
+    ]
 else:
     SAMPLE_RECIPIENT_EMAIL = []
 
@@ -575,6 +577,8 @@ except AttributeError:
 
 def load_cache():
     try:
+        log("Loading cache")
+
         conn = _get_db_connection()
         if conn is None:
             log("Warning: unable to connect to database for cache")
@@ -1017,8 +1021,8 @@ class AccountManager:
             params = [SERVER_IP, COUNTRY]
             if BATCH_NUMBER:
                 query += " AND batch = %s "
-                params.append(BATCH_NUMBER)
-            query += " LIMIT 1001 OFFSET 0"
+                params.append(f"batch_{BATCH_NUMBER}")
+            query += " LIMIT 2000 OFFSET 0"
             cursor.execute(query, params)
             rows = cursor.fetchall()
             cursor.close()
@@ -1588,6 +1592,7 @@ def flush_db_operations():
                     f"DB operations: {total_account_updates} account updates, "
                     f"{total_failed} failures, {total_recipients} sent recipients"
                 )
+                log("DONE SENDING!\n\n\n")
 
             except Exception as exc:
                 log(
@@ -1643,37 +1648,37 @@ def prompt_for_sample_recipient() -> Optional[int]:
     print("Invalid choice. Please enter 1 for old app or 2 for new app.")
 
 
-def get_action_status() -> bool:
-    # return True
+def get_action_status() -> tuple[bool, dict]:
     conn = _get_db_connection()
     if conn is None:
-        return False
+        return False, {"batch_number": None}
 
     try:
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT action, status, date_time FROM manualbot_actions_tracker "
+            "SELECT action, status, date_time, batch_number FROM manualbot_actions_tracker "
             "ORDER BY action_id DESC LIMIT 1"
         )
         row = cursor.fetchone()
         cursor.close()
         if not row:
-            return False
+            return False, {"batch_number": None}
 
         action = str(row[0]).strip().lower() if row[0] is not None else ""
         status = str(row[1]).strip().lower() if row[1] is not None else ""
-        timestamp = row[2].replace(tzinfo=timezone.utc)
+        timestamp = row[2].replace(tzinfo=timezone.utc) if row[2] else None
+        batch_number = row[3]
 
         if not timestamp or not isinstance(timestamp, datetime):
-            return False
+            return False, {"batch_number": batch_number}
 
         if datetime.now(UTC) - timestamp > timedelta(minutes=10):
-            return False
+            return False, {"batch_number": batch_number}
 
-        return action == "run_bots" and status == "true"
+        return action == "run_bots" and status == "true", {"batch_number": batch_number}
     except Exception as exc:
         log(f"Error checking action status: {exc}")
-        return False
+        return False, {"batch_number": None}
     finally:
         try:
             conn.close()
@@ -1681,21 +1686,21 @@ def get_action_status() -> bool:
             pass
 
 
-def main_batches():
+def main_batches(
+    batch_number: int = 1,
+    app_choice: int = 1,
+    signal_timestamp: Optional[datetime] = None,
+):
     print("Starting...")
 
-    global BATCH_NUMBER, SENDER_APP, MAX_CONCURRENT_ACCOUNTS
-    app_choice = prompt_for_sender_app_selection()
-    if app_choice is None:
-        print("No app selection made. Exiting.")
-        return
+    global BATCH_NUMBER, SENDER_APP, MAX_CONCURRENT_ACCOUNTS, SUBSEQUENT_BATCHES
     SENDER_APP = app_choice
     print(f"Selected {'New' if SENDER_APP == 2 else 'Old'} app.")
 
-    BATCH_NUMBER = prompt_for_batch_selection()
-    if not BATCH_NUMBER:
-        print("No batch selected. Exiting.")
-        return
+    BATCH_NUMBER = str(batch_number)
+    print(f"Selected batch: {BATCH_NUMBER}")
+    SUBSEQUENT_BATCHES = random.randint(17, 20)
+    # SUBSEQUENT_BATCHES = 3
 
     # connect_new_random("netherlands")
     # connect_new_random(VPN_COUNTRY)
@@ -1753,15 +1758,19 @@ def main_batches():
     log(f"Ready: {total_acc} accounts | {total_rcpt} recipients")
     log(f"Max/account: {max_per_account} | Est. accounts needed: {est_accounts_needed}")
     log("-" * 55)
-    log("Waiting for run signal...")
-    while True:
-        if not get_action_status():
-            time.sleep(5)
-            continue
-        else:
-            break
 
-    log("Run signal received. Starting batch processing...")
+    if signal_timestamp is not None:
+        elapsed = datetime.now(UTC) - signal_timestamp
+        wait_seconds = max(0, 4 * 60 - elapsed.total_seconds())
+        # wait_seconds = max(0, 2 * 60 - elapsed.total_seconds())
+        if wait_seconds > 0:
+            log(
+                f"Signal received {elapsed.total_seconds():.1f}s ago. "
+                f"Waiting {wait_seconds:.1f}s before starting run."
+            )
+            time.sleep(wait_seconds)
+
+    log("Run signal synced. Starting batch processing...")
 
     _start_runtime_watchdog()
 
@@ -1789,15 +1798,15 @@ def main_batches():
 
         if round_idx > 0:
             MAX_CONCURRENT_ACCOUNTS = 1
-            log("Changing ip.")
-            connect_new_random(VPN_COUNTRY)
+            # log("Changing ip.")
+            # connect_new_random(VPN_COUNTRY)
             time.sleep(5)
 
             # log("1 minute wait before next send.")
             # time.sleep(60)
 
         log(
-            f"Starting batch {round_idx + 1}/{SUBSEQUENT_BATCHES + 1}\nThreads: {MAX_CONCURRENT_ACCOUNTS}"
+            f"Starting batch {round_idx + 1}/{SUBSEQUENT_BATCHES + 1} || Threads: {MAX_CONCURRENT_ACCOUNTS}"
         )
 
         _reset_account_status()
@@ -1897,3 +1906,38 @@ def main_batches():
     log("=" * 55)
     flush_db_operations()
     log("=" * 55)
+
+
+def run_smtp_bot(app_choice: int = 1):
+    print("Starting SMTP bot runner.")
+    while not _shutdown.is_set():
+        log("Waiting for SMTP run signal...")
+        batch_number = 1
+        signal_time = None
+        while not _shutdown.is_set():
+            active, data = get_action_status()
+            if active:
+                batch_value = data.get("batch_number")
+                if batch_value is not None:
+                    try:
+                        batch_number = int(batch_value)
+                    except Exception:
+                        batch_number = 1
+                signal_time = datetime.now(UTC)
+                break
+            if _shutdown.wait(5):
+                break
+
+        if _shutdown.is_set():
+            break
+
+        log(f"Run signal received for batch {batch_number}. Preparing to start.")
+        main_batches(
+            batch_number=batch_number,
+            app_choice=app_choice,
+            signal_timestamp=signal_time,
+        )
+        log("SMTP batch finished. Returning to signal wait loop.")
+        time.sleep(5)
+
+    log("SMTP bot runner exiting.")
