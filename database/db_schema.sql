@@ -508,6 +508,7 @@ CREATE TABLE
     server_ip VARCHAR(45) NULL,
     date_time DATETIME NULL,
     action VARCHAR(255) NULL,
+    batch_number INT NULL,
     status VARCHAR(255) NULL
   ) ENGINE = InnoDB;
 
