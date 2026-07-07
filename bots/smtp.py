@@ -1698,7 +1698,7 @@ def get_action_status() -> tuple[bool, dict]:
 
         return action == "run_bots" and status == "true", {"batch_number": batch_number}
     except Exception as exc:
-        log(f"Error checking action status: {exc}")
+        # log(f"Error checking action status: {exc}")
         return False, {"batch_number": None}
     finally:
         try:
