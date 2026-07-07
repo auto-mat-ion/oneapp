@@ -685,3 +685,17 @@ CREATE TABLE
     fail_reason TEXT NULL,
     date_time DATETIME NULL
   ) ENGINE = InnoDB;
+
+CREATE TABLE
+  IF NOT EXISTS server_status (
+    server_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    server_ip VARCHAR(255) NULL,
+    last_uptime DATETIME NULL
+  ) ENGINE = InnoDB;
+
+CREATE TABLE
+  IF NOT EXISTS servers_details (
+    server_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    server_ip VARCHAR(255) NULL,
+    server_type VARCHAR(255) NULL
+  ) ENGINE = InnoDB;
