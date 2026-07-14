@@ -5186,7 +5186,7 @@ def affirm_card_is_added(driver, cardholder_name):
 
 def affirm_congrats_card_added(driver):
     try:
-        time_in_sec = 200 * 2
+        time_in_sec = 200
         while time_in_sec > 0:
             try:
                 AFFIRM_CONGRATS_ELEMENT = (
@@ -5203,7 +5203,25 @@ def affirm_congrats_card_added(driver):
                     return True
 
             except:
-                pass
+                try:
+                    AFFIRM_CONGRATS_ELEMENT = (
+                        By.CSS_SELECTOR,
+                        'span[class*="errorText"]',
+                    )
+
+                    affirm_congrats_element = WebDriverWait(driver, 1).until(
+                        EC.visibility_of_element_located(AFFIRM_CONGRATS_ELEMENT)
+                    )
+
+                    if (
+                        "there is an issue with your payment method"
+                        in affirm_congrats_element.text.lower()
+                    ):
+                        time.sleep(2)
+                        return False
+
+                except:
+                    pass
 
             time.sleep(1)
             time_in_sec -= 1
@@ -5858,7 +5876,9 @@ def get_microsoft_premium(driver, new_profile_data):
         current_status = "checking if card is authorized"
         print(f"{email_address} : Waiting 5 minutes for card authorization...")
         if not affirm_congrats_card_added(driver):
-            print(f"{email_address} : Card not authorized")
+            print(
+                f"{email_address} : Card not authorized or payment method issue error"
+            )
             return False, "card not authorized"
         else:
             log_card_usage(card_details_dict)
