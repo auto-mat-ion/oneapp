@@ -3907,7 +3907,7 @@ def language_is_the_desired(driver):
     try:
         LANGUAGE_EDIT_BUTTON_ELEMENT = (
             By.CSS_SELECTOR,
-            'select[id="cultureSelectId"]',
+            'button[id="cultureSelectId"]',
         )
 
         language_edit_button = WebDriverWait(driver, wait_time * 2).until(
@@ -3922,8 +3922,9 @@ def language_is_the_desired(driver):
         time.sleep(1)
 
         if (
-            Select(language_edit_button).first_selected_option.text
-            == "English (United States)"
+            Select(language_edit_button)
+            .first_selected_option.text.lower()
+            .startswith("english (united states)")
         ):
             return True
         else:
@@ -3937,7 +3938,12 @@ def select_english_language(driver):
     try:
         LANGUAGE_EDIT_BUTTON_ELEMENT = (
             By.CSS_SELECTOR,
-            'select[id="cultureSelectId"]',
+            'button[id="cultureSelectId"]',
+        )
+
+        ENGLISH_OPTION_ELEMENT = (
+            By.CSS_SELECTOR,
+            'div[id*="fluent-option"][role="option"]',
         )
 
         SAVE_BUTTON_ELEMENT = (
@@ -3949,15 +3955,25 @@ def select_english_language(driver):
             EC.element_to_be_clickable(LANGUAGE_EDIT_BUTTON_ELEMENT)
         )
 
-        # scroll to view first
-        driver.execute_script(
-            "arguments[0].scrollIntoView({ behavior: 'smooth', block: 'center' });",
-            language_edit_button,
-        )
+        # CLICK AND CLICK ENGLISH OPTION
+        language_edit_button.click()
+
         time.sleep(1)
 
-        Select(language_edit_button).select_by_value("en-US")
+        language_options = WebDriverWait(driver, wait_time / 3).until(
+            EC.visibility_of_all_elements_located(ENGLISH_OPTION_ELEMENT)
+        )
 
+        english_option = [
+            option
+            for option in language_options
+            if option.text.lower().startswith("english (united states)")
+        ][0]
+
+        driver.execute_script(
+            "arguments[0].scrollIntoView({ behavior: 'smooth', block: 'center' });",
+            english_option,
+        )
         time.sleep(1)
 
         save_button_element = WebDriverWait(driver, wait_time / 3).until(
