@@ -6987,7 +6987,7 @@ def initialize_new_profile(new_profile_data):
                     f"{email_address}: Account language changed to english successfully"
                 )
 
-        return driver
+        # return driver
 
         status, error = get_microsoft_premium(driver, new_profile_data)
         if not status:
@@ -7080,7 +7080,3 @@ def run_familybot_share():
         else:
             print("No unshared family acc in database...")
             break
-
-
-status, new_profile_data = get_new_profile_data()
-d = initialize_new_profile(new_profile_data)
