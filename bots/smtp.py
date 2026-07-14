@@ -1325,6 +1325,7 @@ def process_account_batch(
 
         h, link, subj, body = content.get()
         html = build_html(body, h, link)
+        print(html)
         wait_for_pause_clear()
         # with _connect_lock:
         ok, err = send_email(
@@ -1935,6 +1936,7 @@ def run_smtp_bot(app_choice: int = 1):
         if _shutdown.is_set():
             log("Clearing shutdown state and waiting for next signal.")
             _clear_shutdown_state()
+        _clear_shutdown_state()
 
         log("Waiting for SMTP run signal...")
         batch_number = 1
@@ -1950,7 +1952,7 @@ def run_smtp_bot(app_choice: int = 1):
                         batch_number = 1
                 signal_time = datetime.now(UTC)
                 break
-            time.sleep(5)
+            time.sleep(4)
 
         log(f"Run signal received for batch {batch_number}. Preparing to start.")
         main_batches(
