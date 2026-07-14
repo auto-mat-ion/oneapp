@@ -3921,11 +3921,7 @@ def language_is_the_desired(driver):
         )
         time.sleep(1)
 
-        if (
-            Select(language_edit_button)
-            .first_selected_option.text.lower()
-            .startswith("english (united states)")
-        ):
+        if language_edit_button.text.lower().startswith("english (united states)"):
             return True
         else:
             return False
@@ -3974,6 +3970,8 @@ def select_english_language(driver):
             "arguments[0].scrollIntoView({ behavior: 'smooth', block: 'center' });",
             english_option,
         )
+        time.sleep(1)
+        english_option.click()
         time.sleep(1)
 
         save_button_element = WebDriverWait(driver, wait_time / 3).until(
@@ -4038,6 +4036,7 @@ def change_timezone(driver):
         else:
             city_state = "Washington, District of Columbia"
 
+            tz_edit_button.send_keys(Keys.BACK_SPACE * 50)
             tz_edit_button.send_keys(city_state)
             time.sleep(3)
             tz_edit_button.send_keys(Keys.ENTER)
