@@ -5589,6 +5589,11 @@ def get_microsoft_premium(driver, new_profile_data):
             By.CSS_SELECTOR,
             'button[aria-label="Start trial, pay later"]',
         )
+
+        START_TRIAL2_BUTTON_ELEMENT = (
+            By.CSS_SELECTOR,
+            'button[aria-label="Subscribe"]',
+        )
         # ENTERING CARD DETAILS
         current_status = "entering card number"
         card_number_element = WebDriverWait(driver, wait_time).until(
@@ -5797,6 +5802,28 @@ def get_microsoft_premium(driver, new_profile_data):
         except:
             pass
 
+        # click checkbox
+        try:
+            current_status = "clicking checkbox"
+            time.sleep(1)
+            CHECKBOX_ELEMENT = (
+                By.CSS_SELECTOR,
+                'i[data-icon-name="CheckMark"]',
+            )
+            checkbox_element = WebDriverWait(driver, wait_time).until(
+                EC.presence_of_element_located(CHECKBOX_ELEMENT)
+            )
+            # scroll_into_view(driver, checkbox_element)
+            driver.execute_script(
+                "arguments[0].scrollIntoView({ behavior: 'smooth', block: 'center' });",
+                checkbox_element,
+            )
+            time.sleep(1)
+            checkbox_element.click()
+
+        except:
+            pass
+
         current_status = "clicking start trial button"
         try:
             time.sleep(4)
@@ -5812,7 +5839,21 @@ def get_microsoft_premium(driver, new_profile_data):
             start_trial_button_element.click()
             print(f"{email_address} : Clicked start trial button")
         except:
-            pass
+            try:
+                time.sleep(4)
+                print(f"{email_address} : Clicking start trial button")
+
+                start_trial_button_element = WebDriverWait(driver, wait_time).until(
+                    EC.element_to_be_clickable(START_TRIAL2_BUTTON_ELEMENT)
+                )
+                time.sleep(0.5)
+                start_trial_button_element = WebDriverWait(driver, wait_time).until(
+                    EC.element_to_be_clickable(START_TRIAL2_BUTTON_ELEMENT)
+                )
+                start_trial_button_element.click()
+                print(f"{email_address} : Clicked start trial button")
+            except:
+                pass
 
         current_status = "checking if card is authorized"
         print(f"{email_address} : Waiting 5 minutes for card authorization...")
