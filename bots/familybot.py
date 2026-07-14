@@ -9,7 +9,8 @@ from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.common.action_chains import ActionChains
 
 from selenium.webdriver.support import expected_conditions as EC
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from utils.server_ip_helper import get_server_ip
 
 from seleniumbase import Driver
@@ -4148,7 +4149,7 @@ def login_on_country_page(driver, new_profile_data):
 def change_account_country(driver, new_profile_data):
     try:
         retries = 0
-        num_of_retries = 5
+        num_of_retries = 7
         while retries < num_of_retries:
             try:
                 email = new_profile_data.get("email")
@@ -6971,7 +6972,7 @@ def initialize_new_profile(new_profile_data):
                 "FAIL",
                 "Error to change country",
             )
-            return False, "Error to change country"
+            return False, "Error to change country", driver
 
         else:
             print(f"{email_address}: Country changed successfully")
@@ -6986,7 +6987,7 @@ def initialize_new_profile(new_profile_data):
                     f"{email_address}: Account language changed to english successfully"
                 )
 
-        # return driver
+        return driver
 
         status, error = get_microsoft_premium(driver, new_profile_data)
         if not status:
@@ -7081,5 +7082,5 @@ def run_familybot_share():
             break
 
 
-# status, new_profile_data = get_new_profile_data()
-# driver = initialize_new_profile(new_profile_data)
+status, new_profile_data = get_new_profile_data()
+d = initialize_new_profile(new_profile_data)
