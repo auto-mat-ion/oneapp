@@ -4,14 +4,256 @@ import re
 import time
 from datetime import datetime
 from selenium.webdriver.support.wait import WebDriverWait
+from seleniumbase import Driver
+import subprocess
+import random
 
-from automation import (
-    Driver,
-    chrome_location,
-    connect_us_random,
-    close_other_tabs,
-    get_fakey_data,
-)
+EXPRESSVPN_CMD = "C:\\Program Files (x86)\\ExpressVPN\\services\\ExpressVPN.CLI.exe"
+
+
+def connect_us_random():
+    try:
+
+        def run_cmd(args):
+            result = subprocess.run(
+                [EXPRESSVPN_CMD] + args,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            return result.stdout.strip(), result.stderr.strip()
+
+        def connect(location=None):
+            if location:
+                out, err = run_cmd(["connect", location])
+            else:
+                out, err = run_cmd(["connect"])
+            print(f"Express vpn: {out or err}")
+
+        def disconnect():
+            out, err = run_cmd(["disconnect"])
+            print(f"Express vpn: {out or err}")
+
+        disconnect()
+        time.sleep(1)
+        locations = [
+            "95",
+            "271",
+            "19",
+            "283",
+            "288",
+            "270",
+            "276",
+            "265",
+            "273",
+            "17",
+            "302",
+            "299",
+            "304",
+            "292",
+            "306",
+            "9",
+            "294",
+            "18",
+            "172",
+            "278",
+            "284",
+            "293",
+            "275",
+            "165",
+            "277",
+            "286",
+            "290",
+            "161",
+            "272",
+            "6",
+            "70",
+            "74",
+            "71",
+            "280",
+            "291",
+            "54",
+            "202",
+            "305",
+            "285",
+            "301",
+            "26",
+            "155",
+            "168",
+            "281",
+            "75",
+            "295",
+            "289",
+            "297",
+            "94",
+            "282",
+            "296",
+            "298",
+            "204",
+            "1",
+            "207",
+            "2",
+            "300",
+            "287",
+            "166",
+            "303",
+            "25",
+            "279",
+            "274",
+        ]
+
+        random_location = str(random.choice(locations))
+
+        connect(random_location)
+        time.sleep(3)
+        return True
+    except:
+        return False
+
+
+def close_other_tabs(driver):
+    """
+    Closes all other tabs
+    """
+    try:
+        main = driver.window_handles[0]
+
+        for handle in driver.window_handles[1:]:
+            driver.switch_to.window(handle)
+            driver.close()
+
+        driver.switch_to.window(main)
+        return True
+    except:
+        return False
+
+
+def get_fakey_data(driver, country="united states"):
+    try:
+        countries = {
+            "united states": "https://www.fakexy.com/fake-address-generator-us",
+            "sweden": "https://www.fakexy.com/fake-address-generator-se",
+            "poland": "https://www.fakexy.com/fake-address-generator-pl",
+            "norway": "https://www.fakexy.com/fake-address-generator-no",
+        }
+
+        # url = "https://www.fakexy.com/fake-address-generator-se"
+        # url = "https://www.fakexy.com"
+        url = countries.get(country.lower())
+        # driver.execute_script(f"window.open('{url}', '_blank');")
+        driver.get(url)
+        # driver.switch_to.window(driver.window_handles[1])
+        wait = WebDriverWait(driver, 5)
+
+        retries = 0
+        while retries < 3:
+            try:
+                LOGO_ELEMENT = (By.CSS_SELECTOR, 'h2[class="logoh"]')
+                logo = wait.until(EC.visibility_of_element_located(LOGO_ELEMENT))
+                if logo.text.lower().startswith("fake address generator"):
+                    retries = 5
+                    # print("Fakey tab loaded successfully")
+                    break
+                else:
+                    print("Logo displayed differently!!")
+                    driver.refresh()
+                    retries += 1
+            except:
+                try:
+                    # time.sleep(10)
+                    driver.uc_gui_click_captcha()
+                    time.sleep(5)
+                    pyautogui.click()
+                    time.sleep(5)
+
+                    logo = wait.until(EC.visibility_of_element_located(LOGO_ELEMENT))
+                    if logo.text.lower().startswith("fake address generator"):
+                        retries = 5
+                        # print("Fakey tab loaded successfully")
+                        break
+                    else:
+                        driver.refresh()
+                        retries += 1
+                except:
+                    driver.refresh()
+                    retries += 1
+            # except:
+            #     driver.refresh()
+            #     retries += 1
+
+        wait = WebDriverWait(driver, 10)
+        if retries != 5:
+            print("Error loading fakey tab")
+            return False, "Error loading fakey tab"
+
+        # Wait for at least one section to load
+        wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "div.box")))
+
+        section_data = {}
+
+        boxes = driver.find_elements("css selector", "div.box")
+
+        for box in boxes:
+            try:
+                title = box.find_element(By.CSS_SELECTOR, "h1.titleh").text.strip()
+            except:
+                continue
+
+            # Skip hidden sections
+            if "display: none" in (box.get_attribute("style") or ""):
+                continue
+
+            # Wait for rows inside this box (if table exists)
+            try:
+                WebDriverWait(driver, 1).until(
+                    lambda d: (
+                        len(box.find_elements(By.CSS_SELECTOR, "table tbody tr")) > 0
+                    )
+                )
+            except:
+                pass
+
+            rows = box.find_elements(By.CSS_SELECTOR, "table tbody tr")
+
+            for row in rows:
+                cols = row.find_elements(By.CSS_SELECTOR, "td")
+                if len(cols) == 2:
+                    key = cols[0].text.strip()
+                    value = cols[1].text.strip()
+                    if key == "Expire":
+                        # section_data["expiry_month"] = value.split("/")[1].strip()
+                        # section_data["expiry_year"] = value.split("/")[0].strip()
+                        pass
+                    elif key == "City/Town":
+                        section_data["city"] = value
+                    elif key == "Zip/Postal Code":
+                        section_data["postal_code"] = value
+                    elif key == "Street":
+                        section_data["address_line1"] = value
+                    elif key == "Credit card number":
+                        # section_data["card_number"] = value
+                        pass
+                    elif key == "Full Name":
+                        # section_data["name_on_card"] = value
+                        pass
+                    elif key == "CVV":
+                        # section_data["cvv"] = value
+                        pass
+                    elif key == "State/Province/Region":
+                        section_data["state"] = value
+                        pass
+                    else:
+                        pass
+                        # section_data[key] = value
+
+        return True, section_data
+
+    except:
+        return False, {}
+    finally:
+        driver.switch_to.window(driver.window_handles[0])
+        close_other_tabs(driver)
+
 
 AVAILABLE_COUNTRIES = ["united states", "sweden", "poland", "norway"]
 COUNTRY_DISPLAY = {
