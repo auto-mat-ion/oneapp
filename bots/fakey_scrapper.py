@@ -4,9 +4,13 @@ import re
 import time
 from datetime import datetime
 from selenium.webdriver.support.wait import WebDriverWait
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support import expected_conditions as EC
 from seleniumbase import Driver
 import subprocess
 import random
+import pyautogui
+
 
 EXPRESSVPN_CMD = "C:\\Program Files (x86)\\ExpressVPN\\services\\ExpressVPN.CLI.exe"
 
@@ -374,11 +378,11 @@ def is_valid_record(record: dict) -> bool:
     return True
 
 
-def main():
+def scraper():
     selected_country = choose_country()
     count = ask_positive_integer("Enter number of fake details to collect: ")
 
-    output_filename = "utils/fake_details.json"
+    output_filename = "fake_details.json"
     output_path = os.path.abspath(output_filename)
     records, full_data = load_records(output_path, selected_country)
     initial_count = len(records)
@@ -437,7 +441,3 @@ def main():
         print(f"Output file: {output_path}")
     else:
         print("No records were saved.")
-
-
-if __name__ == "__main__":
-    main()
