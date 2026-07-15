@@ -5864,26 +5864,27 @@ def get_microsoft_premium(driver, new_profile_data):
             pass
 
         # click checkbox
-        try:
-            current_status = "clicking checkbox"
-            time.sleep(1)
-            CHECKBOX_ELEMENT = (
-                By.CSS_SELECTOR,
-                'i[data-icon-name="CheckMark"]',
-            )
-            checkbox_element = WebDriverWait(driver, wait_time).until(
-                EC.presence_of_element_located(CHECKBOX_ELEMENT)
-            )
-            # scroll_into_view(driver, checkbox_element)
-            driver.execute_script(
-                "arguments[0].scrollIntoView({ behavior: 'smooth', block: 'center' });",
-                checkbox_element,
-            )
-            time.sleep(1)
-            checkbox_element.click()
+        if PREFERRED_SMS_COUNTRY.lower() == "united states":
+            try:
+                current_status = "clicking checkbox"
+                time.sleep(1)
+                CHECKBOX_ELEMENT = (
+                    By.CSS_SELECTOR,
+                    'i[data-icon-name="CheckMark"]',
+                )
+                checkbox_element = WebDriverWait(driver, wait_time).until(
+                    EC.presence_of_element_located(CHECKBOX_ELEMENT)
+                )
+                # scroll_into_view(driver, checkbox_element)
+                driver.execute_script(
+                    "arguments[0].scrollIntoView({ behavior: 'smooth', block: 'center' });",
+                    checkbox_element,
+                )
+                time.sleep(1)
+                checkbox_element.click()
 
-        except:
-            pass
+            except:
+                pass
 
         current_status = "clicking start trial button"
         try:
