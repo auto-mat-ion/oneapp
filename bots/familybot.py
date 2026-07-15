@@ -5167,18 +5167,61 @@ def credit_card_is_declined(driver):
 
 def affirm_card_is_added(driver, cardholder_name):
     try:
-        AFFIRM_ELEMENT = (
-            By.CSS_SELECTOR,
-            'div[id="input_id"]',
-        )
+        retries = 0
+        while retries < 10:
+            try:
+                AFFIRM_ELEMENT = (
+                    By.CSS_SELECTOR,
+                    'div[id="input_id"]',
+                )
 
-        affirm_element = WebDriverWait(driver, wait_time * 15).until(
-            EC.visibility_of_element_located(AFFIRM_ELEMENT)
-        )
+                affirm_element = WebDriverWait(driver, wait_time).until(
+                    EC.visibility_of_element_located(AFFIRM_ELEMENT)
+                )
 
-        # card_details_dict.get("name_on_card")
+                if cardholder_name.lower() in affirm_element.text.lower():
+                    return True
 
-        return cardholder_name.lower() in affirm_element.text.lower()
+                else:
+                    ERROR_ELEMENT = (
+                        By.CSS_SELECTOR,
+                        'span[class*="ms-MessageBar-innerText"]',
+                    )
+
+                    error_element = WebDriverWait(driver, wait_time).until(
+                        EC.visibility_of_element_located(ERROR_ELEMENT)
+                    )
+                    if "sorry, something went wrong" in error_element.text.lower():
+                        return False
+
+            except:
+                try:
+                    SAVE_BUTTON_ELEMENT = (
+                        By.CSS_SELECTOR,
+                        'button[aria-label="Save"]',
+                    )
+                    save_button_element = WebDriverWait(driver, 1).until(
+                        EC.element_to_be_clickable(SAVE_BUTTON_ELEMENT)
+                    )
+                    save_button_element.click()
+                except:
+                    try:
+                        ERROR_ELEMENT = (
+                            By.CSS_SELECTOR,
+                            'span[class*="ms-MessageBar-innerText"]',
+                        )
+
+                        error_element = WebDriverWait(driver, 1).until(
+                            EC.visibility_of_element_located(ERROR_ELEMENT)
+                        )
+                        if "sorry, something went wrong" in error_element.text.lower():
+                            return False
+
+                    except:
+                        pass
+
+            retries += 1
+        return False
 
     except:
         return False
@@ -5796,7 +5839,7 @@ def get_microsoft_premium(driver, new_profile_data):
 
             return False, "Card was declined"
         else:
-            print(f"{email_address} : Card accepted.")
+            print(f"{email_address} : Card not declined.")
 
         current_status = "checking if card is added to payments"
         if affirm_card_is_added(driver, card_details_dict.get("name_on_card")):
