@@ -267,6 +267,31 @@ def get_server_uptime_status_df():
             return "offline"
 
         df["status"] = df["last_update_seconds"].apply(get_status)
+
+        def get_server_sort_key(server_name):
+            name = str(server_name or "").strip().lower()
+            if "ovh" in name:
+                match = re.search(r"(\d+)", name)
+                number = int(match.group(1)) if match else 10**9
+                return (0, number, name)
+            if "smtp" in name:
+                match = re.search(r"(\d+)", name)
+                number = int(match.group(1)) if match else 10**9
+                return (1, number, name)
+            if "hotmail" in name:
+                match = re.search(r"(\d+)", name)
+                number = int(match.group(1)) if match else 10**9
+                return (2, number, name)
+            return (3, 10**9, name)
+
+        status_order = {"good": 0, "mid": 1, "offline": 2}
+        df["status_rank"] = df["status"].map(status_order)
+        df["server_sort_key"] = df["server_type"].apply(get_server_sort_key)
+        df = df.sort_values(
+            by=["status_rank", "server_sort_key"],
+            kind="mergesort",
+        ).reset_index(drop=True)
+
         df["last_update_time_utc"] = df["last_update_time_utc"].dt.strftime(
             "%Y-%m-%d %H:%M:%S"
         )
