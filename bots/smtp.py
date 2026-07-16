@@ -1325,7 +1325,7 @@ def process_account_batch(
 
         h, link, subj, body = content.get()
         html = build_html(body, h, link)
-        print(html)
+        # print(html)
         wait_for_pause_clear()
         # with _connect_lock:
         ok, err = send_email(
