@@ -256,7 +256,7 @@ except:
     PREFERRED_SMS_COUNTRY = "netherlands"
 
 try:
-    CHANGE_COUNTRY = str(get_setting("CHANGE_COUNTRY", "sweden")).lower()
+    CHANGE_COUNTRY = PREFERRED_SMS_COUNTRY.lower()
     if not CHANGE_COUNTRY:
         CHANGE_COUNTRY = "sweden"
 
