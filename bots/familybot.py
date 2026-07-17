@@ -4173,6 +4173,9 @@ def change_account_country(driver, new_profile_data):
                 bring_to_front(driver)
 
                 driver.get("https://account.microsoft.com/profile")
+                driver.execute_script("window.localStorage.clear();")
+                driver.execute_script("window.sessionStorage.clear();")
+                time.sleep(3)
 
                 login_on_country_page(driver, new_profile_data)
 
