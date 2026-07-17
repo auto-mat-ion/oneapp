@@ -4165,6 +4165,23 @@ def change_account_country(driver, new_profile_data):
     try:
         retries = 0
         num_of_retries = 7
+        driver.quit()
+        driver_success = False
+        while (retries < 3) and (not driver_success):
+            try:
+                status, driverdata, error = initialize_new_profile_driver()
+                if status:
+                    driver, user_path, proxy = driverdata.values()
+
+                    time.sleep(0.5)
+                    driver.maximize_window()
+                    time.sleep(0.5)
+                    driver.get(MICROSOFT_LOGIN_URL)
+                    time.sleep(1)
+                    driver_success = True
+            except:
+                driver.quit()
+                retries += 1
         while retries < num_of_retries:
             try:
                 email = new_profile_data.get("email")
@@ -4173,9 +4190,6 @@ def change_account_country(driver, new_profile_data):
                 bring_to_front(driver)
 
                 driver.get("https://account.microsoft.com/profile")
-                driver.execute_script("window.localStorage.clear();")
-                driver.execute_script("window.sessionStorage.clear();")
-                time.sleep(3)
 
                 login_on_country_page(driver, new_profile_data)
 
@@ -4242,8 +4256,25 @@ def change_account_country(driver, new_profile_data):
 
             except Exception as E:
                 retries += 1
+                driver.quit()
+                driver_success = False
+                while (retries < 3) and (not driver_success):
+                    try:
+                        status, driverdata, error = initialize_new_profile_driver()
+                        if status:
+                            driver, user_path, proxy = driverdata.values()
+
+                            time.sleep(0.5)
+                            driver.maximize_window()
+                            time.sleep(0.5)
+                            driver.get(MICROSOFT_LOGIN_URL)
+                            time.sleep(1)
+                            driver_success = True
+                    except:
+                        driver.quit()
+                        retries += 1
                 print(
-                    f"{email} : Exception error changing country. Retrying... ({retries}/{num_of_retries})"
+                    f"{email} : Attempting retry {retries}/{num_of_retries} for changing country"
                 )
 
         return False
