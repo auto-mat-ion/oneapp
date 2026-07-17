@@ -4194,7 +4194,7 @@ def change_account_country(driver, new_profile_data):
                 login_on_country_page(driver, new_profile_data)
 
                 if country_is_the_desired(driver):
-                    return True
+                    return True, driver
 
                 COUNTRY_EDIT_BUTTON_ELEMENT = (
                     By.CSS_SELECTOR,
@@ -4247,7 +4247,7 @@ def change_account_country(driver, new_profile_data):
                     logout_then_re_login_existing_acc(driver, new_profile_data)
 
                 if country_is_the_desired(driver):
-                    return True
+                    return True, driver
                 else:
                     print(
                         f"{email} : Country not changed. Retrying... ({retries}/{num_of_retries})"
@@ -4277,9 +4277,9 @@ def change_account_country(driver, new_profile_data):
                     f"{email} : Attempting retry {retries}/{num_of_retries} for changing country"
                 )
 
-        return False
+        return False, driver
     except:
-        return False
+        return False, driver
 
 
 def change_account_language_lingo(driver, new_profile_data):
@@ -7119,7 +7119,7 @@ def initialize_new_profile(new_profile_data):
 
         # return driver
 
-        status = change_account_country(driver, new_profile_data)
+        status, driver = change_account_country(driver, new_profile_data)
 
         if not status:
             new_profile_logger(
