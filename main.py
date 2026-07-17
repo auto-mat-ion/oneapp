@@ -21,7 +21,7 @@ if get_server_ip() == "test_ip":
 
 bot = int(
     input(
-        f"Oneapp v1.9\n\nSERVER IP: {get_server_ip()}\n\nSelect bot to run:\n1. Familybot\n2. Hotmailbot\n3. Password Changer\n4. Email Sender\n5. Familybot Share\n6. New app Hotmailbot \n7. Save manual sender cookies\n8. Fakey scraperr\nEnter choice (1/2/3/4/5/6): ".format()
+        f"Oneapp v1.92\n\nSERVER IP: {get_server_ip()}\n\nSelect bot to run:\n1. Familybot\n2. Hotmailbot\n3. Password Changer\n4. Email Sender\n5. Familybot Share\n6. New app Hotmailbot \n7. Save manual sender cookies\n8. Fakey scraperr\nEnter choice (1/2/3/4/5/6): ".format()
     )
 )
 
