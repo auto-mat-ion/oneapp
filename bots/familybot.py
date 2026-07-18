@@ -3834,19 +3834,42 @@ def logout_then_re_login_existing_acc(driver, new_profile_data):
 
         enter_email(driver, email)
         click_next_button(driver)
-        click_send_code_to_recovery_email_button(driver)
-        enter_recovery_email_2(driver, recovery)
-        # click_next_button(driver)
-        click_password_next_button(driver)
-        status, code = wait_for_code_by_recovery_mail(recovery)
-        if not status:
-            print(f"{email} : Code not sent to recovery email!")
-            return False
-        enter_code_and_click_next_after_pass_change(driver, code)
-        click_stay_signed_in_button(driver)
-        driver.get("https://account.microsoft.com/profile")
-        login_on_country_page(driver, new_profile_data)
-        print(f"{email} : Re-logged in successfully")
+        if click_send_code_to_recovery_email_button(driver):
+            enter_recovery_email_2(driver, recovery)
+            click_password_next_button(driver)
+            status, code = wait_for_code_by_recovery_mail(recovery)
+            if not status:
+                print(f"{email} : Code not sent to recovery email!")
+                return False
+            enter_code_and_click_next_after_pass_change(driver, code)
+            click_stay_signed_in_button(driver)
+            driver.get("https://account.microsoft.com/profile")
+            login_on_country_page(driver, new_profile_data)
+            print(f"{email} : Re-logged in successfully")
+            return True
+        else:
+            enter_password(driver=driver, password=password)
+            click_password_next_button(driver=driver)
+            click_stay_signed_in_button(driver)
+            driver.get("https://account.microsoft.com/profile")
+            login_on_country_page(driver, new_profile_data)
+            print(f"{email} : Re-logged in successfully")
+            return True
+
+        # click_send_code_to_recovery_email_button(driver)
+        # enter_recovery_email_2(driver, recovery)
+        # # click_next_button(driver)
+        # click_password_next_button(driver)
+        # status, code = wait_for_code_by_recovery_mail(recovery)
+        # if not status:
+        #     print(f"{email} : Code not sent to recovery email!")
+        #     return False
+        # enter_code_and_click_next_after_pass_change(driver, code)
+
+        # click_stay_signed_in_button(driver)
+        # driver.get("https://account.microsoft.com/profile")
+        # login_on_country_page(driver, new_profile_data)
+        # print(f"{email} : Re-logged in successfully")
         return True
 
     except:
