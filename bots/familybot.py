@@ -3721,27 +3721,33 @@ def change_acc_pass(driver, new_profile_data):
             print(f"{email}: Reloging in with NEW password")
             click_existing_account_smtp(driver)
 
-            click_send_code_to_recovery_email_button(driver)
-            enter_recovery_email_2(driver, recovery)
-            click_password_next_button(driver)
-            status, code = wait_for_code_by_recovery_mail(recovery)
-            if not status:
-                print(f"{email} : Code not sent to recovery email!")
-                return False, new_pass
-            enter_code_and_click_next_after_pass_change(driver, code)
+            if click_send_code_to_recovery_email_button(driver):
+                enter_recovery_email_2(driver, recovery)
+                click_password_next_button(driver)
+                status, code = wait_for_code_by_recovery_mail(recovery)
+                if not status:
+                    print(f"{email} : Code not sent to recovery email!")
+                    return False, new_pass
+                enter_code_and_click_next_after_pass_change(driver, code)
+                print(f"{email} : Password changed successfully")
+                return True, new_pass
+            else:
+                enter_password(driver=driver, password=new_pass)
+                click_password_next_button(driver=driver)
+                print(f"{email} : Password changed successfully")
+                return True, new_pass
 
         except:
             pass
 
-        print(f"{email} : Password changed successfully")
-        return True, new_pass
+        return False, "Error clicking reloging in after password change"
 
     except Exception as e:
         print(f"{email} : Exception error while changing password: {str(e)}")
         return False, f"Exception during changing password: {str(e)}"
 
 
-def re_login_existing_acc(driver, new_profile_data):
+def re_login_existing_acc_owldie(driver, new_profile_data):
     try:
         email = new_profile_data.get("email")
         password = new_profile_data.get("pass")
@@ -3766,6 +3772,47 @@ def re_login_existing_acc(driver, new_profile_data):
                 return False
             enter_code_and_click_next_after_pass_change(driver, code)
             click_stay_signed_in_button(driver)
+        return False
+    except:
+        return False
+
+
+def re_login_existing_acc(driver, new_profile_data):
+    try:
+        email = new_profile_data.get("email")
+        password = new_profile_data.get("pass")
+        recovery = new_profile_data.get("recovery_email")
+
+        if click_existing_account_smtp(
+            driver, wait_time=2
+        ) or enter_email_and_click_next(driver, email):
+            if click_send_code_to_recovery_email_button(driver):
+                enter_recovery_email_2(driver, recovery)
+                click_password_next_button(driver)
+                status, code = wait_for_code_by_recovery_mail(recovery)
+                if not status:
+                    print(f"{email} : Code not sent to recovery email!")
+                    return False
+                enter_code_and_click_next_after_pass_change(driver, code)
+                click_stay_signed_in_button(driver)
+                print(f"{email} : Password changed successfully")
+                return True
+            else:
+                enter_password(driver=driver, password=password)
+                click_password_next_button(driver=driver)
+                click_stay_signed_in_button(driver)
+                print(f"{email} : Password changed successfully")
+                return True
+
+            # click_send_code_to_recovery_email_button(driver)
+            # enter_recovery_email_2(driver, recovery)
+            # click_password_next_button(driver)
+            # status, code = wait_for_code_by_recovery_mail(recovery)
+            # if not status:
+            #     print("Code not sent to recovery email!")
+            #     return False
+            # enter_code_and_click_next_after_pass_change(driver, code)
+
         return False
     except:
         return False
