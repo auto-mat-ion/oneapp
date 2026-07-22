@@ -2034,7 +2034,7 @@ def main_batches(
 def run_smtp_bot(app_choice: int = 1):
 
     if not is_server_authorized():
-        print("Server not authorized to run mtp")
+        print("Server not authorized to run smtp")
         return
 
     print("Starting SMTP bot runner.")
