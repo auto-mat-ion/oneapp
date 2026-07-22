@@ -4756,14 +4756,14 @@ def main():
                         else:
                             st.error(message)
             with col2:
-                pass
-                # if st.button("Shutdown", key="shutdown_smtp_button"):
-                #     with st.spinner("Writing shutdown action..."):
-                #         success, message = insert_manual_shutdown_action()
-                #         if success:
-                #             st.success(message)
-                #         else:
-                #             st.error(message)
+                # pass
+                if st.button("Shutdown", key="shutdown_smtp_button"):
+                    with st.spinner("Writing shutdown action..."):
+                        success, message = insert_manual_shutdown_action()
+                        if success:
+                            st.success(message)
+                        else:
+                            st.error(message)
             st.markdown("---")
 
             st.subheader("Server Uptime Status")
