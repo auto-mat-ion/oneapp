@@ -200,6 +200,7 @@ _account_fail_count = 0
 _shared_cache = msal.SerializableTokenCache()
 _shutdown = threading.Event()
 _shutdown_reason: Optional[str] = None
+_shutdown_watcher_started = False
 _connect_lock = threading.Lock()
 _pause_requested = threading.Event()
 
@@ -1708,6 +1709,66 @@ def get_action_status() -> tuple[bool, dict]:
             pass
 
 
+def check_manual_shutdown_signal() -> bool:
+    conn = _get_db_connection()
+    if conn is None:
+        return False
+
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT action, status, date_time FROM manualbot_actions_tracker "
+            "ORDER BY action_id DESC LIMIT 1"
+        )
+        row = cursor.fetchone()
+        cursor.close()
+        if not row:
+            return False
+
+        action = str(row[0]).strip().lower() if row[0] is not None else ""
+        status = str(row[1]).strip().lower() if row[1] is not None else ""
+        timestamp = row[2].replace(tzinfo=timezone.utc) if row[2] else None
+
+        if not timestamp or not isinstance(timestamp, datetime):
+            return False
+
+        if datetime.now(UTC) - timestamp > timedelta(minutes=5):
+            return False
+
+        return action == "manual_shutdown" and status == "True"
+    except Exception:
+        return False
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+def _manual_shutdown_watcher():
+    global _shutdown_watcher_started
+    last_shutdown_timestamp = None
+    while True:
+        if _shutdown.is_set() and _shutdown_reason == "manual":
+            _shutdown_watcher_started = False
+            return
+
+        if check_manual_shutdown_signal():
+            now = datetime.now(UTC)
+            if last_shutdown_timestamp is None or (
+                now - last_shutdown_timestamp
+            ) > timedelta(seconds=1):
+                last_shutdown_timestamp = now
+                log("Manual shutdown signal received from database.")
+                global _shutdown_reason
+                _shutdown_reason = "manual"
+                _shutdown.set()
+                _shutdown_watcher_started = False
+                return
+
+        time.sleep(5)
+
+
 def main_batches(
     batch_number: int = 1,
     app_choice: int = 1,
@@ -1795,6 +1856,10 @@ def main_batches(
     log("Run signal synced. Starting batch processing...")
 
     _start_runtime_watchdog()
+    global _shutdown_watcher_started
+    if not _shutdown_watcher_started:
+        threading.Thread(target=_manual_shutdown_watcher, daemon=True).start()
+        _shutdown_watcher_started = True
 
     stats = StatsTracker(total_acc, total_rcpt)
     account_states = [
@@ -1931,6 +1996,7 @@ def main_batches(
 
 
 def run_smtp_bot(app_choice: int = 1):
+
     print("Starting SMTP bot runner.")
     while True:
         if _shutdown.is_set():
