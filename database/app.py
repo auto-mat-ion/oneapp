@@ -366,6 +366,64 @@ def insert_manual_sender_action(batch_number=None):
             pass
 
 
+def get_today_used_run_bots_batches():
+    """Return batch numbers already used today for run_bots actions."""
+    conn = get_db_connection()
+    if conn is None:
+        return []
+    try:
+        cursor = conn.cursor()
+        today_start = datetime.now(UTC).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+        cursor.execute(
+            "SELECT DISTINCT batch_number FROM manualbot_actions_tracker "
+            "WHERE action = %s AND status = %s AND date_time >= %s "
+            "AND batch_number IS NOT NULL",
+            ("run_bots", "True", today_start),
+        )
+        rows = cursor.fetchall()
+        return [int(row[0]) for row in rows if row and row[0] is not None]
+    except Exception:
+        return []
+    finally:
+        try:
+            cursor.close()
+        except Exception:
+            pass
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+def insert_manual_shutdown_action():
+    """Insert a manual shutdown action into manualbot_actions_tracker."""
+    conn = get_db_connection()
+    if conn is None:
+        return False, "Unable to connect to database"
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO manualbot_actions_tracker "
+            "(server_ip, date_time, action, status) VALUES (%s, %s, %s, %s)",
+            (get_current_server_ip(), datetime.now(UTC), "manual_shutdown", "True"),
+        )
+        conn.commit()
+        return True, "Shutdown signal sent.."
+    except Exception as exc:
+        return False, f"Unable to insert shutdown action: {exc}"
+    finally:
+        try:
+            cursor.close()
+        except Exception:
+            pass
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
 def truncate_table(table_name):
     conn = get_db_connection()
     if conn is None:
@@ -4661,20 +4719,51 @@ def main():
             st.title("SMTP")
 
             st.markdown("---")
-            batch_option = st.selectbox(
-                "Batch number:", ["batch_1", "batch_2", "batch_3"], index=0
-            )
-            if st.button("Run SMTP", key="run_smtp_button"):
-                mapping = {"batch_1": 1, "batch_2": 2, "batch_3": 3}
-                batch_num = mapping.get(batch_option, None)
-                with st.spinner("Writing manual sender action..."):
-                    success, message = insert_manual_sender_action(
-                        batch_number=batch_num
-                    )
-                    if success:
-                        st.success(message)
-                    else:
-                        st.error(message)
+            mapping = {"batch_1": 1, "batch_2": 2, "batch_3": 3, "batch_4": 4}
+            all_batch_options = ["batch_1", "batch_2", "batch_3", "batch_4"]
+            used_batches = get_today_used_run_bots_batches()
+            available_options = [
+                opt for opt in all_batch_options if mapping.get(opt) not in used_batches
+            ]
+
+            if used_batches:
+                used_labels = [f"batch_{num}" for num in sorted(used_batches)]
+                st.info(
+                    "The following batch(es) were already used today and are not available: "
+                    + ", ".join(used_labels)
+                )
+
+            if not available_options:
+                available_options = ["No batch available (all used today)"]
+
+            batch_option = st.selectbox("Batch number:", available_options, index=0)
+            run_disabled = batch_option not in mapping
+            if run_disabled:
+                st.warning(
+                    "No available batch can be selected because all batch numbers were used today."
+                )
+
+            col1, col2 = st.columns([2, 1])
+            with col1:
+                if st.button("Run SMTP", key="run_smtp_button", disabled=run_disabled):
+                    batch_num = mapping.get(batch_option, None)
+                    with st.spinner("Writing manual sender action..."):
+                        success, message = insert_manual_sender_action(
+                            batch_number=batch_num
+                        )
+                        if success:
+                            st.success(message)
+                        else:
+                            st.error(message)
+            with col2:
+                pass
+                # if st.button("Shutdown", key="shutdown_smtp_button"):
+                #     with st.spinner("Writing shutdown action..."):
+                #         success, message = insert_manual_shutdown_action()
+                #         if success:
+                #             st.success(message)
+                #         else:
+                #             st.error(message)
             st.markdown("---")
 
             st.subheader("Server Uptime Status")
