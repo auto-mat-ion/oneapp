@@ -1,6 +1,8 @@
 import json
 import os
+import platform
 import signal
+import subprocess
 import random
 import re
 import time
@@ -1651,7 +1653,43 @@ def prompt_for_sample_recipient() -> Optional[int]:
     print("Invalid choice. Please enter 1 for old app or 2 for new app.")
 
 
+def sync_pc_time() -> bool:
+    """Sync local PC time with the system NTP/time service."""
+    try:
+        system = platform.system().lower()
+        if system == "windows":
+            subprocess.run(
+                ["w32tm", "/resync"],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            return True
+
+        if system in {"linux", "darwin"}:
+            subprocess.run(
+                ["timedatectl", "set-ntp", "true"],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            subprocess.run(
+                ["timedatectl", "timesync-status"],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            return True
+
+        return False
+    except subprocess.CalledProcessError:
+        return False
+    except Exception:
+        return False
+
+
 def get_action_status() -> tuple[bool, dict]:
+    sync_pc_time()
     conn = _get_db_connection()
     if conn is None:
         return False, {"batch_number": None}
