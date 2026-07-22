@@ -5,7 +5,7 @@ import random
 import re
 import time
 import threading
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, as_completed, wait, FIRST_COMPLETED
 from datetime import timedelta, datetime, timezone, UTC
 from pathlib import Path
 from typing import List, Dict, Tuple, Optional
@@ -1130,8 +1130,13 @@ def send_email(
     body_html: str,
 ) -> Tuple[bool, str]:
 
+    if _shutdown.is_set():
+        return False, "SHUTDOWN"
     # global SALNJLA
-    # time.sleep(random.uniform(3, 5))  # Random delay to avoid detection
+    # delay = random.uniform(3, 5)
+    # if _shutdown.wait(delay):
+    #     return False, "SHUTDOWN"
+
     # SALNJLA += 1
     # if SALNJLA % 77 == 0:
     #     return False, "DODODODOD"
@@ -1272,20 +1277,20 @@ def process_account_batch(
     recipients: "RecipientManager",
     content: "ContentManager",
 ) -> Dict:
-    # time.sleep(random.uniform(4, 7))
-    # print(
-    #     f"Processing account {state.account_idx + 1}/{state.total_accounts}: {state.account['email']}"
-    # )
-    if (
-        _shutdown.is_set()
-        or state.failed
-        # or state.completed
-        or not recipients.has_more()
-    ):
+
+    if _shutdown.is_set() or state.failed or not recipients.has_more():
+        if _shutdown.is_set():
+            # log("Shutdown initiated!")
+            pass
+        elif state.failed:
+            print("Acc has failed")
+        elif recipients.has_more():
+            print("No more recipients")
+        else:
+            print("Account unable to process")
         return {"skipped": True}
 
     session = make_session()
-    # print(f"Session created for account {state.account['email']}")
     try:
         email = state.account["email"]
         if not state.started:
@@ -1301,16 +1306,10 @@ def process_account_batch(
             )
             label = f"b{state.batch_round + 1}"
 
-        # print(
-        #     f"Fetching batch of size {batch_size} for account {state.account['email']}"
-        # )
-
         batch = recipients.get_batch(batch_size)
         if not batch:
             state.completed = True
             return {"skipped": True}
-
-        # print(f"Batch fetched for account {state.account['email']}: {batch}")
 
         if not state.token:
             state.token = get_token(email)
@@ -1319,7 +1318,9 @@ def process_account_batch(
                 recipients.return_batch(batch)
                 state.failed = True
                 state.error = "AUTH_FAILED"
+                log("Auth failed!")
                 return {"failed": True, "error": "AUTH_FAILED", "sent": 0}
+
             log(f"  ✓ {_short(email)}: token OK")
 
         # print(f"Sending email for account {state.account['email']} with batch: {batch}")
@@ -1735,7 +1736,7 @@ def check_manual_shutdown_signal() -> bool:
         if datetime.now(UTC) - timestamp > timedelta(minutes=5):
             return False
 
-        return action == "manual_shutdown" and status == "True"
+        return action == "manual_shutdown" and status == "true"
     except Exception:
         return False
     finally:
@@ -1746,7 +1747,7 @@ def check_manual_shutdown_signal() -> bool:
 
 
 def _manual_shutdown_watcher():
-    global _shutdown_watcher_started
+    global _shutdown_watcher_started, _shutdown_reason
     last_shutdown_timestamp = None
     while True:
         if _shutdown.is_set() and _shutdown_reason == "manual":
@@ -1759,8 +1760,7 @@ def _manual_shutdown_watcher():
                 now - last_shutdown_timestamp
             ) > timedelta(seconds=1):
                 last_shutdown_timestamp = now
-                log("Manual shutdown signal received from database.")
-                global _shutdown_reason
+                log("** Manual shutdown signal received from database.**")
                 _shutdown_reason = "manual"
                 _shutdown.set()
                 _shutdown_watcher_started = False
@@ -1870,14 +1870,9 @@ def main_batches(
     round_idx = 0
     while round_idx <= SUBSEQUENT_BATCHES:
         if _shutdown.is_set():
-            if _shutdown_reason == "timeout":
-                content = _resume_after_runtime_pause(content)
-                if content is None:
-                    log("Stopping due to shutdown during wait.")
-                    break
-                continue
-            log("Shutdown: stopping batch rounds...")
-            break
+            if _shutdown_reason:
+                log("Shutdown: stopping batch rounds...")
+                break
 
         if not recipients.has_more():
             log("All recipients consumed.")
@@ -1885,12 +1880,7 @@ def main_batches(
 
         if round_idx > 0:
             MAX_CONCURRENT_ACCOUNTS = 1
-            # log("Changing ip.")
-            # connect_new_random(VPN_COUNTRY)
             time.sleep(5)
-
-            # log("1 minute wait before next send.")
-            # time.sleep(60)
 
         log(
             f"Starting batch {round_idx + 1}/{SUBSEQUENT_BATCHES + 1} || Threads: {MAX_CONCURRENT_ACCOUNTS}"
@@ -1904,7 +1894,8 @@ def main_batches(
             break
 
         futures = {}
-        with ThreadPoolExecutor(max_workers=MAX_CONCURRENT_ACCOUNTS) as executor:
+        executor = ThreadPoolExecutor(max_workers=MAX_CONCURRENT_ACCOUNTS)
+        try:
             log(f"Submitting {len(active_states)} accounts for processing...")
             for idx, state in enumerate(active_states):
                 if _shutdown.is_set():
@@ -1920,31 +1911,47 @@ def main_batches(
             batch_fail = 0
             print("Waiting for account processing to complete...")
 
-            for future in as_completed(futures):
-                state = futures[future]
-                result = future.result()
+            while futures:
+                done, not_done = wait(futures, timeout=1, return_when=FIRST_COMPLETED)
 
-                if _shutdown.is_set() and _shutdown_reason != "timeout":
+                if not done and _shutdown.is_set():
                     log("Shutdown: waiting for remaining accounts...")
+                    break
 
-                if result.get("skipped"):
-                    continue
+                for future in done:
+                    state = futures.pop(future)
+                    try:
+                        result = future.result()
+                    except Exception as exc:
+                        log(f"Error processing account future: {exc}")
+                        result = {"skipped": True}
 
-                if result.get("failed"):
-                    batch_fail += 1
-                elif result.get("completed"):
-                    batch_success += 1
+                    if _shutdown.is_set():
+                        log("Shutdown: waiting for remaining accounts...")
 
-                if result.get("failed") and not state.finalized:
-                    state.finalized = True
-                    accounts.mark_failed(state.account, result.get("error", ""))
-                    stats.update(state.account, False, state.sent)
-                    continue
+                    if result.get("skipped"):
+                        continue
 
-                if result.get("completed") and not state.finalized:
-                    state.finalized = True
-                    accounts.mark_done(state.account)
-                    stats.update(state.account, True, state.sent)
+                    if result.get("failed"):
+                        batch_fail += 1
+                    elif result.get("completed"):
+                        batch_success += 1
+
+                    if result.get("failed") and not state.finalized:
+                        state.finalized = True
+                        accounts.mark_failed(state.account, result.get("error", ""))
+                        stats.update(state.account, False, state.sent)
+                        continue
+
+                    if result.get("completed") and not state.finalized:
+                        state.finalized = True
+                        accounts.mark_done(state.account)
+                        stats.update(state.account, True, state.sent)
+
+                if _shutdown.is_set():
+                    break
+        finally:
+            executor.shutdown(wait=False)
 
             log(
                 f"\n{'=' * 55}\n\nBatch {round_idx + 1}/{SUBSEQUENT_BATCHES + 1} Finished\n"
@@ -1991,7 +1998,10 @@ def main_batches(
     log(f"  Time:       {final_stats['elapsed']:.1f}s ({final_stats['rate']:.1f}/s)")
     log(f"  Remaining:  {recipients.remaining()} recipients")
     log("=" * 55)
-    flush_db_operations()
+    if _shutdown_reason != "manual":
+        flush_db_operations()
+    else:
+        log("Manual shutdown: skipping DB flush.")
     log("=" * 55)
 
 
