@@ -1710,6 +1710,32 @@ def get_action_status() -> tuple[bool, dict]:
             pass
 
 
+def is_server_authorized() -> bool:
+    if not SERVER_IP:
+        return False
+
+    conn = _get_db_connection()
+    if conn is None:
+        return False
+
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT 1 FROM servers_details WHERE server_ip = %s LIMIT 1",
+            (SERVER_IP,),
+        )
+        row = cursor.fetchone()
+        cursor.close()
+        return row is not None
+    except Exception:
+        return False
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
 def check_manual_shutdown_signal() -> bool:
     conn = _get_db_connection()
     if conn is None:
@@ -2006,6 +2032,10 @@ def main_batches(
 
 
 def run_smtp_bot(app_choice: int = 1):
+
+    if not is_server_authorized():
+        print("Server not authorized to run mtp")
+        return
 
     print("Starting SMTP bot runner.")
     while True:
