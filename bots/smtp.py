@@ -948,10 +948,29 @@ class RecipientManager:
                 recipients.append(normalized)
 
             random.shuffle(recipients)
+
+            try:
+                batch_number = (
+                    int(str(BATCH_NUMBER).strip()) if BATCH_NUMBER is not None else 0
+                )
+            except (TypeError, ValueError):
+                batch_number = 0
+
+            if batch_number % 2 == 1:
+                split_index = len(recipients) // 2
+                recipients = recipients[:split_index]
+                selection_label = "first_half"
+            else:
+                split_index = len(recipients) // 2
+                recipients = recipients[split_index:]
+                selection_label = "second_half"
+
             self.queue.extend(recipients)
             self._total_loaded = len(recipients)
 
-            log(f"✓ Loaded {len(recipients)} valid recipients from DB")
+            log(
+                f"✓ Loaded {len(recipients)} valid recipients from DB ({selection_label})"
+            )
         except Exception as exc:
             log(f"Error: failed to load recipients from database: {exc}")
         finally:
