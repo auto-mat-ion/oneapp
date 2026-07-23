@@ -3720,11 +3720,11 @@ def render_email_sender_stats():
             "date_time BETWEEN %s AND %s",
             (start_dt, end_dt),
         )
-        total_sent_recipients_range = db_count(
-            "sender_sent_recipients",
-            "date_time BETWEEN %s AND %s",
-            (start_dt, end_dt),
-        )
+        # total_sent_recipients_range = db_count(
+        #     "sender_sent_recipients",
+        #     "date_time BETWEEN %s AND %s",
+        #     (start_dt, end_dt),
+        # )
 
         cards = [
             {"label": "Total Sender Accounts", "value": total_sender_accounts},
@@ -3742,10 +3742,10 @@ def render_email_sender_stats():
                 "label": "Failed Accounts in Range",
                 "value": total_failed_range,
             },
-            {
-                "label": "Sent Recipients in Range",
-                "value": total_sent_recipients_range,
-            },
+            # {
+            #     "label": "Sent Recipients in Range",
+            #     "value": total_sent_recipients_range,
+            # },
         ]
         render_stats_cards(cards)
     except Exception as e:
