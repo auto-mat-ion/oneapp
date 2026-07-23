@@ -1094,8 +1094,13 @@ def parse_email_file(uploaded_file):
     data = []
     for line in rows:
         if ":" in line:
-            # email, password = line.split(":", 1)
             email, password = line.split(":")[:2]
+            data.append({"email": email.strip(), "pass": password.strip()})
+        elif "|" in line:
+            email, password = line.split("|")[:2]
+            data.append({"email": email.strip(), "pass": password.strip()})
+        else:
+            email, password = line.split(",")[:2]
             data.append({"email": email.strip(), "pass": password.strip()})
     return pd.DataFrame(data)
 
