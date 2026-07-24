@@ -208,6 +208,33 @@ _pause_requested = threading.Event()
 
 
 _BASIC_RE = re.compile(r".+@.+\..+")
+LOAD_RETRY_ATTEMPTS = 5
+LOAD_RETRY_DELAY_SECONDS = 2.0
+
+
+def _run_with_retry(
+    operation_name: str,
+    func,
+    default=None,
+    attempts: int = LOAD_RETRY_ATTEMPTS,
+    delay_seconds: float = LOAD_RETRY_DELAY_SECONDS,
+):
+    last_error = None
+    for attempt in range(1, attempts + 1):
+        try:
+            return func()
+        except Exception as exc:
+            last_error = exc
+            if attempt >= attempts:
+                log(f"Failed to {operation_name} after {attempts} attempts: {exc}")
+                return default
+            wait_time = min(delay_seconds * attempt, 10.0)
+            log(
+                f"Retrying {operation_name} in {wait_time:.1f}s "
+                f"({attempt}/{attempts}) after error: {exc}"
+            )
+            time.sleep(wait_time)
+    return default
 
 
 def connect_new_random(COUNTRY=VPN_COUNTRY):
@@ -579,45 +606,51 @@ except AttributeError:
 
 
 def load_cache():
-    try:
+    def _load_once():
         log("Loading cache")
 
         conn = _get_db_connection()
         if conn is None:
-            log("Warning: unable to connect to database for cache")
-            return
-        cursor = conn.cursor()
-        cursor.execute(f"SELECT cache_bin_file FROM {_get_cache_bins_table()}")
-        results = cursor.fetchall()
-        cursor.close()
-        conn.close()
+            raise RuntimeError("unable to connect to database for cache")
 
-        combined_data = {
-            "Account": {},
-            "IdToken": {},
-            "AccessToken": {},
-            "RefreshToken": {},
-            "AppMetadata": {},
-        }
+        try:
+            cursor = conn.cursor()
+            cursor.execute(f"SELECT cache_bin_file FROM {_get_cache_bins_table()}")
+            results = cursor.fetchall()
+            cursor.close()
 
-        for result in results:
-            if result and result[0]:
-                temp_cache = msal.SerializableTokenCache()
-                temp_cache.deserialize(result[0].decode("utf-8"))
-                # _shared_cache.update(temp_cache)
-                raw_data = json.loads(temp_cache.serialize())
-                for category in combined_data.keys():
-                    if category in raw_data:
-                        combined_data[category].update(raw_data[category])
+            combined_data = {
+                "Account": {},
+                "IdToken": {},
+                "AccessToken": {},
+                "RefreshToken": {},
+                "AppMetadata": {},
+            }
 
-        num_accounts = len(combined_data.get("Account", {}))
-        _shared_cache.deserialize(json.dumps(combined_data))
+            for result in results:
+                if result and result[0]:
+                    temp_cache = msal.SerializableTokenCache()
+                    temp_cache.deserialize(result[0].decode("utf-8"))
+                    raw_data = json.loads(temp_cache.serialize())
+                    for category in combined_data.keys():
+                        if category in raw_data:
+                            combined_data[category].update(raw_data[category])
 
-        log(
-            f"Cache loaded from database: {len(results)} servers caches, {num_accounts} accounts"
-        )
-    except Exception as e:
-        log(f"Cache load error: {e}")
+            num_accounts = len(combined_data.get("Account", {}))
+            _shared_cache.deserialize(json.dumps(combined_data))
+
+            log(
+                f"Cache loaded from database: {len(results)} servers caches, {num_accounts} accounts"
+            )
+        except Exception as e:
+            raise RuntimeError(f"cache load failed: {e}") from e
+        finally:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+    _run_with_retry("load cache from database", _load_once, default=None)
 
 
 def _load_db_config() -> dict:
@@ -639,17 +672,29 @@ def _load_db_config() -> dict:
     }
 
 
-def _get_db_connection():
+def _get_db_connection(
+    attempts: int = LOAD_RETRY_ATTEMPTS, delay_seconds: float = LOAD_RETRY_DELAY_SECONDS
+):
     try:
         import mysql.connector
     except ImportError:
         return None
 
-    try:
-        return mysql.connector.connect(**_load_db_config())
-    except Exception as exc:
-        log(f"Error: unable to connect to database: {exc}")
-        return None
+    for attempt in range(1, attempts + 1):
+        try:
+            return mysql.connector.connect(**_load_db_config())
+        except Exception as exc:
+            if attempt >= attempts:
+                log(f"Error: unable to connect to database: {exc}")
+                return None
+            wait_time = min(delay_seconds * attempt, 10.0)
+            log(
+                f"Retrying database connection in {wait_time:.1f}s "
+                f"({attempt}/{attempts}) after error: {exc}"
+            )
+            time.sleep(wait_time)
+
+    return None
 
 
 def available_batches_for_server() -> List[str]:
@@ -815,43 +860,52 @@ class ContentManager:
         limit: int = 0,
         offset: int = 0,
     ) -> List[str]:
-        conn = _get_db_connection()
-        if conn is None:
-            print(f"Error: unable to load table {table_name} from database")
-            return []
+        def _load_once() -> List[str]:
+            conn = _get_db_connection()
+            if conn is None:
+                raise RuntimeError(
+                    f"unable to connect to database for {table_name}.{column_name}"
+                )
 
-        try:
-            cursor = conn.cursor()
-            query = f"SELECT `{column_name}` FROM `{table_name}`"
-            params = []
-            where_clauses = []
-            if country:
-                where_clauses.append("LOWER(country) = %s")
-                params.append(country.lower())
-            if where_clauses:
-                query += " WHERE " + " AND ".join(where_clauses)
-            if limit > 0:
-                query += " LIMIT %s"
-                params.append(limit)
-            if offset > 0:
-                query += " OFFSET %s"
-                params.append(offset)
-            cursor.execute(query, params)
-            rows = [
-                str(row[0]).strip()
-                for row in cursor.fetchall()
-                if row and row[0] is not None and str(row[0]).strip()
-            ]
-            cursor.close()
-            return rows
-        except Exception as exc:
-            log(f"Error: failed to load {table_name}.{column_name}: {exc}")
-            return []
-        finally:
             try:
-                conn.close()
-            except Exception:
-                pass
+                cursor = conn.cursor()
+                query = f"SELECT `{column_name}` FROM `{table_name}`"
+                params = []
+                where_clauses = []
+                if country:
+                    where_clauses.append("LOWER(country) = %s")
+                    params.append(country.lower())
+                if where_clauses:
+                    query += " WHERE " + " AND ".join(where_clauses)
+                if limit > 0:
+                    query += " LIMIT %s"
+                    params.append(limit)
+                if offset > 0:
+                    query += " OFFSET %s"
+                    params.append(offset)
+                cursor.execute(query, params)
+                rows = [
+                    str(row[0]).strip()
+                    for row in cursor.fetchall()
+                    if row and row[0] is not None and str(row[0]).strip()
+                ]
+                cursor.close()
+                return rows
+            except Exception as exc:
+                raise RuntimeError(
+                    f"failed to load {table_name}.{column_name}: {exc}"
+                ) from exc
+            finally:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+
+        return _run_with_retry(
+            f"load {table_name}.{column_name} from database",
+            _load_once,
+            default=[],
+        )
 
     def get(self) -> Tuple[str, str, str, str]:
         with _content_lock:
@@ -915,69 +969,77 @@ class RecipientManager:
         self._load()
 
     def _load(self):
-        conn = _get_db_connection()
-        if conn is None:
-            log("Error: unable to connect to database for recipients")
-            return
-
-        try:
-            cursor = conn.cursor()
-            query = (
-                "SELECT recipient_email FROM sender_recipients "
-                "WHERE server_ip = %s AND COALESCE(country, '') = %s "
-                "LIMIT 1000000 offset 0"
-            )
-            params = [SERVER_IP, COUNTRY]
-
-            cursor.execute(query, params)
-            rows = cursor.fetchall()
-            cursor.close()
-
-            seen = set()
-            recipients = []
-            for row in rows:
-                if not row or row[0] is None:
-                    continue
-                email = str(row[0]).strip().lower()
-                if not email:
-                    continue
-                is_valid, normalized = _is_valid_email(email)
-                if not is_valid or normalized in seen:
-                    continue
-                seen.add(normalized)
-                recipients.append(normalized)
-
-            random.shuffle(recipients)
+        def _load_once():
+            conn = _get_db_connection()
+            if conn is None:
+                raise RuntimeError("unable to connect to database for recipients")
 
             try:
-                batch_number = (
-                    int(str(BATCH_NUMBER).strip()) if BATCH_NUMBER is not None else 0
+                cursor = conn.cursor()
+                query = (
+                    "SELECT recipient_email FROM sender_recipients "
+                    "WHERE server_ip = %s AND COALESCE(country, '') = %s "
+                    "LIMIT 1000000 offset 0"
                 )
-            except (TypeError, ValueError):
-                batch_number = 0
+                params = [SERVER_IP, COUNTRY]
 
-            if batch_number % 2 == 1:
-                split_index = len(recipients) // 2
-                recipients = recipients[:split_index]
-                selection_label = "first_half"
-            else:
-                split_index = len(recipients) // 2
-                recipients = recipients[split_index:]
-                selection_label = "second_half"
+                cursor.execute(query, params)
+                rows = cursor.fetchall()
+                cursor.close()
 
-            self.queue.extend(recipients)
-            self._total_loaded = len(recipients)
+                seen = set()
+                recipients = []
+                for row in rows:
+                    if not row or row[0] is None:
+                        continue
+                    email = str(row[0]).strip().lower()
+                    if not email:
+                        continue
+                    is_valid, normalized = _is_valid_email(email)
+                    if not is_valid or normalized in seen:
+                        continue
+                    seen.add(normalized)
+                    recipients.append(normalized)
 
-            log(
-                f"✓ Loaded {len(recipients)} valid recipients from DB ({selection_label})"
-            )
-        except Exception as exc:
-            log(f"Error: failed to load recipients from database: {exc}")
-        finally:
-            try:
-                conn.close()
-            except Exception:
-                pass
+                random.shuffle(recipients)
+
+                try:
+                    batch_number = (
+                        int(str(BATCH_NUMBER).strip())
+                        if BATCH_NUMBER is not None
+                        else 0
+                    )
+                except (TypeError, ValueError):
+                    batch_number = 0
+
+                if batch_number % 2 == 1:
+                    split_index = len(recipients) // 2
+                    recipients = recipients[:split_index]
+                    selection_label = "first_half"
+                else:
+                    split_index = len(recipients) // 2
+                    recipients = recipients[split_index:]
+                    selection_label = "second_half"
+
+                self.queue = deque()
+                self._total_loaded = 0
+                self.queue.extend(recipients)
+                self._total_loaded = len(recipients)
+
+                log(
+                    f"✓ Loaded {len(recipients)} valid recipients from DB ({selection_label})"
+                )
+            except Exception as exc:
+                raise RuntimeError(
+                    f"failed to load recipients from database: {exc}"
+                ) from exc
+            finally:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+
+        _run_with_retry("load recipients from database", _load_once, default=None)
 
     def get_batch(self, size: int) -> List[str]:
         global SAMPLE_RECIPIENT, SAMPLE_RECIPIENT_EMAIL
@@ -1029,53 +1091,61 @@ class AccountManager:
         self._load()
 
     def _load(self):
-        conn = _get_db_connection()
-        if conn is None:
-            log("Error: unable to connect to database for accounts")
-            return
+        def _load_once():
+            conn = _get_db_connection()
+            if conn is None:
+                raise RuntimeError("unable to connect to database for accounts")
 
-        try:
-            cursor = conn.cursor()
-            query = (
-                f"SELECT email, pass, recovery FROM {_get_sender_accounts_table()} "
-                "WHERE server_ip = %s AND COALESCE(country, '') = %s "
-            )
-            params = [SERVER_IP, COUNTRY]
-            if BATCH_NUMBER:
-                query += " AND batch = %s "
-                params.append(f"batch_{BATCH_NUMBER}")
-            query += " LIMIT 2000 OFFSET 0"
-            cursor.execute(query, params)
-            rows = cursor.fetchall()
-            cursor.close()
-
-            for row in rows:
-                if not row or row[0] is None:
-                    continue
-                email = str(row[0]).strip()
-                password = str(row[1]).strip()
-                recovery = (
-                    str(row[2]).strip() if len(row) > 2 and row[2] is not None else ""
-                )
-                if not email:
-                    continue
-                self.accounts.append(
-                    {
-                        "email": email,
-                        "password": password,
-                        "recovery": recovery,
-                        "creation_date": "",
-                    }
-                )
-
-            log(f"Accounts: {len(self.accounts)}")
-        except Exception as exc:
-            log(f"Error: failed to load accounts from database: {exc}")
-        finally:
             try:
-                conn.close()
-            except Exception:
-                pass
+                cursor = conn.cursor()
+                query = (
+                    f"SELECT email, pass, recovery FROM {_get_sender_accounts_table()} "
+                    "WHERE server_ip = %s AND COALESCE(country, '') = %s "
+                )
+                params = [SERVER_IP, COUNTRY]
+                if BATCH_NUMBER:
+                    query += " AND batch = %s "
+                    params.append(f"batch_{BATCH_NUMBER}")
+                query += " LIMIT 2000 OFFSET 0"
+                cursor.execute(query, params)
+                rows = cursor.fetchall()
+                cursor.close()
+
+                accounts = []
+                for row in rows:
+                    if not row or row[0] is None:
+                        continue
+                    email = str(row[0]).strip()
+                    password = str(row[1]).strip()
+                    recovery = (
+                        str(row[2]).strip()
+                        if len(row) > 2 and row[2] is not None
+                        else ""
+                    )
+                    if not email:
+                        continue
+                    accounts.append(
+                        {
+                            "email": email,
+                            "password": password,
+                            "recovery": recovery,
+                            "creation_date": "",
+                        }
+                    )
+
+                self.accounts = accounts
+                log(f"Accounts: {len(self.accounts)}")
+            except Exception as exc:
+                raise RuntimeError(
+                    f"failed to load accounts from database: {exc}"
+                ) from exc
+            finally:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+
+        _run_with_retry("load accounts from database", _load_once, default=None)
 
     def mark_done(self, account: Dict):
         try:
