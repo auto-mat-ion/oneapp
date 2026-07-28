@@ -4028,7 +4028,7 @@ def initialize_new_profile(new_profile_data):
     A dictionary with email_address, and password
     """
     try:
-        print("\n--------------------------------------\n")
+        print("\n")
         connect_new_random()
         email_address = new_profile_data.get("email")
         password = new_profile_data.get("pass")
@@ -4366,13 +4366,14 @@ def initialize_new_profile(new_profile_data):
         print(f"{email_address}: Setting up SMTP")
         status, error = smtp_process(driver, new_profile_data)
         if status:
-            print(f"{email_address}: Successfully set up SMTP")
+            print(f"{email_address}: Finalising")
             new_profile_logger(
                 email_address,
                 "SUCCESS",
                 "Login successfull",
             )
             update_accounts_data(email=email_address, save_smtp="YES")
+            print(f"{email_address}: Successfully set up SMTP")
 
             return True, driver
         else:
@@ -4393,15 +4394,14 @@ def initialize_new_profile(new_profile_data):
         return False, f"Undocumented_error: {E}"
     finally:
         try:
-            # input(
-            #     f"{email_address}: Process completed. Press Enter to close the browser and continue..."
-            # )
-            # time.sleep(3)
             driver.quit()
             processed_email(new_profile_data_original)
+
             pass
         except:
             pass
+
+        print("\n--------------------------------------\n")
 
 
 def signin_multithread():
