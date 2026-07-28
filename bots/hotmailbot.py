@@ -7,7 +7,8 @@ from selenium.webdriver.support.ui import Select
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from utils.server_ip_helper import get_server_ip
 
 from seleniumbase import Driver
@@ -174,7 +175,7 @@ def get_db_connection():
         return None
 
 
-def execute_db_action(action, retries=5, delay=2):
+def execute_db_action(action, retries=7, delay=10):
     attempt = 1
     while attempt <= retries:
         try:
@@ -3545,7 +3546,7 @@ def update_accounts_data(
         return True
 
     try:
-        return execute_db_action(db_action, retries=3, delay=1)
+        return execute_db_action(db_action, retries=7, delay=10)
     except Exception as e:
         print(f"Error saving to accounts table after retries: {e}")
         return False
@@ -3695,7 +3696,7 @@ def load_cache():
             return result
 
         try:
-            result = execute_db_action(load_action, retries=3, delay=1)
+            result = execute_db_action(load_action, retries=7, delay=10)
         except Exception as e:
             print(f"Error loading cache after retries: {e}")
             return cache
@@ -3750,7 +3751,7 @@ def save_cache(cache):
             conn.close()
 
         try:
-            execute_db_action(save_action, retries=3, delay=1)
+            execute_db_action(save_action, retries=10, delay=10)
         except Exception as e:
             print(f"Error saving cache after retries: {e}")
 
@@ -4441,7 +4442,7 @@ def get_new_profile_data():
         return True, {"email": email, "pass": password}
 
     try:
-        return execute_db_action(db_action, retries=3, delay=1)
+        return execute_db_action(db_action, retries=5, delay=10)
     except Exception as e:
         print(f"Error getting email from db after retries: {e}")
         return False, {"email": "", "pass": ""}
