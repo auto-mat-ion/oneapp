@@ -208,8 +208,8 @@ _pause_requested = threading.Event()
 
 
 _BASIC_RE = re.compile(r".+@.+\..+")
-LOAD_RETRY_ATTEMPTS = 5
-LOAD_RETRY_DELAY_SECONDS = 2.0
+LOAD_RETRY_ATTEMPTS = 7
+LOAD_RETRY_DELAY_SECONDS = 5.0
 
 
 def _run_with_retry(
@@ -228,7 +228,7 @@ def _run_with_retry(
             if attempt >= attempts:
                 log(f"Failed to {operation_name} after {attempts} attempts: {exc}")
                 return default
-            wait_time = min(delay_seconds * attempt, 10.0)
+            wait_time = min(delay_seconds * attempt, 30.0)
             log(
                 f"Retrying {operation_name} in {wait_time:.1f}s "
                 f"({attempt}/{attempts}) after error: {exc}"
@@ -590,19 +590,19 @@ def log(msg: str):
         _append_to_file(LOG_FILE, file_line)
 
 
-def _signal_handler(sig, frame):
-    if not _shutdown.is_set():
-        log("⚠ Shutdown requested (Ctrl+C). Finishing current accounts...")
-        global _shutdown_reason
-        _shutdown_reason = "manual"
-        _shutdown.set()
+# def _signal_handler(sig, frame):
+#     if not _shutdown.is_set():
+#         log("⚠ Shutdown requested (Ctrl+C). Finishing current accounts...")
+#         global _shutdown_reason
+#         _shutdown_reason = "manual"
+#         _shutdown.set()
 
 
-signal.signal(signal.SIGINT, _signal_handler)
-try:
-    signal.signal(signal.SIGBREAK, _signal_handler)
-except AttributeError:
-    pass
+# signal.signal(signal.SIGINT, _signal_handler)
+# try:
+#     signal.signal(signal.SIGBREAK, _signal_handler)
+# except AttributeError:
+#     pass
 
 
 def load_cache():
