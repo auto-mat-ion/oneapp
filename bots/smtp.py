@@ -1914,7 +1914,7 @@ def _manual_shutdown_watcher():
             ) > timedelta(seconds=1):
                 last_shutdown_timestamp = now
                 log("** Manual shutdown signal received from database.**")
-                _shutdown_reason = "manual"
+                _shutdown_reason = "manual_triggered"
                 _shutdown.set()
                 _shutdown_watcher_started = False
                 return
@@ -2024,7 +2024,7 @@ def main_batches(
     while round_idx <= SUBSEQUENT_BATCHES:
         if _shutdown.is_set():
             if _shutdown_reason:
-                log("Shutdown: stopping batch rounds...")
+                log("Shutdown: stopping batch rounds. Reason: " + _shutdown_reason)
                 break
 
         if not recipients.has_more():
@@ -2123,6 +2123,7 @@ def main_batches(
                 log(f"Waiting {BATCH_WAIT_TIME:.1f} minutes before next batch...")
                 _shutdown.wait(BATCH_WAIT_TIME * 60)
                 if _shutdown.is_set():
+                    log("Shutdown: stopping batch rounds. Reason: " + _shutdown_reason)
                     continue
 
         round_idx += 1
