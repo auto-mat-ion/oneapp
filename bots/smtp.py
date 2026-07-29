@@ -162,6 +162,18 @@ elif SERVER_IP in ["57.129.48.113"]:
         "mitestingacc.03@gmail.com",
         "stacash.affiliate@gmail.com",
     ]
+elif SERVER_IP in ["13.140.147.200"]:
+    SAMPLE_RECIPIENT_EMAIL = ["wrochna1988@gmail.com"]
+elif SERVER_IP in ["164.132.105.244"]:
+    SAMPLE_RECIPIENT_EMAIL = ["andrewsetup17@gmail.com"]
+elif SERVER_IP in ["164.132.110.181"]:
+    SAMPLE_RECIPIENT_EMAIL = ["aidanmotthews986@gmail.com"]
+elif SERVER_IP in ["164.132.104.37"]:
+    SAMPLE_RECIPIENT_EMAIL = ["marcusfrancis0227@gmail.com"]
+
+elif SERVER_IP in ["51.161.34.220"]:
+    SAMPLE_RECIPIENT_EMAIL = ["durwoodstacks100@gmail.com"]
+
 else:
     SAMPLE_RECIPIENT_EMAIL = []
 
