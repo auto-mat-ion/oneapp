@@ -260,9 +260,9 @@ def get_server_uptime_status_df():
         def get_status(seconds):
             if pd.isna(seconds):
                 return "offline"
-            if seconds < 15:
+            if seconds < (60 * 2):
                 return "good"
-            if seconds <= 45:
+            if seconds <= (60 * 3):
                 return "mid"
             return "offline"
 
@@ -4254,8 +4254,8 @@ def database_management():
                 st.download_button(
                     label="Download cache_bin file",
                     data=cache_bin_data,
-                    file_name=f"cache_bin_{now}.txt",
-                    mime="application/json",
+                    file_name=f"cache_bin_{now}.bin",
+                    mime="application/octet-stream",
                 )
                 st.write(f"Found {len(cache_emails)} emails in cache bins.")
             else:

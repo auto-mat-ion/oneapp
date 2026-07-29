@@ -1778,63 +1778,69 @@ def sync_pc_time() -> bool:
 
 
 def get_action_status() -> tuple[bool, dict]:
-    sync_pc_time()
-    conn = _get_db_connection()
-    if conn is None:
-        return False, {"batch_number": None}
+    def _fetch_action_status():
+        sync_pc_time()
+        conn = _get_db_connection()
+        if conn is None:
+            raise RuntimeError("No database connection")
 
-    try:
-        cursor = conn.cursor()
-        server_ip = str(SERVER_IP or "").strip()
-        now_utc = datetime.now(UTC)
-
-        if server_ip:
-            cursor.execute(
-                "SELECT server_id FROM server_status WHERE server_ip = %s",
-                (server_ip,),
-            )
-            existing_row = cursor.fetchone()
-            if existing_row:
-                cursor.execute(
-                    "UPDATE server_status SET last_uptime = %s WHERE server_ip = %s",
-                    (now_utc, server_ip),
-                )
-            else:
-                cursor.execute(
-                    "INSERT INTO server_status (server_ip, last_uptime) VALUES (%s, %s)",
-                    (server_ip, now_utc),
-                )
-            conn.commit()
-
-        cursor.execute(
-            "SELECT action, status, date_time, batch_number FROM manualbot_actions_tracker "
-            "ORDER BY action_id DESC LIMIT 1"
-        )
-        row = cursor.fetchone()
-        cursor.close()
-        if not row:
-            return False, {"batch_number": None}
-
-        action = str(row[0]).strip().lower() if row[0] is not None else ""
-        status = str(row[1]).strip().lower() if row[1] is not None else ""
-        timestamp = row[2].replace(tzinfo=timezone.utc) if row[2] else None
-        batch_number = row[3]
-
-        if not timestamp or not isinstance(timestamp, datetime):
-            return False, {"batch_number": batch_number}
-
-        if datetime.now(UTC) - timestamp > timedelta(minutes=3):
-            return False, {"batch_number": batch_number}
-
-        return action == "run_bots" and status == "true", {"batch_number": batch_number}
-    except Exception as exc:
-        # log(f"Error checking action status: {exc}")
-        return False, {"batch_number": None}
-    finally:
         try:
-            conn.close()
-        except Exception:
-            pass
+            cursor = conn.cursor()
+            server_ip = str(SERVER_IP or "").strip()
+            now_utc = datetime.now(UTC)
+
+            if server_ip:
+                cursor.execute(
+                    "SELECT server_id FROM server_status WHERE server_ip = %s",
+                    (server_ip,),
+                )
+                existing_row = cursor.fetchone()
+                if existing_row:
+                    cursor.execute(
+                        "UPDATE server_status SET last_uptime = %s WHERE server_ip = %s",
+                        (now_utc, server_ip),
+                    )
+                else:
+                    cursor.execute(
+                        "INSERT INTO server_status (server_ip, last_uptime) VALUES (%s, %s)",
+                        (server_ip, now_utc),
+                    )
+                conn.commit()
+
+            cursor.execute(
+                "SELECT action, status, date_time, batch_number FROM manualbot_actions_tracker "
+                "ORDER BY action_id DESC LIMIT 1"
+            )
+            row = cursor.fetchone()
+            cursor.close()
+            if not row:
+                return False, {"batch_number": None}
+
+            action = str(row[0]).strip().lower() if row[0] is not None else ""
+            status = str(row[1]).strip().lower() if row[1] is not None else ""
+            timestamp = row[2].replace(tzinfo=timezone.utc) if row[2] else None
+            batch_number = row[3]
+
+            if not timestamp or not isinstance(timestamp, datetime):
+                return False, {"batch_number": batch_number}
+
+            if datetime.now(UTC) - timestamp > timedelta(minutes=3):
+                return False, {"batch_number": batch_number}
+
+            return action == "run_bots" and status == "true", {
+                "batch_number": batch_number,
+            }
+        finally:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+    return _run_with_retry(
+        "check action status from database",
+        _fetch_action_status,
+        default=(False, {"batch_number": None}),
+    )
 
 
 def is_server_authorized() -> bool:
@@ -2186,7 +2192,7 @@ def run_smtp_bot(app_choice: int = 1):
                         batch_number = 1
                 signal_time = datetime.now(UTC)
                 break
-            time.sleep(4)
+            time.sleep(60 * 1)
 
         log(f"Run signal received for batch {batch_number}. Preparing to start.")
         main_batches(
