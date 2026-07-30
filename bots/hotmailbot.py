@@ -1,5 +1,5 @@
 import time
-from datetime import timedelta, datetime
+from datetime import timedelta, datetime, timezone
 import os
 import sys
 from selenium.webdriver.common.by import By
@@ -3189,7 +3189,14 @@ def new_profile_logger(email, status, error):
             cursor = conn.cursor()
             cursor.execute(
                 "INSERT INTO signin_log (server_ip, bot_type, email_acc, log_time, status, error) VALUES (%s, %s, %s, %s, %s, %s)",
-                (SERVER_IP, BOT_TYPE, email, datetime.now(), status, error),
+                (
+                    SERVER_IP,
+                    BOT_TYPE,
+                    email,
+                    datetime.now(tz=timezone.utc),
+                    status,
+                    error,
+                ),
             )
             conn.commit()
             conn.close()
@@ -4302,6 +4309,14 @@ def initialize_new_profile(new_profile_data):
                     return False, "OTP ENTERED IS INCORRECT"
                 else:
                     print(f"{email_address}: OTP verified successfully")
+        else:
+            print(f"{email_address}: Protect your account page NOT displayed")
+            new_profile_logger(
+                email_address,
+                "FAIL",
+                "Otp sent is incorrect",
+            )
+            return False, "OTP ENTERED IS INCORRECT"
 
         print(f"{email_address}:Finalizing signin")
         close_other_tabs(driver)
@@ -4316,9 +4331,7 @@ def initialize_new_profile(new_profile_data):
                 click_stay_signed_in_button(driver)
         except:
             pass
-        # close_poppup_after_login(driver)
-        # go_to_outlook(driver)
-        # close_outlook_poppup(driver)
+
         joined_microsoft_premium = "NO"
         print(f"{email_address}: SUCCESSFULL LOGIN!")
 
@@ -4339,6 +4352,14 @@ def initialize_new_profile(new_profile_data):
             update_accounts_data(email=email_address, password=error)
 
             new_profile_data["pass"] = error
+        else:
+            print(f"{email_address}: Error changing password: {error}")
+            new_profile_logger(
+                email_address,
+                "FAIL",
+                f"Error changing password: {error}",
+            )
+            return False, f"Error changing password: {error}"
 
         print(f"{email_address}: Joining microsoft premium")
         driver.refresh()
@@ -4431,7 +4452,7 @@ def get_new_profile_data():
         email, password = row
         cursor.execute(
             "INSERT INTO processing_emails (email, pass, server_ip, bot_type, date_time) VALUES (%s, %s, %s, %s, %s)",
-            (email, password, SERVER_IP, BOT_TYPE, datetime.now()),
+            (email, password, SERVER_IP, BOT_TYPE, datetime.now(tz=timezone.utc)),
         )
         cursor.execute(
             "DELETE FROM input_emails WHERE email = %s AND pass = %s", (email, password)
