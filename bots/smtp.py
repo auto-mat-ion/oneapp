@@ -2044,11 +2044,11 @@ def main_batches(
     ]
 
     round_idx = 0
+    batch_wait_time = 45
     while round_idx <= SUBSEQUENT_BATCHES:
-        if _shutdown.is_set():
-            if _shutdown_reason:
-                log("Shutdown: stopping batch rounds. Reason: " + _shutdown_reason)
-                break
+        if _shutdown.is_set() and _shutdown_reason:
+            log("Shutdown: stopping batch rounds. Reason: " + _shutdown_reason)
+            break
 
         if not recipients.has_more():
             log("All recipients consumed.")
@@ -2056,7 +2056,8 @@ def main_batches(
 
         if round_idx > 0:
             MAX_CONCURRENT_ACCOUNTS = 1
-            time.sleep(5)
+            log(f"Waiting for {batch_wait_time:.1f}s before starting batch...")
+            time.sleep(batch_wait_time)
 
         log(
             f"Starting batch {round_idx + 1}/{SUBSEQUENT_BATCHES + 1} || Threads: {MAX_CONCURRENT_ACCOUNTS}"
@@ -2073,6 +2074,7 @@ def main_batches(
         executor = ThreadPoolExecutor(max_workers=MAX_CONCURRENT_ACCOUNTS)
         try:
             log(f"Submitting {len(active_states)} accounts for processing...")
+
             for idx, state in enumerate(active_states):
                 if _shutdown.is_set():
                     break
