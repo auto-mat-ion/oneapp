@@ -384,6 +384,11 @@ def disconnect_vpn():
 
 
 def _start_runtime_watchdog():
+    _clear_shutdown_state()
+    time.sleep(
+        3
+    )  # Ensure any previous shutdown state is cleared before starting the watcher
+
     def watcher():
         if not _shutdown.wait(MAX_RUNTIME_SECONDS):
             log(
@@ -1945,7 +1950,7 @@ def main_batches(
     app_choice: int = 1,
     signal_timestamp: Optional[datetime] = None,
 ):
-    print("Starting...")
+    print("**********************************************************\n\n\nStarting...")
 
     global BATCH_NUMBER, SENDER_APP, MAX_CONCURRENT_ACCOUNTS, SUBSEQUENT_BATCHES
     SENDER_APP = app_choice
