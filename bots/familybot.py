@@ -711,7 +711,7 @@ def initialize_new_profile_driver():
                     locale_code="en",
                 )
             else:
-                user_data_dir = "Cookies not saved. SAVE_COOKIES option turned off."
+                user_data_dir = "NO_KOKIS"
                 driver = Driver(
                     uc=True,
                     # browser="firefox",
@@ -7186,6 +7186,133 @@ def initialize_new_profile(new_profile_data):
             recovery_phone_number=recovery_phone_number,
             joined_microsoft_premium=joined_microsoft_premium,
         )
+
+        if recovery_email_page_popped_up == "NO":
+            driver.get(
+                "https://account.live.com/password/Change?mkt=en-US&refd=account.microsoft.com&refp=profile"
+            )
+            time.sleep(3)
+            if is_protect_your_account_page(driver):
+                recovery_email_page_popped_up = "YES"
+
+                lets_protect_your_account_banner_page(driver)
+                print(f"{email_address}: Protect your account page")
+                if not select_alternate_email_option(driver=driver):
+                    print(f"{email_address}: Error selecting an alternate email option")
+                    # return driver
+                    # new_profile_logger(
+                    #     email_address,
+                    #     "FAIL",
+                    #     "Error selecting an alternate email option",
+                    # )
+                    # return False, "Error selecting an alternate email option"
+
+                status, temp_email, email_token = create_email()
+                if not status:
+                    print(
+                        f"{email_address}: Error getting a temp mail from temp-mail. Tempmail unresponsive"
+                    )
+                    new_profile_logger(
+                        email_address,
+                        "FAIL",
+                        "Error getting email from tempmail",
+                    )
+                    return (
+                        False,
+                        "Error getting a temp mail from temp-mail. Tempmail unresponsive",
+                    )
+
+                else:
+                    print(f"{email_address}: got email from temp-mail. Verifying..")
+                    if not enter_email(driver=driver, email_address=temp_email):
+                        print(f"{email_address}: Error entering recovery email")
+                        new_profile_logger(
+                            email_address,
+                            "FAIL",
+                            "Error entering recovery email",
+                        )
+                        return False, "Error entering recovery email"
+                    time.sleep(0.5)
+                    bring_to_front(driver)
+                    time.sleep(1)
+                    sss, er = click_next_button_rec_email(driver)
+                    if not sss:
+                        os.makedirs("screenshots", exist_ok=True)
+                        driver.save_screenshot(f"screenshots/{email_address}_error.png")
+                        print(
+                            f"{email_address}: Error clicking next after entering recovery email: {er}"
+                        )
+                        new_profile_logger(
+                            email_address,
+                            "FAIL",
+                            "Error clicking next after entering recovery email",
+                        )
+                        return (
+                            False,
+                            "Error clicking next after entering recovery email",
+                        )
+
+                    status, code = wait_for_code(email_token)
+                    time.sleep(3)
+                    if not status:
+                        print(f"{email_address}: Error getting code from tempmail")
+                        new_profile_logger(
+                            email_address,
+                            "FAIL",
+                            "Error getting code from tempmail. Timed out without receiving code",
+                        )
+                        return False, "Error getting code from tempmail. Timeout"
+                    else:
+                        print(f"{email_address}: Code received from tempmail: {code}")
+                    if not enter_code(driver, code):
+                        print(
+                            f"{email_address}: Error entering email verification code"
+                        )
+                        new_profile_logger(
+                            email_address,
+                            "FAIL",
+                            "Error entering email verification code",
+                        )
+                        return False, "Error entering email verification code"
+
+                    if not click_next_button(driver):
+                        print(
+                            f"{email_address}: Error clicking next after entering otp"
+                        )
+                        new_profile_logger(
+                            email_address,
+                            "FAIL",
+                            "Error clicking next after entering otp",
+                        )
+                        return False, "Error clicking next after entering otp"
+
+                    if invalid_code(driver):
+                        print(f"{email_address}: OTP ENTERED IS INCORRECT")
+                        new_profile_logger(
+                            email_address,
+                            "FAIL",
+                            "Otp sent is incorrect",
+                        )
+                        return False, "OTP ENTERED IS INCORRECT"
+                    else:
+                        print(f"{email_address}: OTP verified successfully")
+            else:
+                pass
+
+        if recovery_email_page_popped_up == "YES":
+            update_accounts_data(
+                email=email_address,
+                has_recovery_email=recovery_email_page_popped_up,
+                recovery_email=temp_email,
+            )
+        else:
+            print(f"{email_address}: Protect your account page NOT displayed")
+            new_profile_logger(
+                email_address,
+                "FAIL",
+                "Recovery not added. Protect your account page NOT displayed",
+            )
+            return False, "Recovery not added. Protect your account page NOT displayed"
 
         status, error = change_acc_pass(driver, new_profile_data)
         if status:
