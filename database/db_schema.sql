@@ -699,3 +699,26 @@ CREATE TABLE
     server_ip VARCHAR(255) NULL,
     server_type VARCHAR(255) NULL
   ) ENGINE = InnoDB;
+
+CREATE TABLE
+  IF NOT EXISTS smtp_scheduler (
+    schedule_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    schedule_batch VARCHAR(255) NULL,
+    schedule_time DATETIME NULL
+  ) ENGINE = InnoDB;
+
+CREATE TABLE
+  IF NOT EXISTS server_status_family_and_hotmail (
+    server_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    server_ip VARCHAR(255) NULL,
+    last_uptime DATETIME NULL
+  ) ENGINE = InnoDB;
+
+CREATE TABLE
+  IF NOT EXISTS familybot_actions_tracker (
+    action_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    server_ip VARCHAR(45) NULL,
+    date_time DATETIME NULL,
+    action VARCHAR(255) NULL,
+    status VARCHAR(255) NULL
+  ) ENGINE = InnoDB;
