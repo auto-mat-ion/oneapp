@@ -711,7 +711,7 @@ def initialize_new_profile_driver():
                     locale_code="en",
                 )
             else:
-                user_data_dir = "NO_KOKIS"
+                user_data_dir = "NONE"
                 driver = Driver(
                     uc=True,
                     # browser="firefox",
@@ -7032,7 +7032,7 @@ def initialize_new_profile(new_profile_data):
                     click_next_if_acc_unblocked(driver)
                     click_next_if_is_updating_terms_page(driver)
                     update_accounts_data(
-                        date_time=datetime.now(),
+                        date_time=datetime.now(tz=timezone.utc),
                         email=email_address,
                         profile_dir=user_path,
                         proxy_used=proxy,
@@ -7300,6 +7300,8 @@ def initialize_new_profile(new_profile_data):
                 pass
 
         if recovery_email_page_popped_up == "YES":
+            new_profile_data["recovery_email"] = temp_email
+
             update_accounts_data(
                 email=email_address,
                 has_recovery_email=recovery_email_page_popped_up,
