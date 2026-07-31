@@ -143,9 +143,9 @@ if SERVER_IP in [
     "13.140.181.16",
     "13.140.181.22",
 ]:
-    MAX_CONCURRENT_ACCOUNTS = 2
+    MAX_CONCURRENT_ACCOUNTS = 1
 else:
-    MAX_CONCURRENT_ACCOUNTS = 2
+    MAX_CONCURRENT_ACCOUNTS = 1
 
 SAMPLE_RECIPIENT_EMAIL = []
 
@@ -992,12 +992,29 @@ class RecipientManager:
                 raise RuntimeError("unable to connect to database for recipients")
 
             try:
+                try:
+                    batch_number = (
+                        int(str(BATCH_NUMBER).strip())
+                        if BATCH_NUMBER is not None
+                        else 0
+                    )
+                except (TypeError, ValueError):
+                    batch_number = 0
+
                 cursor = conn.cursor()
-                query = (
-                    "SELECT recipient_email FROM sender_recipients "
-                    "WHERE server_ip = %s AND COALESCE(country, '') = %s "
-                    "LIMIT 1000000 offset 0"
-                )
+                if batch_number == 5:
+                    log("loading from list2 recipients")
+                    query = (
+                        "SELECT recipient_email FROM sender_recipients_2 "
+                        "WHERE server_ip = %s AND COALESCE(country, '') = %s "
+                        "LIMIT 1000000 offset 0"
+                    )
+                else:
+                    query = (
+                        "SELECT recipient_email FROM sender_recipients "
+                        "WHERE server_ip = %s AND COALESCE(country, '') = %s "
+                        "LIMIT 1000000 offset 0"
+                    )
                 params = [SERVER_IP, COUNTRY]
 
                 cursor.execute(query, params)
@@ -1020,23 +1037,15 @@ class RecipientManager:
 
                 random.shuffle(recipients)
 
-                try:
-                    batch_number = (
-                        int(str(BATCH_NUMBER).strip())
-                        if BATCH_NUMBER is not None
-                        else 0
-                    )
-                except (TypeError, ValueError):
-                    batch_number = 0
-
-                if batch_number % 2 == 1:
-                    split_index = len(recipients) // 2
-                    recipients = recipients[:split_index]
-                    selection_label = "first_half"
-                else:
-                    split_index = len(recipients) // 2
-                    recipients = recipients[split_index:]
-                    selection_label = "second_half"
+                if batch_number != 5:
+                    if batch_number % 2 == 1:
+                        split_index = len(recipients) // 2
+                        recipients = recipients[:split_index]
+                        selection_label = "first_half"
+                    else:
+                        split_index = len(recipients) // 2
+                        recipients = recipients[split_index:]
+                        selection_label = "second_half"
 
                 self.queue = deque()
                 self._total_loaded = 0
