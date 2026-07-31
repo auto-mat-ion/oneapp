@@ -143,9 +143,9 @@ if SERVER_IP in [
     "13.140.181.16",
     "13.140.181.22",
 ]:
-    MAX_CONCURRENT_ACCOUNTS = 4
+    MAX_CONCURRENT_ACCOUNTS = 2
 else:
-    MAX_CONCURRENT_ACCOUNTS = 4
+    MAX_CONCURRENT_ACCOUNTS = 2
 
 SAMPLE_RECIPIENT_EMAIL = []
 
@@ -2056,8 +2056,8 @@ def main_batches(
 
         if round_idx > 0:
             MAX_CONCURRENT_ACCOUNTS = 1
-            log(f"Waiting for {batch_wait_time:.1f}s before starting batch...")
-            time.sleep(batch_wait_time)
+            # log(f"Waiting for {batch_wait_time:.1f}s before starting batch...")
+            # time.sleep(batch_wait_time)
 
         log(
             f"Starting batch {round_idx + 1}/{SUBSEQUENT_BATCHES + 1} || Threads: {MAX_CONCURRENT_ACCOUNTS}"
