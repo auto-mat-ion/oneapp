@@ -128,6 +128,7 @@ SPINNER_TIME = float(_EMAIL_SENDER_SETTINGS.get("SPINNER_TIME", 15))
 BATCH_WAIT_TIME = 0
 MAX_RUNTIME_SECONDS = 50 * 60
 NEXT_RUN_WAIT_TIME = 4 * 60 * 60
+STAGGER_ = 3
 
 if SERVER_IP in [
     "51.77.216.17",
@@ -1532,6 +1533,7 @@ def process_account_batch(
         log_sent(batch)
         log(f"  ✓ {_short(email)} {label} : {len(batch)} rcpts")
         _log_account_status(True)
+        time.sleep(STAGGER_)
 
         if state.batch_round == 0:
             delay = random.uniform(BATCH_DELAY_MIN, BATCH_DELAY_MAX)
