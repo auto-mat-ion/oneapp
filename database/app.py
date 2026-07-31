@@ -2,11 +2,13 @@ import math
 import os
 import random
 import csv
+import time
 import streamlit as st
 import pandas as pd
 import json
 from pathlib import Path
 from datetime import datetime, timedelta, UTC
+from zoneinfo import ZoneInfo
 from sqlalchemy import create_engine
 import re
 import string
@@ -202,6 +204,322 @@ def get_db_tables():
 def get_current_server_ip():
     settings = load_bot_settings()
     return settings.get("SERVER_IP", "")
+
+
+BATCHES = ["batch_1", "batch_2", "batch_3", "batch_4"]
+SCHEDULER_INTERVAL = timedelta(hours=3)
+
+
+def get_poland_timezone():
+    return ZoneInfo("Europe/Warsaw")
+
+
+def get_now_poland():
+    return datetime.now(get_poland_timezone())
+
+
+def format_duration_for_display(total_seconds):
+    seconds = int(abs(total_seconds))
+    days, remainder = divmod(seconds, 86400)
+    hours, remainder = divmod(remainder, 3600)
+    minutes, seconds = divmod(remainder, 60)
+
+    if days > 0:
+        return f"{days} day{'s' if days != 1 else ''} {hours} hour{'s' if hours != 1 else ''} {minutes} minute{'s' if minutes != 1 else ''}"
+
+    if hours > 0:
+        return f"{hours} hour{'s' if hours != 1 else ''} {minutes} minute{'s' if minutes != 1 else ''} {seconds} second{'s' if seconds != 1 else ''}"
+
+    if minutes > 0:
+        return f"{minutes} minute{'s' if minutes != 1 else ''} {seconds} second{'s' if seconds != 1 else ''}"
+
+    return f"{seconds} second{'s' if seconds != 1 else ''}"
+
+
+def format_remaining_time(delta):
+    total_seconds = int(delta.total_seconds())
+    if total_seconds < 0:
+        return f"ran {format_duration_for_display(total_seconds)} ago"
+    return format_duration_for_display(total_seconds)
+
+
+def get_smtp_scheduler_map():
+    conn = get_db_connection()
+    if conn is None:
+        return {}
+
+    try:
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(
+            "SELECT batch_name, schedule_time FROM smtp_scheduler ORDER BY batch_name"
+        )
+        rows = cursor.fetchall()
+        result = {}
+        for row in rows:
+            batch_name = row.get("batch_name")
+            schedule_time = row.get("schedule_time")
+            if batch_name is None:
+                continue
+            if isinstance(schedule_time, str):
+                try:
+                    schedule_time = datetime.fromisoformat(
+                        schedule_time.replace("Z", "+00:00")
+                    )
+                except ValueError:
+                    schedule_time = None
+            if schedule_time is not None and schedule_time.tzinfo is None:
+                schedule_time = schedule_time.replace(tzinfo=UTC)
+            result[batch_name] = schedule_time
+        return result
+    except Exception as exc:
+        st.error(f"Unable to load SMTP scheduler data: {exc}")
+        return {}
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+def ensure_smtp_scheduler_unique_index():
+    conn = get_db_connection()
+    if conn is None:
+        return False
+
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SHOW INDEX FROM smtp_scheduler WHERE Key_name = 'unique_smtp_batch_name'"
+        )
+        if cursor.fetchone() is None:
+            cursor.execute(
+                "CREATE UNIQUE INDEX unique_smtp_batch_name ON smtp_scheduler(batch_name)"
+            )
+            conn.commit()
+        return True
+    except Exception:
+        return False
+    finally:
+        try:
+            cursor.close()
+        except Exception:
+            pass
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+def get_smtp_scheduler_display_rows():
+    conn = get_db_connection()
+    if conn is None:
+        return []
+
+    try:
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(
+            "SELECT batch_name, schedule_time FROM smtp_scheduler ORDER BY batch_name"
+        )
+        rows = []
+        for row in cursor.fetchall():
+            batch_name = row.get("batch_name")
+            schedule_time = row.get("schedule_time")
+            if batch_name is None or schedule_time is None:
+                continue
+            if schedule_time.tzinfo is None:
+                schedule_time = schedule_time.replace(tzinfo=UTC)
+            local_time = schedule_time.astimezone(get_poland_timezone())
+            remaining = schedule_time - datetime.now(UTC)
+            rows.append(
+                {
+                    "Batch": batch_name,
+                    "Scheduled (Poland)": local_time.strftime("%Y-%m-%d %H:%M:%S"),
+                    "Time Remaining": format_remaining_time(remaining),
+                }
+            )
+        return rows
+    except Exception as exc:
+        st.error(f"Unable to load SMTP scheduler display: {exc}")
+        return []
+    finally:
+        try:
+            cursor.close()
+        except Exception:
+            pass
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+def save_smtp_scheduler_schedule(batch_values):
+    if not batch_values:
+        return False, "No schedule values provided."
+
+    ensure_smtp_scheduler_unique_index()
+    conn = get_db_connection()
+    if conn is None:
+        return False, "Unable to connect to database"
+
+    try:
+        cursor = conn.cursor()
+        for batch_name, date_value, time_value in batch_values:
+            if batch_name not in BATCHES:
+                continue
+            if date_value is None:
+                continue
+            parsed_time = parse_scheduler_time(time_value)
+            if parsed_time is None:
+                continue
+            local_dt = datetime.combine(date_value, parsed_time).replace(
+                tzinfo=get_poland_timezone()
+            )
+            utc_dt = local_dt.astimezone(UTC).replace(tzinfo=None)
+            cursor.execute(
+                """
+                INSERT INTO smtp_scheduler (batch_name, schedule_time)
+                VALUES (%s, %s)
+                ON DUPLICATE KEY UPDATE schedule_time = VALUES(schedule_time)
+                """,
+                (batch_name, utc_dt),
+            )
+        conn.commit()
+        return True, "SMTP schedule saved successfully."
+    except Exception as exc:
+        return False, str(exc)
+    finally:
+        try:
+            cursor.close()
+        except Exception:
+            pass
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+def apply_scheduler_autofill(start_batch_name, first_date, first_time, refresh=False):
+    parsed_time = parse_scheduler_time(first_time)
+    if first_date is None or parsed_time is None:
+        return {}
+
+    start_index = BATCHES.index(start_batch_name)
+    start_dt = datetime.combine(first_date, parsed_time).replace(
+        tzinfo=get_poland_timezone()
+    )
+    updates = {}
+
+    for target_index in range(start_index + 1, len(BATCHES)):
+        target_batch = BATCHES[target_index]
+        if (not refresh) and st.session_state.get(
+            f"manual_override_{target_batch}", False
+        ):
+            continue
+        offset = target_index - start_index
+        candidate_dt = start_dt + (SCHEDULER_INTERVAL * offset)
+        updates[target_batch] = {
+            "date": candidate_dt.date(),
+            "time": candidate_dt.strftime("%H:%M"),
+        }
+        st.session_state[f"manual_override_{target_batch}"] = False
+
+    return updates
+
+
+def mark_scheduler_batch_manual(batch_name):
+    st.session_state[f"manual_override_{batch_name}"] = True
+
+
+def handle_scheduler_batch_change(batch_name):
+    if batch_name not in BATCHES:
+        return
+
+    date_value = st.session_state.get(f"scheduler_date_{batch_name}")
+    time_value = st.session_state.get(f"scheduler_time_{batch_name}")
+    if date_value is not None and time_value is not None:
+        st.session_state["scheduler_autofill_pending"] = {
+            "start_batch_name": batch_name,
+            "first_date": date_value,
+            "first_time": time_value,
+            "refresh": False,
+        }
+
+
+def refresh_scheduler_autofill_button():
+    if not BATCHES:
+        return
+
+    first_batch = BATCHES[0]
+    first_date = st.session_state.get(f"scheduler_date_{first_batch}")
+    first_time = st.session_state.get(f"scheduler_time_{first_batch}")
+    if first_date is not None and first_time is not None:
+        for batch_name in BATCHES[1:]:
+            st.session_state[f"manual_override_{batch_name}"] = False
+        st.session_state["scheduler_autofill_pending"] = {
+            "start_batch_name": first_batch,
+            "first_date": first_date,
+            "first_time": first_time,
+            "refresh": True,
+        }
+
+
+def serialize_scheduler_time(value):
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value.strip()
+    if hasattr(value, "strftime"):
+        return value.strftime("%H:%M")
+    return str(value)
+
+
+def parse_scheduler_time(value):
+    if value is None:
+        return None
+    if hasattr(value, "hour") and hasattr(value, "minute"):
+        return value
+    text = str(value).strip()
+    if not text:
+        return None
+    for fmt in ("%H:%M", "%H:%M:%S"):
+        try:
+            return datetime.strptime(text, fmt).time()
+        except ValueError:
+            continue
+    return None
+
+
+def hydrate_scheduler_state_from_db():
+    db_values = get_smtp_scheduler_map()
+    for batch_name in BATCHES:
+        st.session_state.setdefault(f"manual_override_{batch_name}", False)
+        if batch_name in db_values:
+            schedule_dt = db_values[batch_name]
+            if schedule_dt.tzinfo is None:
+                schedule_dt = schedule_dt.replace(tzinfo=UTC)
+            local_dt = schedule_dt.astimezone(get_poland_timezone())
+            st.session_state.setdefault(f"scheduler_date_{batch_name}", local_dt.date())
+            st.session_state.setdefault(
+                f"scheduler_time_{batch_name}", local_dt.strftime("%H:%M")
+            )
+        else:
+            default_now = get_now_poland()
+            st.session_state.setdefault(
+                f"scheduler_date_{batch_name}", default_now.date()
+            )
+            st.session_state.setdefault(
+                f"scheduler_time_{batch_name}", default_now.strftime("%H:%M")
+            )
+
+
+def get_scheduler_default_values():
+    now = get_now_poland()
+    default_values = {}
+    for batch_name in BATCHES:
+        default_values[f"scheduler_date_{batch_name}"] = now.date()
+        default_values[f"scheduler_time_{batch_name}"] = now.strftime("%H:%M")
+        st.session_state.setdefault(f"manual_override_{batch_name}", False)
+    return default_values
 
 
 def get_server_uptime_status_df():
@@ -4724,8 +5042,14 @@ def main():
             st.title("SMTP")
 
             st.markdown("---")
-            mapping = {"batch_1": 1, "batch_2": 2, "batch_3": 3, "batch_4": 4}
-            all_batch_options = ["batch_1", "batch_2", "batch_3", "batch_4"]
+            mapping = {
+                "batch_1": 1,
+                "batch_2": 2,
+                "batch_3": 3,
+                "batch_4": 4,
+                "batch_5": 5,
+            }
+            all_batch_options = ["batch_1", "batch_2", "batch_3", "batch_4", "batch_5"]
             used_batches = get_today_used_run_bots_batches()
             available_options = [
                 opt for opt in all_batch_options if mapping.get(opt) not in used_batches
@@ -4769,6 +5093,144 @@ def main():
                             st.success(message)
                         else:
                             st.error(message)
+            st.markdown("---")
+
+            st.markdown("### Scheduler for SMTP")
+            st.markdown("Current Poland Time:")
+            st.components.v1.html(
+                """
+                <div id="poland-clock" style="font-size: 1.1rem; font-weight: 600; color: white; margin-bottom: 0.5rem;"></div>
+                <script>
+                    function pad(value) {
+                        return value.toString().padStart(2, '0');
+                    }
+                    function updateClock() {
+                        const now = new Date();
+                        const options = {
+                            timeZone: 'Europe/Warsaw',
+                            year: 'numeric',
+                            month: '2-digit',
+                            day: '2-digit',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            second: '2-digit',
+                            hour12: false,
+                        };
+                        const formatter = new Intl.DateTimeFormat('sv-SE', options);
+                        const parts = formatter.formatToParts(now);
+                        const values = {};
+                        for (const part of parts) {
+                            if (part.type !== 'literal') {
+                                values[part.type] = part.value;
+                            }
+                        }
+                        const output = `${values.year}-${values.month}-${values.day} ${values.hour}:${values.minute}:${values.second}`;
+                        const el = document.getElementById('poland-clock');
+                        if (el) {
+                            el.textContent = output;
+                        }
+                    }
+                    updateClock();
+                    setInterval(updateClock, 1000);
+                </script>
+                """,
+                height=80,
+            )
+
+            hydrate_scheduler_state_from_db()
+
+            pending_autofill = st.session_state.pop("scheduler_autofill_pending", None)
+            if pending_autofill:
+                updates = apply_scheduler_autofill(
+                    pending_autofill["start_batch_name"],
+                    pending_autofill["first_date"],
+                    pending_autofill["first_time"],
+                    refresh=pending_autofill.get("refresh", False),
+                )
+                for batch_name, batch_values in updates.items():
+                    st.session_state[f"scheduler_date_{batch_name}"] = batch_values[
+                        "date"
+                    ]
+                    st.session_state[f"scheduler_time_{batch_name}"] = batch_values[
+                        "time"
+                    ]
+
+            scheduler_header = st.columns([1.5, 2, 2])
+            with scheduler_header[0]:
+                st.markdown("**Batch**")
+            with scheduler_header[1]:
+                st.markdown("**Date**")
+            with scheduler_header[2]:
+                st.markdown("**Time**")
+
+            for batch_name in BATCHES:
+                col_batch, col_date, col_time = st.columns([1.5, 2, 2])
+                with col_batch:
+                    st.markdown(f"**{batch_name}**")
+                with col_date:
+                    current_date = st.session_state.get(
+                        f"scheduler_date_{batch_name}", get_now_poland().date()
+                    )
+                    st.date_input(
+                        f"{batch_name} date",
+                        key=f"scheduler_date_{batch_name}",
+                        label_visibility="collapsed",
+                        value=current_date,
+                        on_change=lambda batch_name=batch_name: (
+                            handle_scheduler_batch_change(batch_name)
+                        ),
+                    )
+                with col_time:
+                    current_time = st.session_state.get(
+                        f"scheduler_time_{batch_name}",
+                        get_now_poland().strftime("%H:%M"),
+                    )
+                    time_value = st.text_input(
+                        f"{batch_name} time",
+                        key=f"scheduler_time_{batch_name}",
+                        label_visibility="collapsed",
+                        value=serialize_scheduler_time(current_time),
+                        help="Enter time in HH:MM format",
+                        on_change=lambda batch_name=batch_name: (
+                            handle_scheduler_batch_change(batch_name)
+                        ),
+                    )
+                    if parse_scheduler_time(time_value) is None and time_value:
+                        st.caption("Use HH:MM format")
+
+            col_autofill, col_save = st.columns([1, 2])
+            with col_autofill:
+                if st.button("Refresh Autofill", key="refresh_scheduler_autofill"):
+                    refresh_scheduler_autofill_button()
+            with col_save:
+                if st.button("Save Schedule", key="save_smtp_schedule"):
+                    batch_values = []
+                    for batch_name in BATCHES:
+                        date_value = st.session_state.get(
+                            f"scheduler_date_{batch_name}"
+                        )
+                        time_value = st.session_state.get(
+                            f"scheduler_time_{batch_name}"
+                        )
+                        batch_values.append((batch_name, date_value, time_value))
+                    success, message = save_smtp_scheduler_schedule(batch_values)
+                    if success:
+                        st.success(message)
+                    else:
+                        st.error(message)
+
+            st.markdown("---")
+            st.subheader("Current Schedule")
+            schedule_rows = get_smtp_scheduler_display_rows()
+            if not schedule_rows:
+                st.info("No SMTP batches are scheduled yet.")
+            else:
+                st.dataframe(
+                    pd.DataFrame(schedule_rows),
+                    use_container_width=True,
+                    hide_index=True,
+                )
+
             st.markdown("---")
 
             st.subheader("Server Uptime Status")
