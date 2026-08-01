@@ -193,9 +193,9 @@ if SERVER_IP in [
     "13.140.181.16",
     "13.140.181.22",
 ]:
-    MAX_CONCURRENT_ACCOUNTS = 1
+    MAX_CONCURRENT_ACCOUNTS = 2
 else:
-    MAX_CONCURRENT_ACCOUNTS = 1
+    MAX_CONCURRENT_ACCOUNTS = 2
 
 SAMPLE_RECIPIENT_EMAIL = []
 
@@ -204,6 +204,7 @@ if SERVER_IP in ["51.91.59.107"]:
     SAMPLE_RECIPIENT_EMAIL = [
         "mitestingacc.01@gmail.com",
     ]
+
 elif SERVER_IP in ["162.19.229.114"]:
     SAMPLE_RECIPIENT_EMAIL = ["mitestingacc.02@gmail.com", "stacho1988@gmail.com"]
 
@@ -228,7 +229,7 @@ else:
     SAMPLE_RECIPIENT_EMAIL = []
 
 VPN_COUNTRY = {
-    "51.91.59.107": "hungary",
+    "51.91.59.107": "poland",
     "79.137.75.57": "denmark",
     "51.91.56.36": "sweden",
     "193.70.86.209": "poland",
@@ -374,7 +375,7 @@ def connect_new_random(COUNTRY=VPN_COUNTRY):
                         ).id.to_list()
                     )
                 )
-                print(f"No {COUNTRY} server found. Connecting to Netherlands server")
+                print(f"No {COUNTRY} server found. Connecting to random server")
             except:
                 locations = "93,208,156,209,81,162,219,192,193,194,175,238,160,114,63,152,112,80,57,224,223,133,195,174,111,137,196,197,113,198,164,190,107,154,37,58,199,108,101,128,117,88,115,243,232,91,163,45,79,169,181,245,125,131,100,246,240,144,141,247,241,132,20,142,242,244,140,95,271,19,283,288,270,276,265,273,17,302,299,304,292,306,9,294,18,172,278,284,293,275,165,277,286,290,161,272,6,70,74,71,280,291,54,202,305,285,301,26,155,168,281,75,295,289,297,94,282,296,298,204,1,207,2,300,287,166,303,25,279,274,143,126,184,185,21,307,186,85,147,110,118,124,56,78,130,34,150,153,104,8,103,136,7,92,210,102,99,106,33,129,182,157,29,188,122,119,36,12,134,120,187,189,4,16,212,146,96,32,31,86,145,127,121,211,35,22,23,203,11,201,89,53,178,5,15,263,90,87,139,84,239,105,176,248,249,109,264".split(
                     ","
@@ -1583,7 +1584,7 @@ def process_account_batch(
         log_sent(batch)
         log(f"  ✓ {_short(email)} {label} : {len(batch)} rcpts")
         _log_account_status(True)
-        time.sleep(STAGGER_)
+        # time.sleep(STAGGER_)
 
         if state.batch_round == 0:
             delay = random.uniform(BATCH_DELAY_MIN, BATCH_DELAY_MAX)
@@ -2022,8 +2023,11 @@ def main_batches(
     SUBSEQUENT_BATCHES = random.randint(17, 20)
     # SUBSEQUENT_BATCHES = 3
 
-    # connect_new_random("netherlands")
-    # connect_new_random(VPN_COUNTRY)
+    if SERVER_IP in ["51.91.59.107"]:
+        connect_new_random("netherlands")
+        connect_new_random(VPN_COUNTRY)
+    elif SERVER_IP in ["57.129.48.113"]:
+        connect_random_random()
     disconnect_vpn()
 
     time.sleep(5)
@@ -2117,6 +2121,9 @@ def main_batches(
 
         if round_idx > 0:
             MAX_CONCURRENT_ACCOUNTS = 1
+            if round_idx % 2 == 0 and SERVER_IP in ["57.129.48.113"]:
+                connect_random_random()
+
             # log(f"Waiting for {batch_wait_time:.1f}s before starting batch...")
             # time.sleep(batch_wait_time)
 
@@ -2273,7 +2280,7 @@ def run_smtp_bot(app_choice: int = 1):
                 signal_time = datetime.now(UTC)
                 break
             time.sleep(60 * 1)
-            update()
+            # update()
 
         log(f"Run signal received for batch {batch_number}. Preparing to start.")
         main_batches(
