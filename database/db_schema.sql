@@ -394,6 +394,14 @@ CREATE TABLE
   ) ENGINE = InnoDB;
 
 CREATE TABLE
+  IF NOT EXISTS sender_recipients_2 (
+    recipient_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    recipient_email VARCHAR(255) NULL,
+    country VARCHAR(255) NULL,
+    server_ip VARCHAR(255) NULL
+  ) ENGINE = InnoDB;
+
+CREATE TABLE
   IF NOT EXISTS sender_subjects (
     subject_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
     subject VARCHAR(255) NULL,

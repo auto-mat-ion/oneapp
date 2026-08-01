@@ -69,6 +69,32 @@ def sanitize_state_key(value):
     )
 
 
+def update():
+    """Run update.bat, select menu item 4, then close the current terminal."""
+    try:
+        base_dir = Path(__file__).resolve().parent.parent
+        bat_path = base_dir / "update.bat"
+        if not bat_path.exists():
+            raise FileNotFoundError(f"Update script not found: {bat_path}")
+
+        cmd = f'cmd /c ""{bat_path}""'
+        subprocess.Popen(
+            cmd,
+            shell=True,
+            creationflags=subprocess.CREATE_NEW_CONSOLE,
+        )
+
+        try:
+            os._exit(0)
+        except Exception:
+            pass
+
+        return True
+    except Exception as exc:
+        print(f"update() failed: {exc}")
+        return False
+
+
 def parse_uploaded_values(uploaded_file, text_value):
     content = ""
     if uploaded_file is not None:
@@ -2285,6 +2311,22 @@ def insert_into_db(
             if not success:
                 return False, enriched
             df = enriched
+
+        if table_name == "sender_recipients_2":
+            if "server_ip" not in df.columns:
+                return False, "Recipient upload is missing the server_ip column."
+            blank_server_rows = int(
+                df["server_ip"].astype("string").str.strip().eq("").sum()
+            )
+            if blank_server_rows > 0:
+                return (
+                    False,
+                    f"Recipient upload is incomplete: {blank_server_rows} rows do not have a server assigned.",
+                )
+            success, error = truncate_table(table_name)
+            if not success:
+                return False, f"Unable to clear {table_name}: {error}"
+
         cursor = conn.cursor()
         if overwrite and table_name == "sender_link":
             cursor.execute("DELETE FROM sender_link")
@@ -2345,7 +2387,7 @@ def insert_into_db(
             return True, f"Inserted 0 rows into {table_name}."
 
         if total_rows > chunk_size:
-            if table_name == "sender_recipients":
+            if table_name == "sender_recipients_2":
                 db_configs = get_db_config()
                 engine = create_engine(
                     f"mysql+pymysql://{db_configs['user']}:{db_configs['password']}@{db_configs['host']}/{db_configs['database']}"
@@ -2466,9 +2508,9 @@ def validate_dataframe(table_name, df):
     if table_name == "sender_link":
         if "link" not in df.columns:
             return False, "Table sender_link requires column: link"
-    if table_name == "sender_recipients":
+    if table_name == "sender_recipients_2":
         if "recipient_email" not in df.columns:
-            return False, "Table sender_recipients requires column: recipient_email"
+            return False, "Table sender_recipients_2 requires column: recipient_email"
     if table_name == "sender_subjects":
         if "subject" not in df.columns:
             return False, "Table sender_subjects requires column: subject"
@@ -2677,7 +2719,7 @@ def email_sender_uploader():
         "manualbot_sender_emails": "Manual Sender Emails",
         "sender_hyperlink_text": "Sender Hyperlink Text",
         "sender_link": "Sender Links",
-        "sender_recipients": "Sender Recipients",
+        "sender_recipients_2": "Sender Recipients",
         "sender_subjects": "Sender Subjects",
         "sender_texts": "Sender Texts",
     }
@@ -2804,7 +2846,7 @@ def email_sender_uploader():
             df = parse_manualbot_sender_emails(uploaded_file)
         elif table_name == "sender_link":
             df = parse_text_list(uploaded_file, "link")
-        elif table_name == "sender_recipients":
+        elif table_name == "sender_recipients_2":
             df = parse_text_list(uploaded_file, "recipient_email").drop_duplicates()
         elif table_name == "sender_subjects":
             df = parse_text_list(uploaded_file, "subject")
@@ -2824,7 +2866,7 @@ def email_sender_uploader():
                 "sender_input_accounts",
                 "sender_hyperlink_text",
                 "sender_link",
-                "sender_recipients",
+                "sender_recipients_2",
                 "sender_subjects",
                 "sender_texts",
             ]:
@@ -2845,7 +2887,7 @@ def email_sender_uploader():
         st.success(message)
         st.write(f"Rows found: {len(df)}")
 
-        if table_name == "sender_recipients":
+        if table_name == "sender_recipients_2":
             st.subheader("Step 6: Assign servers to recipients")
 
             settings = load_full_settings()
@@ -2892,15 +2934,33 @@ def email_sender_uploader():
                 st.error("No servers configured. Please add servers first.")
                 return
 
-            selected_servers = st.multiselect(
-                "Select servers for recipient assignment",
-                server_ips,
-                key=f"selected_servers_multi_{table_name}",
-            )
+            selected_servers = [
+                str(server).strip()
+                for server in st.multiselect(
+                    "Select servers for recipient assignment",
+                    server_ips,
+                    default=server_ips,
+                    key=f"selected_servers_multi_{table_name}",
+                )
+                if str(server).strip()
+            ]
+            selected_servers = list(dict.fromkeys(selected_servers))
 
             if not selected_servers:
                 st.warning("Select at least one server to proceed.")
                 return
+
+            dist_key = f"recipient_distribution_{table_name}"
+            dist_signature_key = f"{dist_key}_signature"
+            current_signature = (len(df), tuple(selected_servers))
+            saved_signature = st.session_state.get(dist_signature_key)
+            if saved_signature != current_signature:
+                st.session_state[dist_key] = []
+                st.session_state[dist_signature_key] = current_signature
+
+            if dist_key not in st.session_state:
+                st.session_state[dist_key] = []
+            distribution = st.session_state[dist_key]
 
             dist_method = st.radio(
                 "Recipient distribution method",
@@ -2909,25 +2969,42 @@ def email_sender_uploader():
                 horizontal=True,
             )
 
-            dist_key = f"recipient_distribution_{table_name}"
-            if dist_key not in st.session_state:
-                st.session_state[dist_key] = []
-            distribution = st.session_state[dist_key]
-
             if dist_method == "Equal":
+                total = len(df)
+                num_servers = len(selected_servers)
+                if num_servers == 0:
+                    st.warning("Select at least one server to proceed.")
+                    return
+
+                base, remainder = divmod(total, num_servers)
+                fresh_distribution = [
+                    {
+                        "server": server,
+                        "count": base + (1 if i < remainder else 0),
+                    }
+                    for i, server in enumerate(selected_servers)
+                ]
+
+                if (
+                    not distribution
+                    or sum(item.get("count", 0) for item in distribution) != total
+                    or {
+                        item.get("server")
+                        for item in distribution
+                        if isinstance(item, dict) and item.get("server")
+                    }
+                    != set(selected_servers)
+                ):
+                    distribution = fresh_distribution
+                    st.session_state[dist_key] = distribution
+
                 if st.button(
                     "Distribute recipients equally",
                     key=f"equal_recipient_dist_{table_name}",
                 ):
-                    total = len(df)
-                    num_servers = len(selected_servers)
-                    base = total // num_servers
-                    remainder = total % num_servers
-                    distribution = []
-                    for i, server in enumerate(selected_servers):
-                        count = base + (1 if i < remainder else 0)
-                        distribution.append({"server": server, "count": count})
+                    distribution = fresh_distribution
                     st.session_state[dist_key] = distribution
+                    st.session_state[dist_signature_key] = current_signature
                     st.success("Recipients distributed equally across servers.")
                     st.rerun()
             else:
@@ -2967,6 +3044,10 @@ def email_sender_uploader():
                             if count > 0
                         ]
                         st.session_state[dist_key] = distribution
+                        st.session_state[dist_signature_key] = (
+                            len(df),
+                            tuple(sorted(selected_servers)),
+                        )
                         st.success("Manual recipient distribution saved.")
                         st.rerun()
 
@@ -2974,8 +3055,17 @@ def email_sender_uploader():
             st.write("---")
             st.write("**Current Recipient Distribution:**")
             if distribution:
-                for d in distribution:
-                    st.write(f"- {d['server']}: {d['count']} recipients")
+                dist_summary = pd.DataFrame(
+                    [
+                        {"Server": d["server"], "Assigned recipients": int(d["count"])}
+                        for d in distribution
+                    ]
+                )
+                st.dataframe(
+                    dist_summary,
+                    use_container_width=True,
+                    hide_index=True,
+                )
             else:
                 st.info("No distribution configured yet.")
 
@@ -2983,18 +3073,35 @@ def email_sender_uploader():
                 st.info("Please complete recipient distribution before upload.")
                 return
 
+            df = df.reset_index(drop=True)
             df["server_ip"] = ""
             start_idx = 0
+            server_col_idx = df.columns.get_loc("server_ip")
             for d in distribution:
-                server = d["server"]
-                server_count = d["count"]
+                server = str(d["server"]).strip()
+                server_count = int(d["count"])
                 end_idx = start_idx + server_count
-                df.loc[start_idx : end_idx - 1, "server_ip"] = server
+                df.iloc[start_idx:end_idx, server_col_idx] = server
                 start_idx = end_idx
 
+            unassigned = int(
+                df["server_ip"].fillna("").astype(str).str.strip().eq("").sum()
+            )
+            if unassigned > 0:
+                st.error(
+                    f"Recipient upload is incomplete: {unassigned} rows do not have a server assigned."
+                )
+                return
+
             st.success("Recipients assigned to servers.")
+            server_counts = (
+                df["server_ip"].dropna().astype(str).str.strip().value_counts()
+            )
+            st.write("**Assigned recipients by server:**")
+            for server, count in server_counts.items():
+                st.write(f"- Server {server}: {int(count)} recipients")
             st.write(
-                f"Assigned {len(df)} recipients across servers: {', '.join([d['server'] for d in distribution])}"
+                f"Assigned {len(df)} recipients across servers: {', '.join([str(d['server']) for d in distribution])}"
             )
         elif table_name == "sender_input_accounts":
             st.subheader("Step 6: Server Distribution & Batching")
@@ -3344,7 +3451,7 @@ def email_sender_uploader():
                     target_table,
                     df,
                     overwrite=overwrite,
-                    chunk_size=50000 if table_name == "sender_recipients" else 50000,
+                    chunk_size=50000 if table_name == "sender_recipients_2" else 50000,
                 )
                 if success:
                     st.success(result_message)
@@ -4021,7 +4128,7 @@ def render_email_sender_stats():
 
     try:
         total_sender_accounts = db_count("sender_input_accounts")
-        total_recipients = db_count("sender_recipients")
+        total_recipients = db_count("sender_recipients_2")
         total_invalid_recipients = db_count("sender_invalid_recipients")
         total_available_hyperlinks = db_count("sender_hyperlink_text")
         total_links = db_count("sender_link")
@@ -4081,7 +4188,7 @@ def render_email_sender_stats():
             limit=1000,
         )
         recipient_country = db_group_count(
-            "sender_recipients",
+            "sender_recipients_2",
             "country",
             "country IS NOT NULL AND country <> ''",
             (),

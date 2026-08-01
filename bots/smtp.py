@@ -1053,7 +1053,7 @@ class RecipientManager:
                     batch_number = 0
 
                 cursor = conn.cursor()
-                if batch_number == 5:
+                if batch_number == 500:
                     log("loading from list2 recipients")
                     query = (
                         "SELECT recipient_email FROM sender_recipients_2 "
@@ -1089,7 +1089,7 @@ class RecipientManager:
                 random.shuffle(recipients)
                 selection_label = "all"
 
-                if batch_number != 5:
+                if batch_number != 500:
                     if batch_number % 2 == 1:
                         split_index = len(recipients) // 2
                         recipients = recipients[:split_index]
