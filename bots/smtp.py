@@ -72,18 +72,47 @@ SAMPLE_RECIPIENT = 1
 
 
 def update():
-    """Run update.bat, select option 4, then close the current terminal."""
+    """Launch the updater, send option 4 when prompted, then close the invoking terminal."""
     try:
         base_dir = Path(__file__).resolve().parent.parent
         bat_path = base_dir / "update.bat"
         if not bat_path.exists():
             raise FileNotFoundError(f"Update script not found: {bat_path}")
 
-        cmd = ["cmd.exe", "/c", f'echo 4 && "{bat_path}"']
-        subprocess.Popen(
-            cmd,
+        proc = subprocess.Popen(
+            ["cmd.exe", "/c", f'call "{bat_path}"'],
+            cwd=str(base_dir),
+            stdin=subprocess.PIPE,
+            stdout=None,
+            stderr=None,
             creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0),
+            text=True,
         )
+
+        if proc.stdin is not None:
+            try:
+                proc.stdin.write("4\n")
+                proc.stdin.flush()
+            except Exception:
+                pass
+            finally:
+                try:
+                    proc.stdin.close()
+                except Exception:
+                    pass
+
+        parent_pid = os.getppid()
+        try:
+            subprocess.run(
+                ["taskkill", "/PID", str(parent_pid), "/T", "/F"],
+                check=False,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+        except Exception:
+            pass
+
         os._exit(0)
     except Exception as exc:
         print(f"update() failed: {exc}")
