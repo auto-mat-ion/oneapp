@@ -71,6 +71,26 @@ SENDER_APP = 1  # 1 for old, 2 for new
 SAMPLE_RECIPIENT = 1
 
 
+def update():
+    """Run update.bat, select option 4, then close the current terminal."""
+    try:
+        base_dir = Path(__file__).resolve().parent.parent
+        bat_path = base_dir / "update.bat"
+        if not bat_path.exists():
+            raise FileNotFoundError(f"Update script not found: {bat_path}")
+
+        cmd = ["cmd.exe", "/c", f'echo 4 && "{bat_path}"']
+        subprocess.Popen(
+            cmd,
+            creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0),
+        )
+        os._exit(0)
+    except Exception as exc:
+        print(f"update() failed: {exc}")
+        return False
+    return True
+
+
 def _get_sender_accounts_table() -> str:
     return "sender2_input_accounts" if SENDER_APP == 2 else "sender_input_accounts"
 
@@ -1037,6 +1057,7 @@ class RecipientManager:
                     recipients.append(normalized)
 
                 random.shuffle(recipients)
+                selection_label = "all"
 
                 if batch_number != 5:
                     if batch_number % 2 == 1:
@@ -2223,6 +2244,7 @@ def run_smtp_bot(app_choice: int = 1):
                 signal_time = datetime.now(UTC)
                 break
             time.sleep(60 * 1)
+            update()
 
         log(f"Run signal received for batch {batch_number}. Preparing to start.")
         main_batches(
