@@ -2023,12 +2023,12 @@ def main_batches(
     SUBSEQUENT_BATCHES = random.randint(17, 20)
     # SUBSEQUENT_BATCHES = 3
 
+    disconnect_vpn()
     if SERVER_IP in ["51.91.59.107"]:
         connect_new_random("netherlands")
         connect_new_random(VPN_COUNTRY)
     elif SERVER_IP in ["57.129.48.113"]:
         connect_random_random()
-    disconnect_vpn()
 
     time.sleep(5)
     # print("Connected VPN...")
