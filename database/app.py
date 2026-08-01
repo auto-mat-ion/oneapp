@@ -69,32 +69,6 @@ def sanitize_state_key(value):
     )
 
 
-def update():
-    """Run update.bat, select menu item 4, then close the current terminal."""
-    try:
-        base_dir = Path(__file__).resolve().parent.parent
-        bat_path = base_dir / "update.bat"
-        if not bat_path.exists():
-            raise FileNotFoundError(f"Update script not found: {bat_path}")
-
-        cmd = f'cmd /c ""{bat_path}""'
-        subprocess.Popen(
-            cmd,
-            shell=True,
-            creationflags=subprocess.CREATE_NEW_CONSOLE,
-        )
-
-        try:
-            os._exit(0)
-        except Exception:
-            pass
-
-        return True
-    except Exception as exc:
-        print(f"update() failed: {exc}")
-        return False
-
-
 def parse_uploaded_values(uploaded_file, text_value):
     content = ""
     if uploaded_file is not None:
@@ -5155,8 +5129,16 @@ def main():
                 "batch_3": 3,
                 "batch_4": 4,
                 "batch_5": 5,
+                "batch_6": 6,
             }
-            all_batch_options = ["batch_1", "batch_2", "batch_3", "batch_4", "batch_5"]
+            all_batch_options = [
+                "batch_1",
+                "batch_2",
+                "batch_3",
+                "batch_4",
+                "batch_5",
+                "batch_6",
+            ]
             used_batches = get_today_used_run_bots_batches()
             available_options = [
                 opt for opt in all_batch_options if mapping.get(opt) not in used_batches
