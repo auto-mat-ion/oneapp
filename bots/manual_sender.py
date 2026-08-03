@@ -4928,13 +4928,13 @@ def testlinks():
         )
 
 
-existing_email = "wanda9862558wilson@outlook.com	zEdBHkyHDZpC8.	ugivvvo919@mailkrank.com".split(
-    "\t"
-)
-new_profile_data = {
-    "email": existing_email[0],
-    "pass": existing_email[1],
-    "recovery": existing_email[2],
-}
+# existing_email = "wanda9862558wilson@outlook.com	zEdBHkyHDZpC8.	ugivvvo919@mailkrank.com".split(
+#     "\t"
+# )
+# new_profile_data = {
+#     "email": existing_email[0],
+#     "pass": existing_email[1],
+#     "recovery": existing_email[2],
+# }
 
-driver = initialize_new_profile(new_profile_data)
+# driver = initialize_new_profile(new_profile_data)
