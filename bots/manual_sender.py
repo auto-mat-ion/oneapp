@@ -12,7 +12,7 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from utils.server_ip_helper import get_server_ip
 
 from seleniumbase import Driver
@@ -4291,8 +4291,9 @@ def initialize_new_profile(new_profile_data):
         return False, f"Undocumented_error: {E}"
     finally:
         try:
-            driver.quit()
-            processed_email(new_profile_data_original)
+            # driver.quit()
+            # processed_email(new_profile_data_original)
+            pass
         except:
             pass
 
@@ -4925,3 +4926,15 @@ def testlinks():
             hyperlink=link,
             link="hyper perr",
         )
+
+
+existing_email = "wanda9862558wilson@outlook.com	zEdBHkyHDZpC8.	ugivvvo919@mailkrank.com".split(
+    "\t"
+)
+new_profile_data = {
+    "email": existing_email[0],
+    "pass": existing_email[1],
+    "recovery": existing_email[2],
+}
+
+driver = initialize_new_profile(new_profile_data)
