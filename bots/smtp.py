@@ -915,7 +915,6 @@ class ContentManager:
     def _load(
         self, table_name: str, column_name: str, limit: int = 0, offset: int = 0
     ) -> List[str]:
-        # return self._load_table_attribute(table_name, column_name, COUNTRY, SERVER_IP)
         return self._load_table_attribute(
             table_name, column_name, COUNTRY, limit, offset
         )
@@ -2021,31 +2020,24 @@ def main_batches(
     BATCH_NUMBER = str(batch_number)
     print(f"Selected batch: {BATCH_NUMBER}")
     SUBSEQUENT_BATCHES = random.randint(17, 20)
-    # SUBSEQUENT_BATCHES = 3
-
-    disconnect_vpn()
-    if SERVER_IP in ["51.91.59.107"]:
-        connect_new_random("netherlands")
-        connect_new_random(VPN_COUNTRY)
-    elif SERVER_IP in ["57.129.48.113"]:
-        connect_random_random()
 
     time.sleep(5)
-    # print("Connected VPN...")
-    print("Current settings:")
-    print(f"  SERVER_IP: {SERVER_IP}")
-    print(f"  COUNTRY: {COUNTRY}")
-    print(f"  FIRST_BATCH_BCC: {FIRST_BATCH_BCC}")
-    print(f"  SUBSEQUENT_BATCH_BCC: {SUBSEQUENT_BATCH_BCC}")
-    print(f"  SUBSEQUENT_BATCHES: {SUBSEQUENT_BATCHES}")
-    print(f"  MAX_CONCURRENT_BATCHES: {MAX_CONCURRENT_BATCHES}")
-    print(f"  MAX_CONCURRENT_ACCOUNTS: {MAX_CONCURRENT_ACCOUNTS}")
-    print(f"  BATCH_DELAY: {BATCH_DELAY_MIN}-{BATCH_DELAY_MAX}s")
-    print(f"  STAGGER: {STAGGER_MIN}-{STAGGER_MAX}s")
-    print(f"  SAVE_TO_SENT: {SAVE_TO_SENT}")
-    print("")
+
+    log("Current settings:")
+    log(f"  SERVER_IP: {SERVER_IP}")
+    log(f"  COUNTRY: {COUNTRY}")
+    log(f"  FIRST_BATCH_BCC: {FIRST_BATCH_BCC}")
+    log(f"  SUBSEQUENT_BATCH_BCC: {SUBSEQUENT_BATCH_BCC}")
+    log(f"  SUBSEQUENT_BATCHES: {SUBSEQUENT_BATCHES}")
+    log(f"  MAX_CONCURRENT_BATCHES: {MAX_CONCURRENT_BATCHES}")
+    log(f"  MAX_CONCURRENT_ACCOUNTS: {MAX_CONCURRENT_ACCOUNTS}")
+    log(f"  BATCH_DELAY: {BATCH_DELAY_MIN}-{BATCH_DELAY_MAX}s")
+    log(f"  STAGGER: {STAGGER_MIN}-{STAGGER_MAX}s")
+    log(f"  SAVE_TO_SENT: {SAVE_TO_SENT}")
+    log("")
 
     log("=" * 55)
+    log("")
     log("EMAIL SENDER | Graph API")
     log(f"Selected batch: {BATCH_NUMBER}")
     log(
@@ -2086,7 +2078,7 @@ def main_batches(
     if signal_timestamp is not None:
         elapsed = datetime.now(UTC) - signal_timestamp
         wait_seconds = max(0, 2 * 60 - elapsed.total_seconds())
-        # wait_seconds = max(0, 2 * 60 - elapsed.total_seconds())
+
         if wait_seconds > 0:
             log(
                 f"Signal received {elapsed.total_seconds():.1f}s ago. "
@@ -2121,8 +2113,6 @@ def main_batches(
 
         if round_idx > 0:
             MAX_CONCURRENT_ACCOUNTS = 1
-            if round_idx % 2 == 0 and SERVER_IP in ["57.129.48.113"]:
-                connect_random_random()
 
             # log(f"Waiting for {batch_wait_time:.1f}s before starting batch...")
             # time.sleep(batch_wait_time)
