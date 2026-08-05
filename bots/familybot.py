@@ -1159,14 +1159,18 @@ def remove_from_family_page(driver, new_profile_data):
         print(
             f"{email_address} : Found {len(total_members_buttons)} members that need removal"
         )
-        for i in range(len(total_members_buttons)):
+        time.sleep(10)
+        for i in range(len(total_members_buttons) + 2):
             try:
-                all_options_buttons = WebDriverWait(driver, wait_time * 2).until(
+                all_options_buttons = WebDriverWait(driver, wait_time).until(
                     EC.visibility_of_all_elements_located(OPTION_ELEMET)
                 )
 
-                time.sleep(7)
-                element = WebDriverWait(driver, wait_time * 2).until(
+                if len(all_options_buttons) == 0:
+                    break
+
+                time.sleep(1)
+                element = WebDriverWait(driver, wait_time).until(
                     EC.element_to_be_clickable(OPTION_ELEMET)
                 )
 
@@ -1174,7 +1178,7 @@ def remove_from_family_page(driver, new_profile_data):
                     "arguments[0].scrollIntoView({block:'center'});", element
                 )
 
-                time.sleep(1.5)
+                time.sleep(1)
 
                 element.click()
                 time.sleep(1)
@@ -1182,18 +1186,18 @@ def remove_from_family_page(driver, new_profile_data):
                     remove_from_family_button = WebDriverWait(driver, wait_time).until(
                         EC.element_to_be_clickable(REMOVE_BTN)
                     )
-                    time.sleep(2)
+                    time.sleep(1)
                     remove_from_family_button.click()
-                    time.sleep(3)
+                    time.sleep(2)
                 except:
                     pass
 
-                confirm_remove_button = WebDriverWait(driver, wait_time * 2).until(
+                confirm_remove_button = WebDriverWait(driver, wait_time).until(
                     EC.element_to_be_clickable(CONFIM_REMOVE)
                 )
-                time.sleep(2)
+                time.sleep(1.5)
                 confirm_remove_button.click()
-                time.sleep(3)
+                time.sleep(1.5)
 
                 retries = 0
                 while retries < 5:
