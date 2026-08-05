@@ -1156,9 +1156,7 @@ def remove_from_family_page(driver, new_profile_data):
             if len(total_start_sharing_buttons) > 5
             else total_start_sharing_buttons
         )
-        print(
-            f"{email_address} : Found {len(total_members_buttons)} members that need removal"
-        )
+        print(f"{email_address} : Found members that need removal")
         time.sleep(10)
         for i in range(len(total_members_buttons) + 2):
             try:
@@ -1166,7 +1164,10 @@ def remove_from_family_page(driver, new_profile_data):
                     EC.visibility_of_all_elements_located(OPTION_ELEMET)
                 )
 
+                print(f"len {len(all_options_buttons)} buttons")
+
                 if len(all_options_buttons) == 0:
+                    print("breaking...")
                     break
 
                 time.sleep(1)
