@@ -5773,7 +5773,7 @@ def store_extracted_link(new_profile_data, link, card_details_dict):
 
 
 def store_re_extracted_link(new_profile_data, link):
-    try:
+    def db_action():
         email = new_profile_data.get("email")
         recovery_email = new_profile_data.get("recovery")
         password = new_profile_data.get("pass")
@@ -5832,16 +5832,18 @@ def store_re_extracted_link(new_profile_data, link):
             conn.commit()
             if conn is not None:
                 conn.close()
+
             return True
 
-        try:
-            execute_db_action(db_action)
-        except Exception as db_e:
-            print(
-                f"Error inserting extracted link into DB for {email}. Link: {link}\nDB Error: {db_e}"
-            )
-    except Exception as E:
-        print(f"Error storing extracted link for {email}. Link: {link}\nError: {E}")
+    try:
+        email = "unidentified"
+        email = new_profile_data.get("email")
+
+        return execute_db_action(db_action)
+    except Exception as db_e:
+        print(
+            f"Error inserting extracted link into DB for {email}. Link: {link}\nDB Error: {db_e}"
+        )
 
 
 def add_billing(driver, new_profile_data, card_details_dict):
@@ -7256,6 +7258,272 @@ def share_premium(new_profile_data):
             pass
 
 
+def get_share_link(driver, new_profile_data):
+
+    try:
+        driver.get("https://account.microsoft.com/services/microsoft365/details")
+        time.sleep(2)
+        email_address = new_profile_data.get("email").strip()
+        current_status = "clicking share button"
+        SHARE_ELEMENT = (
+            By.CSS_SELECTOR,
+            'button[aria-label="Share subscription"]',
+        )
+
+        COPY_BUTTON_ELEMENT = (
+            By.CSS_SELECTOR,
+            'button[aria-label="Copy link"]',
+        )
+
+        LINK_INPUT_ELEMENT = (
+            By.CSS_SELECTOR,
+            'input[aria-label="Sharing link"]',
+        )
+
+        share_btn_element = WebDriverWait(driver, wait_time).until(
+            EC.visibility_of_element_located(SHARE_ELEMENT)
+        )
+        # scroll into center view
+        driver.execute_script(
+            "arguments[0].scrollIntoView({block: 'center'});", share_btn_element
+        )
+        time.sleep(1)
+
+        share_btn_element.click()
+        print(f"{email_address} : Clicked share button")
+        time.sleep(2)
+        current_status = "clicking copy link button"
+        copy_btn_element = WebDriverWait(driver, wait_time).until(
+            EC.visibility_of_element_located(COPY_BUTTON_ELEMENT)
+        )
+        copy_btn_element.click()
+        print(f"{email_address} : Clicked copy link button")
+
+        time.sleep(5)
+        current_status = "retrieving sharing link"
+        link_input_element = WebDriverWait(driver, wait_time + 40).until(
+            EC.visibility_of_element_located(LINK_INPUT_ELEMENT)
+        )
+        link = link_input_element.get_attribute("value")
+        print(f"{email_address} : Retrieved sharing link: {link}")
+        # store_extracted_link(new_profile_data, link, card_details_dict)
+        time.sleep(4)
+
+        print(f"{email_address} : Stored extracted link successfully")
+        return True, link
+    except Exception as E:
+        print(f"{email_address} : Error copying sharing link: {E}")
+        return False, "Error copying sharing link"
+
+
+def remove_family(new_profile_data):
+    """ """
+    try:
+        print("\n--------------------------------------\n")
+        global PREFERRED_SMS_COUNTRY
+        PREFERRED_SMS_COUNTRY = new_profile_data.get("country").strip()
+
+        connect_new_random()
+
+        email_address = new_profile_data.get("email").strip()
+        password = new_profile_data.get("pass").strip()
+        recovery = new_profile_data.get("recovery").strip()
+
+        MICROSOFT_PREMIUM_URL = (
+            "https://account.microsoft.com/services/microsoft365/details"
+        )
+
+        retries = 0
+        driver_success = False
+        print(f"{email_address} : Initializing browser driver")
+        while (retries < 3) and (not driver_success):
+            try:
+                status, driverdata, error = initialize_new_profile_driver()
+                if status:
+                    driver, user_path, proxy = driverdata.values()
+
+                    time.sleep(0.5)
+                    driver.maximize_window()
+                    time.sleep(0.5)
+                    driver.get(MICROSOFT_LOGIN_URL)
+                    time.sleep(1)
+                    driver_success = True
+            except:
+                driver.quit()
+                retries += 1
+
+        if not driver_success:
+            print(f"{email_address} : Error initializing new browser driver")
+            new_profile_logger(
+                email_address,
+                "FAIL",
+                "Error initializing new browser driver. Network or proxy error",
+            )
+            return False, "Error initializing new browser driver instance"
+        if not enter_email(driver=driver, email_address=email_address):
+            print(f"{email_address} : Error entering email")
+            new_profile_logger(email_address, "FAIL", "Error loading login page")
+            return False, "Error loading login page"
+
+        time.sleep(1)
+        if not click_next_button(driver=driver):
+            print(f"{email_address} : Error clicking next button after entering email")
+            new_profile_logger(
+                email_address, "FAIL", "Error clicking next button after entering email"
+            )
+            return False, "Error clicking next button after entering email"
+        time.sleep(1)
+
+        if not enter_recovery_email_2(driver=driver, recovery_email=recovery):
+            print(f"{email_address} : Error entering recovery email")
+            new_profile_logger(
+                email_address,
+                "FAIL",
+                "Error entering recovery email",
+            )
+            return False, "Error entering recovery email"
+        time.sleep(0.5)
+        bring_to_front(driver)
+        time.sleep(1)
+
+        sss = click_password_next_button(driver)
+        if not sss:
+            os.makedirs("screenshots", exist_ok=True)
+            driver.save_screenshot(f"screenshots/{email_address}_error.png")
+            print(
+                f"{email_address} : Error clicking next after entering recovery email"
+            )
+            new_profile_logger(
+                email_address,
+                "FAIL",
+                "Error clicking next after entering recovery email",
+            )
+            return False, "Error clicking next after entering recovery email"
+
+        status, code = wait_for_code_by_recovery_mail(recovery)
+        time.sleep(3)
+        if not status:
+            print(f"{email_address} : Error getting code from tempmail")
+            new_profile_logger(
+                email_address,
+                "FAIL",
+                "Error getting code from tempmail. Timed out without receiving code",
+            )
+            return False, "Error getting code from tempmail. Timeout"
+        else:
+            print(f"{email_address} : Code received from tempmail: {code}")
+
+        if not enter_code_and_click_next_after_pass_change(driver, code):
+            print(f"{email_address} : Error entering email verification code")
+            new_profile_logger(
+                email_address,
+                "FAIL",
+                "Error entering email verification code",
+            )
+            return False, "Error entering email verification code"
+
+        print(f"{email_address} : Finalizing signin")
+        close_other_tabs(driver)
+        click_stay_signed_in_button(driver)
+
+        driver.get(MICROSOFT_PREMIUM_URL)
+        time.sleep(1)
+        # return driver
+        if click_share_dropdown_button(driver):
+            print(f"{email_address} : Clicked share dropdown button")
+
+        if not remove_from_family_page(driver, new_profile_data):
+            return False, "Error clicking remove from family button", driver
+
+        print(f"{email_address} : Clicked remove from family button for all members")
+
+        status, link = get_share_link(driver, new_profile_data)
+        if status:
+            print(f"{email_address} : Share link retrieved successfully: {link}")
+        else:
+            print(f"{email_address} : Error retrieving share link: {link}")
+            return False, "Error retrieving share link", driver
+
+        if not store_re_extracted_link(new_profile_data, link):
+            print(f"{email_address} : Error updating removal status in database")
+            return False, "Error updating removal status in database", driver
+        else:
+            print(f"{email_address} : Updated removal status in database successfully")
+
+        return True
+    except Exception as E:
+        print(f"{email_address} : Exception error occurred: {E}")
+        return False, f"Error occurred: {E}", driver
+    finally:
+        try:
+            driver.quit()
+            processed_extractor_email(new_profile_data)
+            print("=" * 50)
+            pass
+        except:
+            pass
+
+
+def get_new_family_extractor_data():
+    def extract_email_from_db():
+        conn = mysql.connector.connect(
+            host=DB_HOST, user=DB_USER, password=DB_PASSWORD, database=DB_NAME
+        )
+        cursor = conn.cursor()
+
+        row = False
+        is_existing = False
+
+        cursor.execute(
+            "SELECT email, pass,recovery, country FROM processing_family_extractor WHERE server_ip = %s AND bot_type = %s LIMIT 1",
+            (SERVER_IP, BOT_TYPE),
+        )
+        row = cursor.fetchone()
+        if row:
+            is_existing = True
+
+        if not row:
+            cursor.execute(
+                "SELECT email, pass,recovery, country FROM family_extractor_accounts LIMIT 1"
+            )
+            row = cursor.fetchone()
+        if not row:
+            conn.close()
+            return False, {}
+        email, password, recovery, country = row
+        if not is_existing:
+            cursor.execute(
+                "INSERT INTO processing_family_extractor (email, pass, recovery, country, server_ip, bot_type, date_time) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                (
+                    email,
+                    password,
+                    recovery,
+                    country,
+                    SERVER_IP,
+                    BOT_TYPE,
+                    datetime.now(tz=timezone.utc),
+                ),
+            )
+            cursor.execute(
+                "DELETE FROM family_extractor_accounts WHERE email = %s AND pass = %s",
+                (email, password),
+            )
+        conn.commit()
+        conn.close()
+        return True, {
+            "email": email,
+            "pass": password,
+            "recovery": recovery,
+            "country": country,
+        }
+
+    return execute_db_action(
+        action=extract_email_from_db,
+        retries=5,
+        delay=5,
+    )
+
+
 def initialize_new_profile(new_profile_data):
     """
     Creating a new chrome profile.
@@ -7835,279 +8103,13 @@ def run_familybot_share():
             break
 
 
-def get_share_link(driver, new_profile_data):
-
-    try:
-        driver.get("https://account.microsoft.com/services/microsoft365/details")
-        time.sleep(2)
-        email_address = new_profile_data.get("email").strip()
-        current_status = "clicking share button"
-        SHARE_ELEMENT = (
-            By.CSS_SELECTOR,
-            'button[aria-label="Share subscription"]',
-        )
-
-        COPY_BUTTON_ELEMENT = (
-            By.CSS_SELECTOR,
-            'button[aria-label="Copy link"]',
-        )
-
-        LINK_INPUT_ELEMENT = (
-            By.CSS_SELECTOR,
-            'input[aria-label="Sharing link"]',
-        )
-
-        share_btn_element = WebDriverWait(driver, wait_time).until(
-            EC.visibility_of_element_located(SHARE_ELEMENT)
-        )
-        # scroll into center view
-        driver.execute_script(
-            "arguments[0].scrollIntoView({block: 'center'});", share_btn_element
-        )
-        time.sleep(1)
-
-        share_btn_element.click()
-        print(f"{email_address} : Clicked share button")
-        time.sleep(2)
-        current_status = "clicking copy link button"
-        copy_btn_element = WebDriverWait(driver, wait_time).until(
-            EC.visibility_of_element_located(COPY_BUTTON_ELEMENT)
-        )
-        copy_btn_element.click()
-        print(f"{email_address} : Clicked copy link button")
-
-        time.sleep(5)
-        current_status = "retrieving sharing link"
-        link_input_element = WebDriverWait(driver, wait_time + 40).until(
-            EC.visibility_of_element_located(LINK_INPUT_ELEMENT)
-        )
-        link = link_input_element.get_attribute("value")
-        print(f"{email_address} : Retrieved sharing link: {link}")
-        # store_extracted_link(new_profile_data, link, card_details_dict)
-        time.sleep(4)
-
-        print(f"{email_address} : Stored extracted link successfully")
-        return True, link
-    except Exception as E:
-        print(f"{email_address} : Error copying sharing link: {E}")
-        return False, "Error copying sharing link"
-
-
-def remove_family(new_profile_data):
-    """ """
-    try:
-        print("\n--------------------------------------\n")
-        global PREFERRED_SMS_COUNTRY
-        PREFERRED_SMS_COUNTRY = new_profile_data.get("country").strip()
-
-        connect_new_random()
-
-        email_address = new_profile_data.get("email").strip()
-        password = new_profile_data.get("pass").strip()
-        recovery = new_profile_data.get("recovery").strip()
-
-        MICROSOFT_PREMIUM_URL = (
-            "https://account.microsoft.com/services/microsoft365/details"
-        )
-
-        retries = 0
-        driver_success = False
-        print(f"{email_address} : Initializing browser driver")
-        while (retries < 3) and (not driver_success):
-            try:
-                status, driverdata, error = initialize_new_profile_driver()
-                if status:
-                    driver, user_path, proxy = driverdata.values()
-
-                    time.sleep(0.5)
-                    driver.maximize_window()
-                    time.sleep(0.5)
-                    driver.get(MICROSOFT_LOGIN_URL)
-                    time.sleep(1)
-                    driver_success = True
-            except:
-                driver.quit()
-                retries += 1
-
-        if not driver_success:
-            print(f"{email_address} : Error initializing new browser driver")
-            new_profile_logger(
-                email_address,
-                "FAIL",
-                "Error initializing new browser driver. Network or proxy error",
-            )
-            return False, "Error initializing new browser driver instance"
-        if not enter_email(driver=driver, email_address=email_address):
-            print(f"{email_address} : Error entering email")
-            new_profile_logger(email_address, "FAIL", "Error loading login page")
-            return False, "Error loading login page"
-
-        time.sleep(1)
-        if not click_next_button(driver=driver):
-            print(f"{email_address} : Error clicking next button after entering email")
-            new_profile_logger(
-                email_address, "FAIL", "Error clicking next button after entering email"
-            )
-            return False, "Error clicking next button after entering email"
-        time.sleep(1)
-
-        if not enter_recovery_email_2(driver=driver, recovery_email=recovery):
-            print(f"{email_address} : Error entering recovery email")
-            new_profile_logger(
-                email_address,
-                "FAIL",
-                "Error entering recovery email",
-            )
-            return False, "Error entering recovery email"
-        time.sleep(0.5)
-        bring_to_front(driver)
-        time.sleep(1)
-
-        sss = click_password_next_button(driver)
-        if not sss:
-            os.makedirs("screenshots", exist_ok=True)
-            driver.save_screenshot(f"screenshots/{email_address}_error.png")
-            print(
-                f"{email_address} : Error clicking next after entering recovery email"
-            )
-            new_profile_logger(
-                email_address,
-                "FAIL",
-                "Error clicking next after entering recovery email",
-            )
-            return False, "Error clicking next after entering recovery email"
-
-        status, code = wait_for_code_by_recovery_mail(recovery)
-        time.sleep(3)
-        if not status:
-            print(f"{email_address} : Error getting code from tempmail")
-            new_profile_logger(
-                email_address,
-                "FAIL",
-                "Error getting code from tempmail. Timed out without receiving code",
-            )
-            return False, "Error getting code from tempmail. Timeout"
-        else:
-            print(f"{email_address} : Code received from tempmail: {code}")
-
-        if not enter_code_and_click_next_after_pass_change(driver, code):
-            print(f"{email_address} : Error entering email verification code")
-            new_profile_logger(
-                email_address,
-                "FAIL",
-                "Error entering email verification code",
-            )
-            return False, "Error entering email verification code"
-
-        print(f"{email_address} : Finalizing signin")
-        close_other_tabs(driver)
-        click_stay_signed_in_button(driver)
-
-        driver.get(MICROSOFT_PREMIUM_URL)
-        time.sleep(1)
-        # return driver
-        if click_share_dropdown_button(driver):
-            print(f"{email_address} : Clicked share dropdown button")
-
-        if not remove_from_family_page(driver, new_profile_data):
-            return False, "Error clicking remove from family button", driver
-
-        print(f"{email_address} : Clicked remove from family button for all members")
-
-        status, link = get_share_link(driver, new_profile_data)
-        if status:
-            print(f"{email_address} : Share link retrieved successfully: {link}")
-        else:
-            print(f"{email_address} : Error retrieving share link: {link}")
-            return False, "Error retrieving share link", driver
-
-        if not store_re_extracted_link(new_profile_data, link):
-            print(f"{email_address} : Error updating removal status in database")
-            return False, "Error updating removal status in database", driver
-        else:
-            print(f"{email_address} : Updated removal status in database successfully")
-
-        return True
-    except Exception as E:
-        print(f"{email_address} : Exception error occurred: {E}")
-        return False, f"Error occurred: {E}", driver
-    finally:
-        try:
-            driver.quit()
-            processed_extractor_email(new_profile_data)
-            print("=" * 50)
-            pass
-        except:
-            pass
-
-
-def get_new_family_extractor_data():
-    def extract_email_from_db():
-        conn = mysql.connector.connect(
-            host=DB_HOST, user=DB_USER, password=DB_PASSWORD, database=DB_NAME
-        )
-        cursor = conn.cursor()
-
-        row = False
-        is_existing = False
-
-        cursor.execute(
-            "SELECT email, pass,recovery, country FROM processing_family_extractor WHERE server_ip = %s AND bot_type = %s LIMIT 1",
-            (SERVER_IP, BOT_TYPE),
-        )
-        row = cursor.fetchone()
-        if row:
-            is_existing = True
-
-        if not row:
-            cursor.execute(
-                "SELECT email, pass,recovery, country FROM family_extractor_accounts LIMIT 1"
-            )
-            row = cursor.fetchone()
-        if not row:
-            conn.close()
-            return False, {}
-        email, password, recovery, country = row
-        if not is_existing:
-            cursor.execute(
-                "INSERT INTO processing_family_extractor (email, pass, recovery, country, server_ip, bot_type, date_time) VALUES (%s, %s, %s, %s, %s, %s, %s)",
-                (
-                    email,
-                    password,
-                    recovery,
-                    country,
-                    SERVER_IP,
-                    BOT_TYPE,
-                    datetime.now(tz=timezone.utc),
-                ),
-            )
-            cursor.execute(
-                "DELETE FROM family_extractor_accounts WHERE email = %s AND pass = %s",
-                (email, password),
-            )
-        conn.commit()
-        conn.close()
-        return True, {
-            "email": email,
-            "pass": password,
-            "recovery": recovery,
-            "country": country,
-        }
-
-    return execute_db_action(
-        action=extract_email_from_db,
-        retries=5,
-        delay=5,
-    )
-
-
 def run_family_link_extractor():
     """
     Creates threads and signs in simultaneously
     """
     global BOT_TYPE
     BOT_TYPE = "family_link_extractor"
-    print(f"Starting Sharebot for country: {PREFERRED_SMS_COUNTRY} and IP: {SERVER_IP}")
+    print(f"Starting Family extractor for IP: {SERVER_IP}")
     while True:
         status, new_profile_data = get_new_family_extractor_data()
         if status:
