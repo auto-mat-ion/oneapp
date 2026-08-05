@@ -1160,14 +1160,12 @@ def remove_from_family_page(driver, new_profile_data):
         time.sleep(10)
         for i in range(len(total_members_buttons) + 2):
             try:
-                all_options_buttons = WebDriverWait(driver, wait_time).until(
-                    EC.visibility_of_all_elements_located(OPTION_ELEMET)
-                )
+                try:
+                    all_options_buttons = WebDriverWait(driver, wait_time / 2).until(
+                        EC.visibility_of_all_elements_located(OPTION_ELEMET)
+                    )
 
-                print(f"len {len(all_options_buttons)} buttons")
-
-                if len(all_options_buttons) == 0:
-                    print("breaking...")
+                except:
                     break
 
                 time.sleep(1)
@@ -1223,7 +1221,6 @@ def remove_from_family_page(driver, new_profile_data):
                 )
                 driver.refresh()
                 time.sleep(10)
-                # click_share_dropdown_button(driver)
                 pass
 
         return True
