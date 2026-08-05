@@ -1157,11 +1157,11 @@ def remove_from_family_page(driver, new_profile_data):
             else total_start_sharing_buttons
         )
         print(f"{email_address} : Found members that need removal")
-        time.sleep(10)
-        for i in range(len(total_members_buttons) + 2):
+        time.sleep(13)
+        for i in range(len(total_members_buttons) + 3):
             try:
                 try:
-                    all_options_buttons = WebDriverWait(driver, wait_time / 2).until(
+                    all_options_buttons = WebDriverWait(driver, wait_time).until(
                         EC.visibility_of_all_elements_located(OPTION_ELEMET)
                     )
 
@@ -1172,13 +1172,13 @@ def remove_from_family_page(driver, new_profile_data):
                 element = WebDriverWait(driver, wait_time).until(
                     EC.element_to_be_clickable(OPTION_ELEMET)
                 )
+                # time.sleep(1)
 
-                driver.execute_script(
-                    "arguments[0].scrollIntoView({block:'center'});", element
-                )
+                # driver.execute_script(
+                #     "arguments[0].scrollIntoView({block:'center'});", element
+                # )
 
                 time.sleep(1)
-
                 element.click()
                 time.sleep(2)
                 try:
@@ -1206,7 +1206,6 @@ def remove_from_family_page(driver, new_profile_data):
                         )
                         time.sleep(1)
                         if remove_dialog.is_displayed():
-                            # print("Waiting for remove dialog to close")
                             time.sleep(2)
 
                         else:
@@ -1215,12 +1214,13 @@ def remove_from_family_page(driver, new_profile_data):
                         break
                     retries += 1
 
+                time.sleep(4)
             except:
                 print(
                     f"{email_address} : Error clicking close button, refreshing instead and trying again"
                 )
                 driver.refresh()
-                time.sleep(10)
+                time.sleep(15)
                 pass
 
         return True
