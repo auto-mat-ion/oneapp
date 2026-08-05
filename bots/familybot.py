@@ -1230,22 +1230,6 @@ def remove_from_family_page(driver, new_profile_data):
         return False
 
 
-# def remove_from_family_page(driver):
-#     try:
-#         driver.get(
-#             "https://account.microsoft.com/family/home?fref=home.cards.card.family.persona"
-#         )
-#         OPTION_ELEMET = 'button[data-bi-id="other-member-menu-button"]'
-#         remove_btn = 'button[data-bi-id="other-lwm-remove-member-item"]'
-#         CONFIM_REMOVE = 'button[data-bi-id="remove-member-submit"]'
-#         REMOVE_DIALOG = 'div[id*="ModalFocusTrapZone"]'
-
-#         all_options
-
-#     except:
-#         pass
-
-
 def is_your_account_has_been_locked_page(driver):
     """
     Checks if the page is YOUR ACCOUNT HAS BEEN LOCKED
@@ -7323,7 +7307,9 @@ def get_share_link(driver, new_profile_data):
 def remove_family(new_profile_data):
     """ """
     try:
-        print("\n--------------------------------------\n")
+        print(
+            "\n====================================================================\n"
+        )
         global PREFERRED_SMS_COUNTRY
         PREFERRED_SMS_COUNTRY = new_profile_data.get("country").strip()
 
@@ -7462,7 +7448,7 @@ def remove_family(new_profile_data):
         try:
             driver.quit()
             processed_extractor_email(new_profile_data)
-            print("=" * 50)
+            # print("=" * 50)
             pass
         except:
             pass
