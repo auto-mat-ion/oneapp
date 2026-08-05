@@ -5804,23 +5804,41 @@ def store_re_extracted_link(new_profile_data, link):
                 "DELETE FROM familybot_extracted_family_links WHERE link = %s",
                 (link,),
             )
+
+            print(
+                f"Deleted records for link: {link} from familybot_extracted_family_links"
+            )
             cursor.execute(
                 "DELETE FROM familybot_extracted_family_links_history WHERE link = %s",
                 (link,),
             )
-            cursor.execute("DELETE FROM link_stats WHERE link = %s", (link,))
 
+            print(
+                f"Deleted records for link: {link} from familybot_extracted_family_links_history"
+            )
+            cursor.execute("DELETE FROM link_stats WHERE link = %s", (link,))
+            print(f"Deleted records for link: {link} from link_stats")
             cursor.execute(
                 "INSERT INTO familybot_extracted_family_links (server_ip, bot_type, date_time, email, pass, recovery, link, country) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
                 insert_values,
+            )
+            print(
+                f"Inserted record for link: {link} into familybot_extracted_family_links"
             )
             cursor.execute(
                 "INSERT INTO familybot_extracted_family_links_history (server_ip, bot_type, date_time, email, pass, recovery, link, country, card_number) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
                 insert_values_history,
             )
+            print(
+                f"Inserted record for link: {link} into familybot_extracted_family_links_history"
+            )
             conn.commit()
+            print(f"Committed changes for link: {link} into DB")
             if conn is not None:
+                print(f"Closing DB connection for link: {link}")
                 conn.close()
+
+            print(f"DB connection closed for link: {link}")
 
             return True
 
