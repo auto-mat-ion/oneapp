@@ -730,3 +730,25 @@ CREATE TABLE
     action VARCHAR(255) NULL,
     status VARCHAR(255) NULL
   ) ENGINE = InnoDB;
+
+-- FAMILY EXTRACTOR
+CREATE TABLE
+  IF NOT EXISTS family_extractor_accounts (
+    acc_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    email VARCHAR(255) NULL,
+    pass VARCHAR(255) NULL,
+    recovery VARCHAR(255) NULL,
+    country VARCHAR(255) NULL
+  ) ENGINE = InnoDB;
+
+CREATE TABLE
+  IF NOT EXISTS processing_family_extractor (
+    change_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    server_ip VARCHAR(45) NULL,
+    bot_type VARCHAR(50) NULL,
+    date_time DATETIME NULL,
+    email VARCHAR(255) NULL,
+    pass VARCHAR(255) NULL,
+    recovery VARCHAR(255) NULL,
+    country VARCHAR(255) NULL
+  ) ENGINE = InnoDB;
