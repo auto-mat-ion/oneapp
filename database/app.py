@@ -1514,6 +1514,37 @@ def parse_second_app_input_accounts(uploaded_file):
     return pd.DataFrame(data)
 
 
+def parse_family_extractor_accounts(uploaded_file):
+    content = uploaded_file.read().decode("utf-8", errors="replace")
+    rows = [row.strip() for row in content.splitlines() if row.strip()]
+    if rows and all(
+        field in rows[0].lower() for field in ["email", "pass", "recovery"]
+    ):
+        rows = rows[1:]
+    data = []
+    for line in rows:
+        if "," in line:
+            parts = [part.strip() for part in line.split(",")]
+        elif ":" in line:
+            parts = [part.strip() for part in line.split(":")]
+        elif "|" in line:
+            parts = [part.strip() for part in line.split("|")]
+        else:
+            continue
+        if len(parts) >= 3:
+            email, password, recovery = parts[0], parts[1], parts[2]
+            country = parts[3] if len(parts) >= 4 else ""
+            data.append(
+                {
+                    "email": email,
+                    "pass": password,
+                    "recovery": recovery,
+                    "country": country,
+                }
+            )
+    return pd.DataFrame(data)
+
+
 def parse_manualbot_input_accounts(uploaded_file):
     content = uploaded_file.read().decode("utf-8", errors="replace")
     rows = [row.strip() for row in content.splitlines() if row.strip()]
@@ -2468,6 +2499,14 @@ def validate_dataframe(table_name, df):
                 False,
                 "Table manualbot_input_accounts requires columns: email, password, recovery, country",
             )
+    if table_name == "family_extractor_accounts":
+        if not all(
+            col in df.columns for col in ["email", "pass", "recovery", "country"]
+        ):
+            return (
+                False,
+                "Table family_extractor_accounts requires columns: email, pass, recovery, country",
+            )
     if table_name == "manualbot_sender_emails":
         if not all(
             col in df.columns for col in ["server_ip", "email", "password", "recovery"]
@@ -2544,6 +2583,7 @@ def general_uploader():
         "familybot_surnames": "Surnames",
         "familybot_card_details": "Card Details",
         "familybot_fake_details": "Fake Details",
+        "family_extractor_accounts": "Family Extractor Accounts",
         # "family_link": "Family Links",
         "familybot_extracted_family_links": "Extracted Family Links",
         "password_changer_accounts": "Password Changer Accounts",
@@ -2582,6 +2622,7 @@ def general_uploader():
         "familybot_surnames",
         "familybot_card_details",
         "familybot_extracted_family_links",
+        "family_extractor_accounts",
     ]:
         selected_country = st.selectbox(
             "Select country for uploaded rows",
@@ -2613,6 +2654,8 @@ def general_uploader():
             df = parse_second_app_input_accounts(uploaded_file)
         elif table_name == "manualbot_input_accounts":
             df = parse_manualbot_input_accounts(uploaded_file)
+        elif table_name == "family_extractor_accounts":
+            df = parse_family_extractor_accounts(uploaded_file)
         elif table_name == "family_link":
             df = parse_text_list(uploaded_file, "link")
         elif table_name == "familybot_extracted_family_links":
@@ -2625,7 +2668,7 @@ def general_uploader():
             df = parse_fake_json(uploaded_file)
 
         if selected_country:
-            if table_name == "familybot_extracted_family_links":
+            if table_name in ["familybot_extracted_family_links", "family_extractor_accounts"]:
                 if "country" in df.columns:
                     df["country"] = (
                         df["country"]
@@ -3152,6 +3195,33 @@ def email_sender_uploader():
                 )
                 server_batches[server] = num_batches
 
+            max_batches = max(server_batches.values(), default=1)
+            preset_key_root = f"batch_preset_{table_name}"
+            if preset_key_root not in st.session_state:
+                st.session_state[preset_key_root] = {}
+
+            st.write("**Batch preset defaults:**")
+            st.caption(
+                "Set a default count for each batch number. These values auto-fill each server/batch and can still be changed manually per server."
+            )
+            batch_preset_values = st.session_state[preset_key_root]
+            for batch_index in range(1, max_batches + 1):
+                batch_name = f"batch_{batch_index}"
+                preset_key = f"{preset_key_root}_{batch_name}"
+                preset_value = st.number_input(
+                    f"{batch_name} preset",
+                    min_value=0,
+                    value=int(
+                        batch_preset_values.get(
+                            batch_name, st.session_state.get(preset_key, 0)
+                        )
+                    ),
+                    step=1,
+                    key=preset_key,
+                )
+                batch_preset_values[batch_name] = int(preset_value)
+            st.session_state[preset_key_root] = batch_preset_values
+
             # Distribution method
             dist_method = st.radio(
                 "Server distribution method",
@@ -3290,17 +3360,32 @@ def email_sender_uploader():
                                 f"Enter counts for each batch (total must equal {count}):"
                             )
 
-                            # Initialize batch counts in session state
+                            # Init per-server batches from the shared preset values.
                             batch_counts_key = f"batch_counts_{server}_{table_name}"
                             if batch_counts_key not in st.session_state:
-                                st.session_state[batch_counts_key] = [0] * num_batches
+                                st.session_state[batch_counts_key] = [
+                                    int(batch_preset_values.get(f"batch_{j + 1}", 0))
+                                    for j in range(num_batches)
+                                ]
 
                             batch_counts = st.session_state[batch_counts_key]
 
-                            # Ensure we have the right number of batch counts
                             if len(batch_counts) != num_batches:
-                                batch_counts = [0] * num_batches
+                                batch_counts = [
+                                    int(batch_preset_values.get(f"batch_{j + 1}", 0))
+                                    for j in range(num_batches)
+                                ]
                                 st.session_state[batch_counts_key] = batch_counts
+
+                            if st.button(
+                                f"Use batch presets for {server}",
+                                key=f"apply_preset_{server}_{table_name}",
+                            ):
+                                st.session_state[batch_counts_key] = [
+                                    int(batch_preset_values.get(f"batch_{j + 1}", 0))
+                                    for j in range(num_batches)
+                                ]
+                                st.rerun()
 
                             # Input boxes for each batch
                             cols = st.columns(min(num_batches, 3))  # Max 3 columns
@@ -3315,6 +3400,7 @@ def email_sender_uploader():
                                         key=f"batch_{j}_{server}_{table_name}",
                                     )
 
+                            st.session_state[batch_counts_key] = batch_counts
                             current_total = sum(batch_counts)
                             st.write(f"Total: {current_total} / {count}")
 

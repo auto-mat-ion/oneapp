@@ -65,7 +65,7 @@ def execute_db_action(action, retries=5, delay=5):
             if attempt == retries:
                 raise
             print(
-                f"Database write failed (attempt {attempt}/{retries}): {exc}. Retrying in {delay} seconds..."
+                f"Database action failed (attempt {attempt}/{retries}): {exc}. Retrying in {delay} seconds..."
             )
             time.sleep(delay)
             attempt += 1
@@ -1009,6 +1009,239 @@ def click_start_sharing_button(driver):
         return False
 
 
+def click_stop_sharing_button(driver, new_profile_data):
+    """
+    Clicks the stop sharing button
+    """
+    try:
+        email_address = new_profile_data.get("email_address")
+        print(f"{email_address} : Clicking stop sharing button for all members")
+        START_SHARING_BTN_ELEMENT = (
+            By.CSS_SELECTOR,
+            'button[data-bi-id="family-stop-sharing"]',
+        )
+
+        GOT_IT_BTN = (By.CSS_SELECTOR, 'button[aria-label="Got it"]')
+        STOP_SHARING_2 = (By.CSS_SELECTOR, 'button[data-bi-id="stop-sharing"]')
+        CANCEL_BTN = (By.CSS_SELECTOR, 'button[data-bi-id*="error"]')
+        try:
+            total_start_sharing_buttons = WebDriverWait(driver, wait_time).until(
+                EC.visibility_of_all_elements_located(START_SHARING_BTN_ELEMENT)
+            )
+
+        except:
+            try:
+                START_SHARING_BTN_ELEMENT = (
+                    By.CSS_SELECTOR,
+                    'button[aria-label="Start sharing Microsoft 365 Premium"]',
+                )
+
+                total_start_sharing_buttons = WebDriverWait(driver, wait_time).until(
+                    EC.visibility_of_all_elements_located(START_SHARING_BTN_ELEMENT)
+                )
+
+            except:
+                print("No members found that need start sharing")
+                return True
+        total_start_sharing_buttons = (
+            [i for i in total_start_sharing_buttons[:5]]
+            if len(total_start_sharing_buttons) > 5
+            else total_start_sharing_buttons
+        )
+        print(
+            f"Found {len(total_start_sharing_buttons)} members that need start sharing"
+        )
+        for i in range(len(total_start_sharing_buttons)):
+            try:
+                start_sharing_buttons = WebDriverWait(driver, wait_time * 2).until(
+                    EC.visibility_of_all_elements_located(START_SHARING_BTN_ELEMENT)
+                )
+                time.sleep(1)
+                element = start_sharing_buttons[0]
+
+                driver.execute_script(
+                    "arguments[0].scrollIntoView({block:'center'});", element
+                )
+
+                time.sleep(1.5)
+
+                element.click()
+                time.sleep(1)
+                try:
+                    got_it_button = WebDriverWait(driver, wait_time * 2).until(
+                        EC.element_to_be_clickable(STOP_SHARING_2)
+                    )
+                    time.sleep(2)
+                    got_it_button.click()
+                    time.sleep(3)
+                except:
+                    cancel_button = WebDriverWait(driver, wait_time * 2).until(
+                        EC.element_to_be_clickable(CANCEL_BTN)
+                    )
+                    time.sleep(2)
+                    cancel_button.click()
+                    time.sleep(2)
+                    # driver.refresh()
+                    click_share_dropdown_button(driver)
+                    time.sleep(2)
+
+                    start_sharing_buttons = WebDriverWait(driver, wait_time * 2).until(
+                        EC.visibility_of_all_elements_located(START_SHARING_BTN_ELEMENT)
+                    )
+                    time.sleep(1)
+                    element = start_sharing_buttons[0]
+
+                    driver.execute_script(
+                        "arguments[0].scrollIntoView({block:'center'});", element
+                    )
+
+                    time.sleep(1.5)
+
+                    element.click()
+                    time.sleep(1)
+
+                    got_it_button = WebDriverWait(driver, wait_time * 2).until(
+                        EC.element_to_be_clickable(GOT_IT_BTN)
+                    )
+                    time.sleep(2)
+                    got_it_button.click()
+                    time.sleep(3)
+
+            except:
+                print(
+                    f"{email_address} : Error clicking close button, refreshing instead and trying again"
+                )
+                driver.refresh()
+                time.sleep(3)
+                click_share_dropdown_button(driver)
+                pass
+
+        return True
+    except:
+        return False
+
+
+def remove_from_family_page(driver, new_profile_data):
+    """
+    Removes members from the family page
+    """
+    try:
+        email_address = new_profile_data.get("email")
+        print(f"{email_address} : Removing members from family page")
+        driver.get("https://account.microsoft.com/family/home")
+        OPTION_ELEMET = By.CSS_SELECTOR, 'button[data-bi-id="other-member-menu-button"]'
+        REMOVE_BTN = (
+            By.CSS_SELECTOR,
+            'button[aria-label="Remove from family group"]',
+        )
+        CONFIM_REMOVE = By.CSS_SELECTOR, 'button[data-bi-id="remove-member-submit"]'
+        REMOVE_DIALOG = By.CSS_SELECTOR, 'div[id*="ModalFocusTrapZone"]'
+
+        try:
+            total_start_sharing_buttons = WebDriverWait(driver, wait_time).until(
+                EC.visibility_of_all_elements_located(OPTION_ELEMET)
+            )
+
+        except:
+            try:
+                total_start_sharing_buttons = WebDriverWait(driver, wait_time).until(
+                    EC.visibility_of_all_elements_located(OPTION_ELEMET)
+                )
+
+            except:
+                print(f"{email_address} : No members found that need start sharing")
+                return True
+        total_members_buttons = (
+            [i for i in total_start_sharing_buttons[:5]]
+            if len(total_start_sharing_buttons) > 5
+            else total_start_sharing_buttons
+        )
+        print(
+            f"{email_address} : Found {len(total_members_buttons)} members that need removal"
+        )
+        for i in range(len(total_members_buttons)):
+            try:
+                all_options_buttons = WebDriverWait(driver, wait_time * 2).until(
+                    EC.visibility_of_all_elements_located(OPTION_ELEMET)
+                )
+
+                time.sleep(7)
+                element = WebDriverWait(driver, wait_time * 2).until(
+                    EC.element_to_be_clickable(OPTION_ELEMET)
+                )
+
+                driver.execute_script(
+                    "arguments[0].scrollIntoView({block:'center'});", element
+                )
+
+                time.sleep(1.5)
+
+                element.click()
+                time.sleep(1)
+                try:
+                    remove_from_family_button = WebDriverWait(driver, wait_time).until(
+                        EC.element_to_be_clickable(REMOVE_BTN)
+                    )
+                    time.sleep(2)
+                    remove_from_family_button.click()
+                    time.sleep(3)
+                except:
+                    pass
+
+                confirm_remove_button = WebDriverWait(driver, wait_time * 2).until(
+                    EC.element_to_be_clickable(CONFIM_REMOVE)
+                )
+                time.sleep(2)
+                confirm_remove_button.click()
+                time.sleep(3)
+
+                retries = 0
+                while retries < 5:
+                    try:
+                        remove_dialog = WebDriverWait(driver, 3).until(
+                            EC.visibility_of_element_located(REMOVE_DIALOG)
+                        )
+                        time.sleep(1)
+                        if remove_dialog.is_displayed():
+                            # print("Waiting for remove dialog to close")
+                            time.sleep(2)
+
+                        else:
+                            break
+                    except:
+                        break
+                    retries += 1
+
+            except:
+                print(
+                    f"{email_address} : Error clicking close button, refreshing instead and trying again"
+                )
+                driver.refresh()
+                time.sleep(3)
+                click_share_dropdown_button(driver)
+                pass
+
+        return True
+    except:
+        return False
+
+
+# def remove_from_family_page(driver):
+#     try:
+#         driver.get(
+#             "https://account.microsoft.com/family/home?fref=home.cards.card.family.persona"
+#         )
+#         OPTION_ELEMET = 'button[data-bi-id="other-member-menu-button"]'
+#         remove_btn = 'button[data-bi-id="other-lwm-remove-member-item"]'
+#         CONFIM_REMOVE = 'button[data-bi-id="remove-member-submit"]'
+#         REMOVE_DIALOG = 'div[id*="ModalFocusTrapZone"]'
+
+#         all_options
+
+#     except:
+#         pass
+
+
 def is_your_account_has_been_locked_page(driver):
     """
     Checks if the page is YOUR ACCOUNT HAS BEEN LOCKED
@@ -1830,7 +2063,7 @@ def processed_email(email_data):
                 (
                     SERVER_IP,
                     BOT_TYPE,
-                    datetime.now(),
+                    datetime.now(tz=timezone.utc),
                     email_data.get("email"),
                     email_data.get("pass"),
                 ),
@@ -1859,6 +2092,60 @@ def processed_email(email_data):
         pass
 
 
+def processed_extractor_email(email_data):
+    def db_action():
+        import mysql.connector
+
+        conn = None
+        try:
+            conn = mysql.connector.connect(
+                host=DB_HOST, user=DB_USER, password=DB_PASSWORD, database=DB_NAME
+            )
+            cursor = conn.cursor()
+
+            # Insert into processed_emails
+            insert_query = """
+            INSERT INTO processed_emails (server_ip, bot_type,date_time, email, pass)
+            VALUES (%s, %s, %s, %s, %s)
+            """
+            cursor.execute(
+                insert_query,
+                (
+                    SERVER_IP,
+                    BOT_TYPE,
+                    datetime.now(tz=timezone.utc),
+                    email_data.get("email"),
+                    email_data.get("pass"),
+                ),
+            )
+
+            # Delete from processing_family_extractor
+            delete_query = """
+            DELETE FROM processing_family_extractor
+            WHERE server_ip = %s AND bot_type = %s AND email = %s 
+            """
+            cursor.execute(
+                delete_query,
+                (SERVER_IP, BOT_TYPE, email_data.get("email")),
+            )
+
+            conn.commit()
+            cursor.close()
+
+            print(
+                f"{email_data.get('email')} : Updated database status as successfully processed."
+            )
+        finally:
+            if conn is not None:
+                conn.close()
+
+    try:
+        execute_db_action(db_action)
+    except Exception as e:
+        print(f"Error in processed_email: {e}")
+        pass
+
+
 def mark_share_as_done(email_address):
     """Mark the given email's share record as processed."""
 
@@ -1873,7 +2160,41 @@ def mark_share_as_done(email_address):
                 "UPDATE familybot_extracted_family_links_history "
                 "SET status = %s, processing_server_ip = %s, processing_date_time = %s "
                 "WHERE email = %s ",
-                ("processed", SERVER_IP, datetime.now(), email_address),
+                ("processed", SERVER_IP, datetime.now(tz=timezone.utc), email_address),
+            )
+            conn.commit()
+            cursor.close()
+            return cursor.rowcount
+        finally:
+            if conn is not None:
+                conn.close()
+
+    try:
+        updated = execute_db_action(db_action)
+        print(f"{email_address} : Updated database status as successfully processed.")
+
+        return bool(updated)
+    except Exception as e:
+        print(f"{email_address} : Error updating share status in database: {e}")
+        return False
+
+
+def mark_removal_as_done(email_address, link):
+    """Mark the given email's share record as processed."""
+    # return True
+
+    def db_action():
+        conn = None
+        try:
+            conn = mysql.connector.connect(
+                host=DB_HOST, user=DB_USER, password=DB_PASSWORD, database=DB_NAME
+            )
+            cursor = conn.cursor()
+            cursor.execute(
+                "UPDATE familybot_extracted_family_links_history "
+                "SET status = %s, processing_server_ip = %s, processing_date_time = %s "
+                "WHERE email = %s ",
+                ("processed", SERVER_IP, datetime.now(tz=timezone.utc), email_address),
             )
             conn.commit()
             cursor.close()
@@ -5451,6 +5772,78 @@ def store_extracted_link(new_profile_data, link, card_details_dict):
         print(f"Error storing extracted link for {email}. Link: {link}\nError: {E}")
 
 
+def store_re_extracted_link(new_profile_data, link):
+    try:
+        email = new_profile_data.get("email")
+        recovery_email = new_profile_data.get("recovery")
+        password = new_profile_data.get("pass")
+
+        def db_action():
+
+            conn = mysql.connector.connect(
+                host=DB_HOST,
+                user=DB_USER,
+                password=DB_PASSWORD,
+                database=DB_NAME,
+            )
+            cursor = conn.cursor()
+
+            insert_values = (
+                SERVER_IP,
+                BOT_TYPE,
+                datetime.now(tz=timezone.utc),
+                email,
+                password,
+                recovery_email,
+                link,
+                PREFERRED_SMS_COUNTRY,
+            )
+
+            insert_values_history = (
+                SERVER_IP,
+                BOT_TYPE,
+                datetime.now(tz=timezone.utc),
+                email,
+                password,
+                recovery_email,
+                link,
+                PREFERRED_SMS_COUNTRY,
+                "re_extracted",
+            )
+            # DELETE RECORDS OF THIS LINK IF EXISTS IN familybot_extracted_family_links AND LINK_STATS TABLES
+            cursor.execute(
+                "DELETE FROM familybot_extracted_family_links WHERE link = %s",
+                (link,),
+            )
+            cursor.execute(
+                "DELETE FROM familybot_extracted_family_links_history WHERE link = %s",
+                (link,),
+            )
+            cursor.execute("DELETE FROM link_stats WHERE link = %s", (link,))
+
+            cursor.execute(
+                "INSERT INTO familybot_extracted_family_links (server_ip, bot_type, date_time, email, pass, recovery, link, country) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+                insert_values,
+            )
+            cursor.execute(
+                "INSERT INTO familybot_extracted_family_links_history (server_ip, bot_type, date_time, email, pass, recovery, link, country, card_number) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                insert_values_history,
+            )
+            conn.commit()
+            if conn is not None:
+                conn.close()
+            return True
+
+        try:
+            execute_db_action(db_action)
+        except Exception as db_e:
+            print(
+                f"Error inserting extracted link into DB for {email}. Link: {link}\nDB Error: {db_e}"
+            )
+    except Exception as E:
+        print(f"Error storing extracted link for {email}. Link: {link}\nError: {E}")
+
+
 def add_billing(driver, new_profile_data, card_details_dict):
     try:
         ADDRESS_LINE1_ELEMENT = (
@@ -7437,6 +7830,288 @@ def run_familybot_share():
         if status:
             d = share_premium(new_profile_data)
             # time.sleep(30)
+        else:
+            print("No unshared family acc in database...")
+            break
+
+
+def get_share_link(driver, new_profile_data):
+
+    try:
+        driver.get("https://account.microsoft.com/services/microsoft365/details")
+        time.sleep(2)
+        email_address = new_profile_data.get("email").strip()
+        current_status = "clicking share button"
+        SHARE_ELEMENT = (
+            By.CSS_SELECTOR,
+            'button[aria-label="Share subscription"]',
+        )
+
+        COPY_BUTTON_ELEMENT = (
+            By.CSS_SELECTOR,
+            'button[aria-label="Copy link"]',
+        )
+
+        LINK_INPUT_ELEMENT = (
+            By.CSS_SELECTOR,
+            'input[aria-label="Sharing link"]',
+        )
+
+        share_btn_element = WebDriverWait(driver, wait_time).until(
+            EC.visibility_of_element_located(SHARE_ELEMENT)
+        )
+        # scroll into center view
+        driver.execute_script(
+            "arguments[0].scrollIntoView({block: 'center'});", share_btn_element
+        )
+        time.sleep(1)
+
+        share_btn_element.click()
+        print(f"{email_address} : Clicked share button")
+        time.sleep(2)
+        current_status = "clicking copy link button"
+        copy_btn_element = WebDriverWait(driver, wait_time).until(
+            EC.visibility_of_element_located(COPY_BUTTON_ELEMENT)
+        )
+        copy_btn_element.click()
+        print(f"{email_address} : Clicked copy link button")
+
+        time.sleep(5)
+        current_status = "retrieving sharing link"
+        link_input_element = WebDriverWait(driver, wait_time + 40).until(
+            EC.visibility_of_element_located(LINK_INPUT_ELEMENT)
+        )
+        link = link_input_element.get_attribute("value")
+        print(f"{email_address} : Retrieved sharing link: {link}")
+        # store_extracted_link(new_profile_data, link, card_details_dict)
+        time.sleep(4)
+
+        print(f"{email_address} : Stored extracted link successfully")
+        return True, link
+    except Exception as E:
+        print(f"{email_address} : Error copying sharing link: {E}")
+        return False, "Error copying sharing link"
+
+
+def remove_family(new_profile_data):
+    """ """
+    try:
+        print("\n--------------------------------------\n")
+        global PREFERRED_SMS_COUNTRY
+        PREFERRED_SMS_COUNTRY = new_profile_data.get("country").strip()
+
+        connect_new_random()
+
+        email_address = new_profile_data.get("email").strip()
+        password = new_profile_data.get("pass").strip()
+        recovery = new_profile_data.get("recovery").strip()
+
+        MICROSOFT_PREMIUM_URL = (
+            "https://account.microsoft.com/services/microsoft365/details"
+        )
+
+        retries = 0
+        driver_success = False
+        print(f"{email_address} : Initializing browser driver")
+        while (retries < 3) and (not driver_success):
+            try:
+                status, driverdata, error = initialize_new_profile_driver()
+                if status:
+                    driver, user_path, proxy = driverdata.values()
+
+                    time.sleep(0.5)
+                    driver.maximize_window()
+                    time.sleep(0.5)
+                    driver.get(MICROSOFT_LOGIN_URL)
+                    time.sleep(1)
+                    driver_success = True
+            except:
+                driver.quit()
+                retries += 1
+
+        if not driver_success:
+            print(f"{email_address} : Error initializing new browser driver")
+            new_profile_logger(
+                email_address,
+                "FAIL",
+                "Error initializing new browser driver. Network or proxy error",
+            )
+            return False, "Error initializing new browser driver instance"
+        if not enter_email(driver=driver, email_address=email_address):
+            print(f"{email_address} : Error entering email")
+            new_profile_logger(email_address, "FAIL", "Error loading login page")
+            return False, "Error loading login page"
+
+        time.sleep(1)
+        if not click_next_button(driver=driver):
+            print(f"{email_address} : Error clicking next button after entering email")
+            new_profile_logger(
+                email_address, "FAIL", "Error clicking next button after entering email"
+            )
+            return False, "Error clicking next button after entering email"
+        time.sleep(1)
+
+        if not enter_recovery_email_2(driver=driver, recovery_email=recovery):
+            print(f"{email_address} : Error entering recovery email")
+            new_profile_logger(
+                email_address,
+                "FAIL",
+                "Error entering recovery email",
+            )
+            return False, "Error entering recovery email"
+        time.sleep(0.5)
+        bring_to_front(driver)
+        time.sleep(1)
+
+        sss = click_password_next_button(driver)
+        if not sss:
+            os.makedirs("screenshots", exist_ok=True)
+            driver.save_screenshot(f"screenshots/{email_address}_error.png")
+            print(
+                f"{email_address} : Error clicking next after entering recovery email"
+            )
+            new_profile_logger(
+                email_address,
+                "FAIL",
+                "Error clicking next after entering recovery email",
+            )
+            return False, "Error clicking next after entering recovery email"
+
+        status, code = wait_for_code_by_recovery_mail(recovery)
+        time.sleep(3)
+        if not status:
+            print(f"{email_address} : Error getting code from tempmail")
+            new_profile_logger(
+                email_address,
+                "FAIL",
+                "Error getting code from tempmail. Timed out without receiving code",
+            )
+            return False, "Error getting code from tempmail. Timeout"
+        else:
+            print(f"{email_address} : Code received from tempmail: {code}")
+
+        if not enter_code_and_click_next_after_pass_change(driver, code):
+            print(f"{email_address} : Error entering email verification code")
+            new_profile_logger(
+                email_address,
+                "FAIL",
+                "Error entering email verification code",
+            )
+            return False, "Error entering email verification code"
+
+        print(f"{email_address} : Finalizing signin")
+        close_other_tabs(driver)
+        click_stay_signed_in_button(driver)
+
+        driver.get(MICROSOFT_PREMIUM_URL)
+        time.sleep(1)
+        # return driver
+        if click_share_dropdown_button(driver):
+            print(f"{email_address} : Clicked share dropdown button")
+
+        if not remove_from_family_page(driver, new_profile_data):
+            return False, "Error clicking remove from family button", driver
+
+        print(f"{email_address} : Clicked remove from family button for all members")
+
+        status, link = get_share_link(driver, new_profile_data)
+        if status:
+            print(f"{email_address} : Share link retrieved successfully: {link}")
+        else:
+            print(f"{email_address} : Error retrieving share link: {link}")
+            return False, "Error retrieving share link", driver
+
+        if not store_re_extracted_link(new_profile_data, link):
+            print(f"{email_address} : Error updating removal status in database")
+            return False, "Error updating removal status in database", driver
+        else:
+            print(f"{email_address} : Updated removal status in database successfully")
+
+        return True
+    except Exception as E:
+        print(f"{email_address} : Exception error occurred: {E}")
+        return False, f"Error occurred: {E}", driver
+    finally:
+        try:
+            driver.quit()
+            processed_extractor_email(new_profile_data)
+            print("=" * 50)
+            pass
+        except:
+            pass
+
+
+def get_new_family_extractor_data():
+    def extract_email_from_db():
+        conn = mysql.connector.connect(
+            host=DB_HOST, user=DB_USER, password=DB_PASSWORD, database=DB_NAME
+        )
+        cursor = conn.cursor()
+
+        row = False
+        is_existing = False
+
+        cursor.execute(
+            "SELECT email, pass,recovery, country FROM processing_family_extractor WHERE server_ip = %s AND bot_type = %s LIMIT 1",
+            (SERVER_IP, BOT_TYPE),
+        )
+        row = cursor.fetchone()
+        if row:
+            is_existing = True
+
+        if not row:
+            cursor.execute(
+                "SELECT email, pass,recovery, country FROM family_extractor_accounts LIMIT 1"
+            )
+            row = cursor.fetchone()
+        if not row:
+            conn.close()
+            return False, {}
+        email, password, recovery, country = row
+        if not is_existing:
+            cursor.execute(
+                "INSERT INTO processing_family_extractor (email, pass, recovery, country, server_ip, bot_type, date_time) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                (
+                    email,
+                    password,
+                    recovery,
+                    country,
+                    SERVER_IP,
+                    BOT_TYPE,
+                    datetime.now(tz=timezone.utc),
+                ),
+            )
+            cursor.execute(
+                "DELETE FROM family_extractor_accounts WHERE email = %s AND pass = %s",
+                (email, password),
+            )
+        conn.commit()
+        conn.close()
+        return True, {
+            "email": email,
+            "pass": password,
+            "recovery": recovery,
+            "country": country,
+        }
+
+    return execute_db_action(
+        action=extract_email_from_db,
+        retries=5,
+        delay=5,
+    )
+
+
+def run_family_link_extractor():
+    """
+    Creates threads and signs in simultaneously
+    """
+    global BOT_TYPE
+    BOT_TYPE = "family_link_extractor"
+    print(f"Starting Sharebot for country: {PREFERRED_SMS_COUNTRY} and IP: {SERVER_IP}")
+    while True:
+        status, new_profile_data = get_new_family_extractor_data()
+        if status:
+            d = remove_family(new_profile_data)
         else:
             print("No unshared family acc in database...")
             break
