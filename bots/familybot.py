@@ -1182,7 +1182,7 @@ def remove_from_family_page(driver, new_profile_data):
                 time.sleep(1)
 
                 element.click()
-                time.sleep(1)
+                time.sleep(2)
                 try:
                     remove_from_family_button = WebDriverWait(driver, wait_time).until(
                         EC.element_to_be_clickable(REMOVE_BTN)
@@ -1222,8 +1222,8 @@ def remove_from_family_page(driver, new_profile_data):
                     f"{email_address} : Error clicking close button, refreshing instead and trying again"
                 )
                 driver.refresh()
-                time.sleep(3)
-                click_share_dropdown_button(driver)
+                time.sleep(10)
+                # click_share_dropdown_button(driver)
                 pass
 
         return True
@@ -5767,80 +5767,74 @@ def store_re_extracted_link(new_profile_data, link):
         recovery_email = new_profile_data.get("recovery")
         password = new_profile_data.get("pass")
 
-        def db_action():
+        conn = mysql.connector.connect(
+            host=DB_HOST,
+            user=DB_USER,
+            password=DB_PASSWORD,
+            database=DB_NAME,
+        )
+        cursor = conn.cursor()
 
-            conn = mysql.connector.connect(
-                host=DB_HOST,
-                user=DB_USER,
-                password=DB_PASSWORD,
-                database=DB_NAME,
-            )
-            cursor = conn.cursor()
+        insert_values = (
+            SERVER_IP,
+            BOT_TYPE,
+            datetime.now(tz=timezone.utc),
+            email,
+            password,
+            recovery_email,
+            link,
+            PREFERRED_SMS_COUNTRY,
+        )
 
-            insert_values = (
-                SERVER_IP,
-                BOT_TYPE,
-                datetime.now(tz=timezone.utc),
-                email,
-                password,
-                recovery_email,
-                link,
-                PREFERRED_SMS_COUNTRY,
-            )
+        insert_values_history = (
+            SERVER_IP,
+            BOT_TYPE,
+            datetime.now(tz=timezone.utc),
+            email,
+            password,
+            recovery_email,
+            link,
+            PREFERRED_SMS_COUNTRY,
+            "re_extracted",
+        )
+        # DELETE RECORDS OF THIS LINK IF EXISTS IN familybot_extracted_family_links AND LINK_STATS TABLES
+        cursor.execute(
+            "DELETE FROM familybot_extracted_family_links WHERE link = %s",
+            (link,),
+        )
 
-            insert_values_history = (
-                SERVER_IP,
-                BOT_TYPE,
-                datetime.now(tz=timezone.utc),
-                email,
-                password,
-                recovery_email,
-                link,
-                PREFERRED_SMS_COUNTRY,
-                "re_extracted",
-            )
-            # DELETE RECORDS OF THIS LINK IF EXISTS IN familybot_extracted_family_links AND LINK_STATS TABLES
-            cursor.execute(
-                "DELETE FROM familybot_extracted_family_links WHERE link = %s",
-                (link,),
-            )
+        print(f"Deleted records for link: {link} from familybot_extracted_family_links")
+        cursor.execute(
+            "DELETE FROM familybot_extracted_family_links_history WHERE link = %s",
+            (link,),
+        )
 
-            print(
-                f"Deleted records for link: {link} from familybot_extracted_family_links"
-            )
-            cursor.execute(
-                "DELETE FROM familybot_extracted_family_links_history WHERE link = %s",
-                (link,),
-            )
+        print(
+            f"Deleted records for link: {link} from familybot_extracted_family_links_history"
+        )
+        cursor.execute("DELETE FROM link_stats WHERE link = %s", (link,))
+        print(f"Deleted records for link: {link} from link_stats")
+        cursor.execute(
+            "INSERT INTO familybot_extracted_family_links (server_ip, bot_type, date_time, email, pass, recovery, link, country) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+            insert_values,
+        )
+        print(f"Inserted record for link: {link} into familybot_extracted_family_links")
+        cursor.execute(
+            "INSERT INTO familybot_extracted_family_links_history (server_ip, bot_type, date_time, email, pass, recovery, link, country, card_number) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
+            insert_values_history,
+        )
+        print(
+            f"Inserted record for link: {link} into familybot_extracted_family_links_history"
+        )
+        conn.commit()
+        print(f"Committed changes for link: {link} into DB")
+        if conn is not None:
+            print(f"Closing DB connection for link: {link}")
+            conn.close()
 
-            print(
-                f"Deleted records for link: {link} from familybot_extracted_family_links_history"
-            )
-            cursor.execute("DELETE FROM link_stats WHERE link = %s", (link,))
-            print(f"Deleted records for link: {link} from link_stats")
-            cursor.execute(
-                "INSERT INTO familybot_extracted_family_links (server_ip, bot_type, date_time, email, pass, recovery, link, country) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
-                insert_values,
-            )
-            print(
-                f"Inserted record for link: {link} into familybot_extracted_family_links"
-            )
-            cursor.execute(
-                "INSERT INTO familybot_extracted_family_links_history (server_ip, bot_type, date_time, email, pass, recovery, link, country, card_number) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
-                insert_values_history,
-            )
-            print(
-                f"Inserted record for link: {link} into familybot_extracted_family_links_history"
-            )
-            conn.commit()
-            print(f"Committed changes for link: {link} into DB")
-            if conn is not None:
-                print(f"Closing DB connection for link: {link}")
-                conn.close()
+        print(f"DB connection closed for link: {link}")
 
-            print(f"DB connection closed for link: {link}")
-
-            return True
+        return True
 
     try:
         email = "unidentified"
