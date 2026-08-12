@@ -2019,7 +2019,8 @@ def main_batches(
 
     BATCH_NUMBER = str(batch_number)
     print(f"Selected batch: {BATCH_NUMBER}")
-    SUBSEQUENT_BATCHES = random.randint(17, 20)
+    # SUBSEQUENT_BATCHES = random.randint(17, 20)
+    SUBSEQUENT_BATCHES = 2
 
     time.sleep(5)
 
