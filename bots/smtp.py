@@ -1180,7 +1180,7 @@ class RecipientManager:
                         batch.append(self.queue.popleft())
                     else:
                         break
-                batch += SAMPLE_RECIPIENT_EMAIL[:1]  # Add test recipient to each batch
+                # batch += SAMPLE_RECIPIENT_EMAIL[:1]  # Add test recipient to each batch
                 return batch
 
     def return_batch(self, batch: List[str]):
@@ -2329,6 +2329,3 @@ def run_smtp_bot(app_choice: int = 1):
         )
         log("SMTP batch finished. Returning to signal wait loop.")
         time.sleep(5)
-
-
-rr = RecipientManager()
