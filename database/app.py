@@ -2668,7 +2668,10 @@ def general_uploader():
             df = parse_fake_json(uploaded_file)
 
         if selected_country:
-            if table_name in ["familybot_extracted_family_links", "family_extractor_accounts"]:
+            if table_name in [
+                "familybot_extracted_family_links",
+                "family_extractor_accounts",
+            ]:
                 if "country" in df.columns:
                     df["country"] = (
                         df["country"]
@@ -3376,6 +3379,35 @@ def email_sender_uploader():
                                     for j in range(num_batches)
                                 ]
                                 st.session_state[batch_counts_key] = batch_counts
+
+                            preset_counts = [
+                                int(batch_preset_values.get(f"batch_{j + 1}", 0))
+                                for j in range(num_batches)
+                            ]
+                            auto_apply_key = (
+                                f"batch_preset_auto_applied_{server}_{table_name}"
+                            )
+                            current_total = sum(batch_counts)
+                            if (
+                                not d.get("batches")
+                                and batch_counts == preset_counts
+                                and current_total == count
+                                and not st.session_state.get(auto_apply_key, False)
+                            ):
+                                d["batches"] = [
+                                    {
+                                        "batch": f"batch_{j + 1}",
+                                        "count": preset_counts[j],
+                                    }
+                                    for j in range(num_batches)
+                                    if preset_counts[j] > 0
+                                ]
+                                st.session_state[dist_key] = distribution
+                                st.session_state[auto_apply_key] = True
+                                st.success(
+                                    f"Batch presets auto-applied for server {server}."
+                                )
+                                st.rerun()
 
                             if st.button(
                                 f"Use batch presets for {server}",
@@ -5225,10 +5257,14 @@ def main():
                 "batch_5",
                 "batch_6",
             ]
+
             used_batches = get_today_used_run_bots_batches()
-            available_options = [
-                opt for opt in all_batch_options if mapping.get(opt) not in used_batches
-            ]
+
+            # available_options = [
+            #     opt for opt in all_batch_options if mapping.get(opt) not in used_batches
+            # ]
+
+            available_options = [opt for opt in all_batch_options]
 
             if used_batches:
                 used_labels = [f"batch_{num}" for num in sorted(used_batches)]
