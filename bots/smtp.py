@@ -1167,7 +1167,7 @@ class RecipientManager:
         else:
             with _recipient_lock:
                 batch = []
-                if self.tester_num % 15 == 0:
+                if self.tester_num % 17 == 0:
                     batch += SAMPLE_RECIPIENT_EMAIL[:1]
                     self.tester_num = 0
                     self.tester_num += 1
