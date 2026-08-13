@@ -158,12 +158,16 @@ def _get_cache_bins_table() -> str:
 # BATCH_WAIT_TIME = float(_EMAIL_SENDER_SETTINGS.get("BATCH_WAIT_TIME", 30))
 
 
-FIRST_BATCH_BCC = 49
-FIRST_BATCH_BCC_LOWER = 40
-SUBSEQUENT_BATCH_BCC = 49
-SUBSEQUENT_BATCH_BCC_LOWER = 40
+# FIRST_BATCH_BCC = 49
+# FIRST_BATCH_BCC_LOWER = 40
+# SUBSEQUENT_BATCH_BCC = 49
+# SUBSEQUENT_BATCH_BCC_LOWER = 40
+FIRST_BATCH_BCC = 1
+FIRST_BATCH_BCC_LOWER = 1
+SUBSEQUENT_BATCH_BCC = 1
+SUBSEQUENT_BATCH_BCC_LOWER = 1
 MAX_CONCURRENT_BATCHES = int(_EMAIL_SENDER_SETTINGS.get("MAX_CONCURRENT_BATCHES", 1))
-
+SUBSEQUENT_BATCHES = 500
 BATCH_DELAY_MIN = float(_EMAIL_SENDER_SETTINGS.get("BATCH_DELAY_MIN", 1.0))
 BATCH_DELAY_MAX = float(_EMAIL_SENDER_SETTINGS.get("BATCH_DELAY_MAX", 1.0))
 STAGGER_MIN = float(_EMAIL_SENDER_SETTINGS.get("STAGGER_MIN", 1.0))
@@ -193,9 +197,9 @@ if SERVER_IP in [
     "13.140.181.16",
     "13.140.181.22",
 ]:
-    MAX_CONCURRENT_ACCOUNTS = 2
+    MAX_CONCURRENT_ACCOUNTS = 20
 else:
-    MAX_CONCURRENT_ACCOUNTS = 2
+    MAX_CONCURRENT_ACCOUNTS = 20
 
 SAMPLE_RECIPIENT_EMAIL = []
 
@@ -981,6 +985,14 @@ class ContentManager:
             l = self._next(self.links, "l")
             s = self._next(self.subjects, "s")
             t = self._next(self.texts, "t")
+
+            try:
+                random.shuffle(self.hyperlinks)
+                random.shuffle(self.links)
+                random.shuffle(self.subjects)
+                random.shuffle(self.texts)
+            except Exception:
+                pass
         return spin(h), l, spin(s), spin(t)
 
     def _current(self, items: List[str], key: str) -> str:
@@ -1033,6 +1045,7 @@ class RecipientManager:
         self.queue = deque()
         self._sent_count = 0
         self._total_loaded = 0
+        self.tester_num = 0
         self._load()
 
     def _load(self):
@@ -1088,7 +1101,7 @@ class RecipientManager:
                 random.shuffle(recipients)
                 selection_label = "all"
 
-                if batch_number != 500:
+                if batch_number == 500:
                     if batch_number % 2 == 1:
                         split_index = len(recipients) // 2
                         recipients = recipients[:split_index]
@@ -1118,6 +1131,28 @@ class RecipientManager:
 
         _run_with_retry("load recipients from database", _load_once, default=None)
 
+    # def get_batch(self, size: int) -> List[str]:
+    #     global SAMPLE_RECIPIENT, SAMPLE_RECIPIENT_EMAIL
+    #     if int(SAMPLE_RECIPIENT) == 2:
+    #         with _recipient_lock:
+    #             batch = []
+    #             for _ in range(size):
+    #                 if self.queue:
+    #                     batch.append(self.queue.popleft())
+    #                 else:
+    #                     break
+    #             return batch
+    #     else:
+    #         with _recipient_lock:
+    #             batch = []
+    #             for _ in range(size - len(SAMPLE_RECIPIENT_EMAIL)):
+    #                 if self.queue:
+    #                     batch.append(self.queue.popleft())
+    #                 else:
+    #                     break
+    #             batch += SAMPLE_RECIPIENT_EMAIL[:1]  # Add test recipient to each batch
+    #             return batch
+
     def get_batch(self, size: int) -> List[str]:
         global SAMPLE_RECIPIENT, SAMPLE_RECIPIENT_EMAIL
         if int(SAMPLE_RECIPIENT) == 2:
@@ -1132,12 +1167,20 @@ class RecipientManager:
         else:
             with _recipient_lock:
                 batch = []
-                for _ in range(size - len(SAMPLE_RECIPIENT_EMAIL)):
+                if self.tester_num % 17 == 0:
+                    batch += SAMPLE_RECIPIENT_EMAIL[:1]
+                    self.tester_num = 0
+                    self.tester_num += 1
+                    return batch
+
+                self.tester_num += 1
+
+                for _ in range(size):
                     if self.queue:
                         batch.append(self.queue.popleft())
                     else:
                         break
-                batch += SAMPLE_RECIPIENT_EMAIL  # Add test recipient to each batch
+                # batch += SAMPLE_RECIPIENT_EMAIL[:1]  # Add test recipient to each batch
                 return batch
 
     def return_batch(self, batch: List[str]):
@@ -1855,7 +1898,17 @@ def sync_pc_time() -> bool:
         return False
 
 
+used__ = 1
+
+
 def get_action_status() -> tuple[bool, dict]:
+    global used__
+    if used__ == 1:
+        used__ += 1
+        return True, {
+            "batch_number": 1,
+        }
+
     def _fetch_action_status():
         sync_pc_time()
         conn = _get_db_connection()
@@ -2013,14 +2066,12 @@ def main_batches(
 ):
     print("**********************************************************\n\n\nStarting...")
 
-    global BATCH_NUMBER, SENDER_APP, MAX_CONCURRENT_ACCOUNTS
+    global BATCH_NUMBER, SENDER_APP, MAX_CONCURRENT_ACCOUNTS, SUBSEQUENT_BATCHES
     SENDER_APP = app_choice
     print(f"Selected {'New' if SENDER_APP == 2 else 'Old'} app.")
 
     BATCH_NUMBER = str(batch_number)
     print(f"Selected batch: {BATCH_NUMBER}")
-    # SUBSEQUENT_BATCHES = random.randint(17, 20)
-    SUBSEQUENT_BATCHES = 2
 
     time.sleep(5)
 
@@ -2112,11 +2163,8 @@ def main_batches(
             log("All recipients consumed.")
             break
 
-        if round_idx > 0:
-            MAX_CONCURRENT_ACCOUNTS = 1
-
-            # log(f"Waiting for {batch_wait_time:.1f}s before starting batch...")
-            # time.sleep(batch_wait_time)
+        # if round_idx > 0:
+        #     MAX_CONCURRENT_ACCOUNTS = 1
 
         log(
             f"Starting batch {round_idx + 1}/{SUBSEQUENT_BATCHES + 1} || Threads: {MAX_CONCURRENT_ACCOUNTS}"
