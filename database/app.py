@@ -251,12 +251,12 @@ def get_smtp_scheduler_map():
     try:
         cursor = conn.cursor(dictionary=True)
         cursor.execute(
-            "SELECT batch_name, schedule_time FROM smtp_scheduler ORDER BY batch_name"
+            "SELECT schedule_batch, schedule_time FROM smtp_scheduler ORDER BY schedule_batch"
         )
         rows = cursor.fetchall()
         result = {}
         for row in rows:
-            batch_name = row.get("batch_name")
+            batch_name = row.get("schedule_batch")
             schedule_time = row.get("schedule_time")
             if batch_name is None:
                 continue
@@ -293,7 +293,7 @@ def ensure_smtp_scheduler_unique_index():
         )
         if cursor.fetchone() is None:
             cursor.execute(
-                "CREATE UNIQUE INDEX unique_smtp_batch_name ON smtp_scheduler(batch_name)"
+                "CREATE UNIQUE INDEX unique_smtp_batch_name ON smtp_scheduler(schedule_batch)"
             )
             conn.commit()
         return True
@@ -318,11 +318,11 @@ def get_smtp_scheduler_display_rows():
     try:
         cursor = conn.cursor(dictionary=True)
         cursor.execute(
-            "SELECT batch_name, schedule_time FROM smtp_scheduler ORDER BY batch_name"
+            "SELECT schedule_batch, schedule_time FROM smtp_scheduler ORDER BY schedule_batch"
         )
         rows = []
         for row in cursor.fetchall():
-            batch_name = row.get("batch_name")
+            batch_name = row.get("schedule_batch")
             schedule_time = row.get("schedule_time")
             if batch_name is None or schedule_time is None:
                 continue
@@ -377,7 +377,7 @@ def save_smtp_scheduler_schedule(batch_values):
             utc_dt = local_dt.astimezone(UTC).replace(tzinfo=None)
             cursor.execute(
                 """
-                INSERT INTO smtp_scheduler (batch_name, schedule_time)
+                INSERT INTO smtp_scheduler (schedule_batch, schedule_time)
                 VALUES (%s, %s)
                 ON DUPLICATE KEY UPDATE schedule_time = VALUES(schedule_time)
                 """,

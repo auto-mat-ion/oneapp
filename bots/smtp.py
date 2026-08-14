@@ -1088,7 +1088,7 @@ class RecipientManager:
                 random.shuffle(recipients)
                 selection_label = "all"
 
-                if batch_number != 500:
+                if batch_number == 500:
                     if batch_number % 2 == 1:
                         split_index = len(recipients) // 2
                         recipients = recipients[:split_index]
