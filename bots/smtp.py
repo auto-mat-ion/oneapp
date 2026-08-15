@@ -1921,6 +1921,69 @@ def get_action_status() -> tuple[bool, dict]:
     )
 
 
+def get_due_smtp_schedule() -> dict:
+    """Return the batch number for a scheduler record within 1 minute of now in UTC."""
+    conn = _get_db_connection()
+    if conn is None:
+        return {"status": False, "batch": None}
+
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT schedule_batch, schedule_time FROM oneapp.smtp_scheduler"
+        )
+        rows = cursor.fetchall()
+        now_utc = datetime.now(UTC)
+        window = timedelta(minutes=1)
+
+        for schedule_batch, schedule_time in rows:
+            try:
+                batch_name = str(schedule_batch or "").strip()
+                # if not batch_name.lower().startswith("batch_"):
+                #     continue
+
+                if isinstance(schedule_time, str):
+                    parsed_time = datetime.fromisoformat(
+                        schedule_time.replace("Z", "+00:00")
+                    )
+                else:
+                    parsed_time = schedule_time
+
+                if parsed_time is None:
+                    continue
+
+                if parsed_time.tzinfo is None:
+                    parsed_time = parsed_time.replace(tzinfo=UTC)
+                else:
+                    parsed_time = parsed_time.astimezone(UTC)
+
+                if (
+                    abs((parsed_time - now_utc).total_seconds())
+                    <= window.total_seconds()
+                ):
+                    try:
+                        batch_value = int(batch_name.replace("batch_", "", 1))
+                    except ValueError:
+                        continue
+                    log(
+                        f"⏰⏰ : SMTP schedule for now found: batch {batch_value} at {parsed_time.isoformat()}\n\n"
+                    )
+                    return {"status": True, "batch": batch_value}
+            except Exception:
+                continue
+
+        return {"status": False, "batch": None}
+    finally:
+        try:
+            cursor.close()
+        except Exception:
+            pass
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
 def is_server_authorized() -> bool:
     if not SERVER_IP:
         return False
@@ -2054,7 +2117,8 @@ def main_batches(
     content = ContentManager()
     log("Loading recipients. Please wait...")
     recipients = RecipientManager()
-
+    # time.sleep(100)
+    # return True
     load_cache()
 
     if not accounts.accounts:
@@ -2270,6 +2334,15 @@ def run_smtp_bot(app_choice: int = 1):
                         batch_number = 1
                 signal_time = datetime.now(UTC)
                 break
+
+            scheduler_signal = get_due_smtp_schedule()
+            if scheduler_signal.get("status"):
+                # batch_number = int(scheduler_signal.get("batch", 1))
+                batch_number = 1
+
+                signal_time = datetime.now(UTC)
+                break
+
             time.sleep(60 * 1)
             # update()
 
@@ -2281,3 +2354,6 @@ def run_smtp_bot(app_choice: int = 1):
         )
         log("SMTP batch finished. Returning to signal wait loop.")
         time.sleep(5)
+
+
+# get_due_smtp_schedule()
