@@ -206,8 +206,8 @@ def get_current_server_ip():
     return settings.get("SERVER_IP", "")
 
 
-BATCHES = ["batch_1", "batch_2", "batch_3", "batch_4"]
-SCHEDULER_INTERVAL = timedelta(hours=3)
+BATCHES = ["batch_1", "batch_2", "batch_3", "batch_4", "batch_5", "batch_6", "batch_7"]
+SCHEDULER_INTERVAL = timedelta(hours=3.5)
 
 
 def get_poland_timezone():
@@ -640,6 +640,205 @@ def get_server_uptime_status_df():
             pass
 
 
+def get_family_hotmail_uptime_status_df():
+    conn = get_db_connection()
+    if conn is None:
+        return pd.DataFrame(
+            columns=[
+                "server_number",
+                "server_ip",
+                "status",
+                "current_action",
+                "last_update_time_utc",
+            ]
+        )
+
+    try:
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(
+            """
+            SELECT
+                sd.server_id,
+                sd.server_ip,
+                ss.last_uptime AS last_update_time_utc,
+                ss.current_action
+            FROM familybot_servers_details sd
+            LEFT JOIN server_status_family_and_hotmail ss
+                ON ss.server_ip = sd.server_ip
+            ORDER BY sd.server_id ASC
+            """
+        )
+        rows = cursor.fetchall()
+        cursor.close()
+
+        if not rows:
+            return pd.DataFrame(
+                columns=[
+                    "server_number",
+                    "server_ip",
+                    "status",
+                    "current_action",
+                    "last_update_time_utc",
+                ]
+            )
+
+        df = pd.DataFrame(rows)
+        df["server_ip"] = df["server_ip"].fillna("")
+        df["current_action"] = df["current_action"].fillna("—")
+        df["last_update_time_utc"] = pd.to_datetime(
+            df["last_update_time_utc"], errors="coerce", utc=True
+        )
+        df["last_update_seconds"] = (
+            datetime.now(UTC) - df["last_update_time_utc"]
+        ).dt.total_seconds()
+
+        def get_status(seconds):
+            if pd.isna(seconds):
+                return "red"
+            if seconds < (60 * 5):
+                return "green"
+            if seconds <= (60 * 12):
+                return "yellow"
+            return "red"
+
+        df["status"] = df["last_update_seconds"].apply(get_status)
+        df["last_update_time_utc"] = df["last_update_time_utc"].dt.strftime(
+            "%Y-%m-%d %H:%M:%S"
+        )
+        df = df.sort_values(by=["server_id"], kind="mergesort").reset_index(drop=True)
+        df.insert(0, "server_number", range(1, len(df) + 1))
+        return df[
+            [
+                "server_number",
+                "server_ip",
+                "status",
+                "current_action",
+                "last_update_time_utc",
+            ]
+        ]
+    except Exception as exc:
+        st.error(f"Unable to load family/hotmail server status: {exc}")
+        return pd.DataFrame(
+            columns=[
+                "server_number",
+                "server_ip",
+                "status",
+                "current_action",
+                "last_update_time_utc",
+            ]
+        )
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+def insert_family_hotmail_action(server_ip, action, country=None):
+    """Insert or update an action for a family/hotmail server."""
+    conn = get_db_connection()
+    if conn is None:
+        return False, "Unable to connect to database"
+
+    try:
+        cursor = conn.cursor()
+        now_utc = datetime.now(UTC)
+
+        cursor.execute(
+            """
+            INSERT INTO familybot_actions_tracker 
+            (server_ip, date_time, action)
+            VALUES (%s, %s, %s)
+            """,
+            (server_ip, now_utc, f"{action}:{country}" if country else action),
+        )
+        conn.commit()
+        return True, "Action recorded"
+    except Exception as exc:
+        return False, str(exc)
+    finally:
+        try:
+            cursor.close()
+        except Exception:
+            pass
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+def bulk_insert_family_hotmail_actions(actions_list):
+    """Bulk insert selected server actions as a single JSON payload.
+
+    actions_list: List of dicts with keys: server_ip, action, country (optional)
+    """
+    if not actions_list:
+        return False, "No actions to insert"
+
+    normalized_actions = []
+    for action_data in actions_list:
+        server_ip = action_data.get("server_ip")
+        action = action_data.get("action")
+        country = action_data.get("country")
+
+        if not server_ip or not action:
+            continue
+
+        normalized_actions.append(
+            {
+                "server_ip": server_ip,
+                "action": action,
+                "country": country,
+            }
+        )
+
+    if not normalized_actions:
+        return False, "No valid actions to insert"
+
+    conn = get_db_connection()
+    if conn is None:
+        return False, "Unable to connect to database"
+
+    try:
+        cursor = conn.cursor()
+        now_utc = datetime.now(UTC)
+        payload = json.dumps(normalized_actions, ensure_ascii=False)
+        server_ip_value = (
+            ", ".join(
+                item["server_ip"]
+                for item in normalized_actions
+                if item.get("server_ip")
+            )
+            or "multiple"
+        )
+
+        cursor.execute(
+            """
+            INSERT INTO familybot_actions_tracker 
+            (server_ip, date_time, action)
+            VALUES (%s, %s, %s)
+            """,
+            (server_ip_value, now_utc, payload),
+        )
+
+        conn.commit()
+        return (
+            True,
+            f"Inserted {len(normalized_actions)} server action(s) in one payload",
+        )
+    except Exception as exc:
+        return False, str(exc)
+    finally:
+        try:
+            cursor.close()
+        except Exception:
+            pass
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
 def insert_manual_sender_action(batch_number=None):
     """Insert an action row into manualbot_actions_tracker.
 
@@ -671,6 +870,7 @@ def insert_manual_sender_action(batch_number=None):
 
         conn.commit()
         return True, "Signal sent.."
+
     except Exception as exc:
         return False, f"Unable to insert action: {exc}"
     finally:
@@ -5001,21 +5201,40 @@ def main():
         st.session_state.selected_page = "Bot Settings"
 
     st.sidebar.markdown("### Pages")
-    if st.sidebar.button("Bot Settings", width="stretch"):
+    if st.sidebar.button(
+        "Bot Settings", width="stretch", key="sidebar_page_bot_settings"
+    ):
         st.session_state.selected_page = "Bot Settings"
-    if st.sidebar.button("General Upload", width="stretch"):
+    if st.sidebar.button(
+        "General Upload", width="stretch", key="sidebar_page_general_upload"
+    ):
         st.session_state.selected_page = "General Upload"
-    if st.sidebar.button("Email Sender Upload", width="stretch"):
+    if st.sidebar.button(
+        "Email Sender Upload",
+        width="stretch",
+        key="sidebar_page_email_sender_upload",
+    ):
         st.session_state.selected_page = "Email Sender Upload"
-    if st.sidebar.button("Stats", width="stretch"):
+    if st.sidebar.button("Stats", width="stretch", key="sidebar_page_stats"):
         st.session_state.selected_page = "Stats"
-    if st.sidebar.button("Database Management", width="stretch"):
+    if st.sidebar.button(
+        "Database Management",
+        width="stretch",
+        key="sidebar_page_database_management",
+    ):
         st.session_state.selected_page = "Database Management"
 
     st.sidebar.markdown("---")
     st.sidebar.subheader("Manual Sender Bot")
-    if st.sidebar.button("SMTP", width="stretch"):
+    if st.sidebar.button("SMTP", width="stretch", key="sidebar_page_smtp"):
         st.session_state.selected_page = "SMTP"
+
+    if st.sidebar.button(
+        "Family and Hotmailbots",
+        width="stretch",
+        key="sidebar_page_family_and_hotmailbots",
+    ):
+        st.session_state.selected_page = "Family and Hotmailbots"
 
     if "manualbot_editor_open" not in st.session_state:
         st.session_state.manualbot_editor_open = False
@@ -5467,6 +5686,275 @@ def main():
                     }
                 )
                 st.dataframe(display_df, use_container_width=True, hide_index=True)
+
+        elif st.session_state.selected_page == "Family and Hotmailbots":
+            st.title("Family and Hotmailbots")
+            st.markdown("---")
+
+            col_refresh, _ = st.columns([1, 4])
+            with col_refresh:
+                if st.button("Refresh", key="refresh_family_hotmail_uptime_status"):
+                    st.session_state["family_hotmail_uptime_status_refresh"] = True
+                    st.rerun()
+
+            if st.session_state.get("family_hotmail_uptime_status_refresh"):
+                st.session_state["family_hotmail_uptime_status_refresh"] = False
+
+            uptime_df = get_family_hotmail_uptime_status_df()
+            if uptime_df.empty:
+                st.info("No family/hotmail server uptime data available yet.")
+            else:
+                st.markdown("### Server Status & Bulk Actions")
+
+                # Initialize session state for preset
+                if "fhm_preset_ip" not in st.session_state:
+                    st.session_state.fhm_preset_ip = ""
+                if "fhm_preset_action" not in st.session_state:
+                    st.session_state.fhm_preset_action = "—"
+                if "fhm_preset_country" not in st.session_state:
+                    st.session_state.fhm_preset_country = "—"
+                if "fhm_last_action_success" not in st.session_state:
+                    st.session_state.fhm_last_action_success = False
+                if "fhm_last_action_message" not in st.session_state:
+                    st.session_state.fhm_last_action_message = ""
+                if "fhm_last_action_count" not in st.session_state:
+                    st.session_state.fhm_last_action_count = 0
+
+                # Header row with the checkbox column on the far left
+                hcol1, hcol2, hcol3, hcol4, hcol5, hcol6, hcol7, hcol8 = st.columns(
+                    [0.7, 0.8, 1.8, 1.2, 1.8, 1.8, 1.2, 1.8]
+                )
+                with hcol1:
+                    st.markdown("**P**")
+                with hcol2:
+                    st.markdown("**#**")
+                with hcol3:
+                    st.markdown("**IP**")
+                with hcol4:
+                    st.markdown("**Status**")
+                with hcol5:
+                    st.markdown("**Current**")
+                with hcol6:
+                    st.markdown("**Action**")
+                with hcol7:
+                    st.markdown("**Country**")
+                with hcol8:
+                    st.markdown("**Updated**")
+
+                st.divider()
+
+                # PRESET CONFIGURATION ROW
+                st.markdown("**PRESET Configuration**")
+                pcol1, pcol2, pcol3, pcol4, pcol5, pcol6, pcol7, pcol8 = st.columns(
+                    [0.7, 0.8, 1.8, 1.2, 1.8, 1.8, 1.2, 1.8]
+                )
+
+                with pcol1:
+                    select_all_checked = st.checkbox(
+                        "Select All",
+                        key="fhm_select_all",
+                        label_visibility="collapsed",
+                    )
+                    all_rows_selected = all(
+                        st.session_state.get(f"fhm_preset_check_{idx}", False)
+                        for idx in range(len(uptime_df))
+                    )
+                    if select_all_checked:
+                        for idx in range(len(uptime_df)):
+                            st.session_state[f"fhm_preset_check_{idx}"] = True
+                    elif all_rows_selected:
+                        for idx in range(len(uptime_df)):
+                            st.session_state[f"fhm_preset_check_{idx}"] = False
+
+                with pcol2:
+                    st.write("—")
+                with pcol3:
+                    preset_ip = st.text_input(
+                        "Preset IP (optional)",
+                        value=st.session_state.fhm_preset_ip,
+                        key="fhm_preset_ip_input",
+                        label_visibility="collapsed",
+                        placeholder="Leave empty for all",
+                    )
+                    st.session_state.fhm_preset_ip = preset_ip
+                with pcol4:
+                    st.write("—")
+                with pcol5:
+                    st.write("—")
+                with pcol6:
+                    preset_action = st.selectbox(
+                        "Preset Action",
+                        ["—", "shutdown", "run familybot", "run hotmailbot"],
+                        key="fhm_preset_action_sel",
+                        label_visibility="collapsed",
+                    )
+                    st.session_state.fhm_preset_action = preset_action
+                with pcol7:
+                    if preset_action != "—" and preset_action != "shutdown":
+                        preset_country = st.selectbox(
+                            "Preset Country",
+                            ["—", "poland", "poland2", "sweden"],
+                            key="fhm_preset_country_sel",
+                            label_visibility="collapsed",
+                        )
+                        st.session_state.fhm_preset_country = preset_country
+                    else:
+                        st.write("—")
+                with pcol8:
+                    st.write("—")
+
+                st.divider()
+
+                # DATA ROWS with independent checkboxes on the far left
+                for idx, row in uptime_df.iterrows():
+                    col1, col2, col3, col4, col5, col6, col7, col8 = st.columns(
+                        [0.7, 0.8, 1.8, 1.2, 1.8, 1.8, 1.2, 1.8]
+                    )
+
+                    with col1:
+                        st.checkbox(
+                            " ",
+                            key=f"fhm_preset_check_{idx}",
+                            label_visibility="collapsed",
+                        )
+
+                    with col2:
+                        st.write(str(row["server_number"]))
+                    with col3:
+                        st.write(str(row["server_ip"]))
+                    with col4:
+                        status_icon = {"green": "🟢", "yellow": "🟡", "red": "🔴"}.get(
+                            row["status"], "—"
+                        )
+                        st.write(f"{status_icon} {row['status']}")
+                    with col5:
+                        st.write(str(row["current_action"] or "—"))
+
+                    # Show action/country only if Preset is checked
+                    preset_checked = st.session_state.get(
+                        f"fhm_preset_check_{idx}", False
+                    )
+
+                    with col6:
+                        if preset_checked:
+                            st.write(
+                                st.session_state.fhm_preset_action
+                                if st.session_state.fhm_preset_action != "—"
+                                else "—"
+                            )
+                        else:
+                            st.write("—")
+                    with col7:
+                        if (
+                            preset_checked
+                            and st.session_state.fhm_preset_action != "—"
+                            and st.session_state.fhm_preset_action != "shutdown"
+                        ):
+                            st.write(
+                                st.session_state.fhm_preset_country
+                                if st.session_state.fhm_preset_country != "—"
+                                else "—"
+                            )
+                        else:
+                            st.write("—")
+                    with col8:
+                        st.write(str(row["last_update_time_utc"] or "—"))
+
+                st.divider()
+
+                # Bulk send button
+                if st.button(
+                    "🚀 Send to Selected Servers",
+                    use_container_width=True,
+                    key="fhm_bulk_send",
+                ):
+                    if st.session_state.fhm_preset_action == "—":
+                        st.error("Please select an action in the PRESET row.")
+                    else:
+                        # Collect rows with Preset checked
+                        preset_rows = []
+                        for idx, row in uptime_df.iterrows():
+                            preset_key = f"fhm_preset_check_{idx}"
+                            if st.session_state.get(preset_key, False):
+                                preset_rows.append(row)
+
+                        if not preset_rows:
+                            st.error(
+                                "Please select at least one server using the Preset column (P)."
+                            )
+                        else:
+                            # Build actions
+                            action_value = st.session_state.fhm_preset_action
+                            country_value = None
+
+                            if (
+                                action_value != "shutdown"
+                                and st.session_state.fhm_preset_country != "—"
+                            ):
+                                country_value = st.session_state.fhm_preset_country
+
+                            actions_to_insert = []
+                            for row in preset_rows:
+                                server_ip = row["server_ip"]
+
+                                # Format action
+                                if action_value == "shutdown":
+                                    formatted_action = f"shutdown"
+                                elif action_value == "run familybot":
+                                    formatted_action = f"run_familybot"
+                                elif action_value == "run hotmailbot":
+                                    formatted_action = f"run_hotmailbot"
+                                else:
+                                    continue
+
+                                # Format action
+                                # if action_value == "shutdown":
+                                #     formatted_action = f"shutdown:{server_ip}"
+                                # elif action_value == "run familybot":
+                                #     formatted_action = f"run_familybot:{server_ip}"
+                                # elif action_value == "run hotmailbot":
+                                #     formatted_action = f"run_hotmailbot:{server_ip}"
+                                # else:
+                                #     continue
+
+                                actions_to_insert.append(
+                                    {
+                                        "server_ip": server_ip,
+                                        "action": formatted_action,
+                                        "country": country_value,
+                                    }
+                                )
+
+                            # Bulk insert with spinner
+                            with st.spinner("📤 Sending signal to selected servers..."):
+                                success, message = bulk_insert_family_hotmail_actions(
+                                    actions_to_insert
+                                )
+
+                            if success:
+                                st.session_state.fhm_last_action_success = True
+                                st.session_state.fhm_last_action_message = message
+                                st.session_state.fhm_last_action_count = len(
+                                    actions_to_insert
+                                )
+                                st.session_state[
+                                    "family_hotmail_uptime_status_refresh"
+                                ] = True
+                                st.rerun()
+                            else:
+                                st.error(f"❌ Failed: {message}")
+
+                st.divider()
+
+                # Display persistent success message if available (below the button)
+                if st.session_state.fhm_last_action_success:
+                    st.success(
+                        f"✅ Signal sent! {st.session_state.fhm_last_action_message}"
+                    )
+                    st.info(
+                        f"📡 Dispatched to {st.session_state.fhm_last_action_count} server(s). Bots will receive and process shortly."
+                    )
+                    st.session_state.fhm_last_action_success = False
 
 
 if __name__ == "__main__":
