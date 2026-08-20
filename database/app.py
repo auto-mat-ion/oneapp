@@ -6,6 +6,8 @@ import time
 import streamlit as st
 import pandas as pd
 import json
+import io
+import zipfile
 from pathlib import Path
 from datetime import datetime, timedelta, UTC
 from zoneinfo import ZoneInfo
@@ -182,6 +184,302 @@ def get_db_connection():
     except Exception as exc:
         st.error(f"Unable to connect to database: {exc}")
         return None
+
+
+def get_alibaba_db_connection():
+    if mysql is None:
+        st.error(
+            "mysql-connector-python is not installed. Install it with `pip install mysql-connector-python`."
+        )
+        return None
+    try:
+        config = get_db_config()
+        config["database"] = "alibaba"
+        return mysql.connector.connect(**config)
+    except Exception as exc:
+        st.error(f"Unable to connect to Alibaba database: {exc}")
+        return None
+
+
+def get_alibaba_server_status_df():
+    conn = get_alibaba_db_connection()
+    if conn is None:
+        return pd.DataFrame()
+
+    cursor = None
+    try:
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(
+            """
+            SELECT server_ip, server_action, server_action_details, date_time
+            FROM server_status
+            ORDER BY server_ip, date_time DESC, id DESC
+            """
+        )
+        status_rows = cursor.fetchall()
+        cursor.execute(
+            """
+            SELECT server_ip, server_name
+            FROM server_details
+            ORDER BY server_ip, id DESC
+            """
+        )
+        detail_rows = cursor.fetchall()
+
+        server_names = {}
+        for detail in detail_rows:
+            server_ip = str(detail.get("server_ip") or "").strip()
+            server_name = str(detail.get("server_name") or "").strip()
+            if server_ip and server_ip not in server_names:
+                server_names[server_ip] = server_name or "unrecognized"
+
+        latest_status = {}
+        for row in status_rows:
+            server_ip = str(row.get("server_ip") or "").strip()
+            if server_ip and server_ip not in latest_status:
+                latest_status[server_ip] = row
+
+        current_utc = datetime.now(UTC).replace(tzinfo=None)
+        polish_timezone = ZoneInfo("Europe/Warsaw")
+        table_rows = []
+        for server_ip, row in latest_status.items():
+            date_time = row.get("date_time")
+            if date_time is None:
+                status = "Offline"
+                polish_date_time = ""
+            else:
+                if date_time.tzinfo is not None:
+                    utc_date_time = date_time.astimezone(UTC).replace(tzinfo=None)
+                else:
+                    utc_date_time = date_time
+                age_minutes = max(0, (current_utc - utc_date_time).total_seconds() / 60)
+                status = (
+                    "Good"
+                    if age_minutes < 5
+                    else "Mid"
+                    if age_minutes < 8
+                    else "Offline"
+                )
+                polish_date_time = (
+                    date_time.replace(tzinfo=UTC)
+                    .astimezone(polish_timezone)
+                    .strftime("%Y-%m-%d %H:%M:%S")
+                )
+
+            table_rows.append(
+                {
+                    "Server IP": server_ip,
+                    "Server Name": server_names.get(server_ip, "unrecognized"),
+                    "Server Status": status,
+                    "Last Uptime": polish_date_time,
+                    "Server Action": row.get("server_action") or "",
+                    "Server Action Details": row.get("server_action_details") or "",
+                }
+            )
+
+        return pd.DataFrame(
+            table_rows,
+            columns=[
+                "Server IP",
+                "Server Name",
+                "Server Status",
+                "Last Uptime",
+                "Server Action",
+                "Server Action Details",
+            ],
+        )
+    except Exception as exc:
+        st.error(f"Unable to load Alibaba server status: {exc}")
+        return pd.DataFrame()
+    finally:
+        if cursor is not None:
+            cursor.close()
+        conn.close()
+
+
+def parse_alibaba_company_urls(text_value):
+    if not isinstance(text_value, str) or not text_value.strip():
+        return []
+
+    urls = []
+    for raw_line in text_value.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+
+        for fragment in re.split(r"[\n,]+", line):
+            candidate = fragment.strip().strip("\"'")
+            if candidate.startswith(("http://", "https://")):
+                alibaba_host = re.match(
+                    r"^(https?://(?:[^/\s,]+\.)*alibaba\.com)",
+                    candidate,
+                    re.IGNORECASE,
+                )
+                if alibaba_host:
+                    candidate = f"{alibaba_host.group(1)}/productlist.html"
+                elif not candidate.endswith("/productlist.html"):
+                    candidate += "/productlist.html"
+                urls.append(candidate)
+
+    return list(dict.fromkeys(urls))
+
+
+def save_alibaba_company_urls(text_value):
+    company_urls = parse_alibaba_company_urls(text_value)
+    if not company_urls:
+        return False, "Please enter at least one Alibaba company URL."
+
+    conn = get_alibaba_db_connection()
+    if conn is None:
+        return False, "Unable to connect to Alibaba database."
+
+    cursor = None
+    try:
+        cursor = conn.cursor()
+        submitted_at = datetime.now(UTC)
+        cursor.executemany(
+            "INSERT IGNORE INTO companies (company_url, date_time) VALUES (%s, %s)",
+            [(company_url, submitted_at) for company_url in company_urls],
+        )
+        conn.commit()
+        saved_count = cursor.rowcount
+        skipped_count = len(company_urls) - saved_count
+        message = f"Saved {saved_count} Alibaba company URL(s)."
+        if skipped_count:
+            message += f" Skipped {skipped_count} existing URL(s)."
+        return True, message
+    except Exception as exc:
+        conn.rollback()
+        return False, str(exc)
+    finally:
+        if cursor is not None:
+            cursor.close()
+        conn.close()
+
+
+def get_alibaba_companies_df():
+    conn = get_alibaba_db_connection()
+    if conn is None:
+        return pd.DataFrame()
+
+    cursor = None
+    try:
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(
+            """
+            SELECT
+                c.company_name,
+                c.company_url,
+                c.date_time,
+                COUNT(st.id) AS num_items,
+                SUM(
+                    CASE
+                        WHEN LOWER(st.scrape_status) = 'completed' THEN 1
+                        ELSE 0
+                    END
+                ) AS completed_items
+            FROM companies AS c
+            LEFT JOIN scrape_tracking AS st ON st.company_url = c.company_url
+            GROUP BY c.id, c.company_name, c.company_url, c.date_time
+            ORDER BY c.date_time DESC, c.id DESC
+            """
+        )
+        rows = cursor.fetchall()
+        companies_df = pd.DataFrame(rows)
+        if companies_df.empty:
+            return companies_df
+
+        companies_df["num_items"] = companies_df["num_items"].astype(int)
+        companies_df["completed_items"] = (
+            companies_df["completed_items"].fillna(0).astype(int)
+        )
+        companies_df["scraped"] = [
+            f"{completed}/{total} ({completed / total * 100:.1f}%)"
+            if total
+            else "0/0 (0.0%)"
+            for completed, total in zip(
+                companies_df["completed_items"], companies_df["num_items"]
+            )
+        ]
+        return companies_df[
+            ["company_name", "company_url", "date_time", "num_items", "scraped"]
+        ].rename(
+            columns={
+                "company_name": "Company Name",
+                "company_url": "Company URL",
+                "date_time": "Date Added",
+                "num_items": "Num. Items",
+                "scraped": "Scraped",
+            }
+        )
+    except Exception as exc:
+        st.error(f"Unable to load Alibaba companies: {exc}")
+        return pd.DataFrame()
+    finally:
+        if cursor is not None:
+            cursor.close()
+        conn.close()
+
+
+def build_alibaba_company_zip(company_name, company_url):
+    conn = get_alibaba_db_connection()
+    if conn is None:
+        return None, "Unable to connect to Alibaba database."
+
+    cursor = None
+    try:
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(
+            """
+            SELECT item_name, scrape_result
+            FROM scrape_tracking
+            WHERE company_url = %s AND LOWER(scrape_status) = 'completed'
+            ORDER BY item_name
+            """,
+            (company_url,),
+        )
+        rows = cursor.fetchall()
+        if not rows:
+            return None, "No completed items found for this company."
+
+        archive_buffer = io.BytesIO()
+        with zipfile.ZipFile(
+            archive_buffer, "w", compression=zipfile.ZIP_DEFLATED
+        ) as archive:
+            for row in rows:
+                item_name = str(row.get("item_name") or "item").strip()
+                scrape_result = row.get("scrape_result")
+                if isinstance(scrape_result, str):
+                    try:
+                        scrape_result = json.loads(scrape_result)
+                    except json.JSONDecodeError:
+                        pass
+
+                category = "Uncategorized"
+                if isinstance(scrape_result, dict):
+                    category = str(
+                        scrape_result.get("category")
+                        or scrape_result.get("category_name")
+                        or category
+                    ).strip()
+
+                safe_category = re.sub(r"[^A-Za-z0-9._ -]+", "_", category).strip()
+                safe_item_name = re.sub(r"[^A-Za-z0-9._ -]+", "_", item_name).strip()
+                archive.writestr(
+                    f"{safe_category or 'Uncategorized'}/{safe_item_name or 'item'}.json",
+                    json.dumps(scrape_result, ensure_ascii=False, indent=2),
+                )
+
+        archive_buffer.seek(0)
+        download_name = str(company_name or company_url or "company").strip()
+        download_name = re.sub(r"[^A-Za-z0-9._ -]+", "_", download_name).strip()
+        return archive_buffer.getvalue(), f"{download_name or 'company'}.zip"
+    except Exception as exc:
+        return None, str(exc)
+    finally:
+        if cursor is not None:
+            cursor.close()
+        conn.close()
 
 
 def get_db_tables():
@@ -5192,6 +5490,22 @@ def main():
             .stTabs [role="tab"] {
                 color: #cbd5e1;
             }
+            .alibaba-table-heading {
+                color: #94a3b8;
+                font-size: 0.72rem;
+                font-weight: 700;
+                letter-spacing: 0.04em;
+                text-transform: uppercase;
+                padding: 0.25rem 0;
+            }
+            .alibaba-table-url a {
+                color: #93c5fd;
+                text-decoration: none;
+            }
+            .alibaba-table-url a:hover {
+                color: #bfdbfe;
+                text-decoration: underline;
+            }
         </style>
         """,
         unsafe_allow_html=True,
@@ -5235,6 +5549,8 @@ def main():
         key="sidebar_page_family_and_hotmailbots",
     ):
         st.session_state.selected_page = "Family and Hotmailbots"
+    if st.sidebar.button("Alibaba", width="stretch", key="sidebar_page_alibaba"):
+        st.session_state.selected_page = "Alibaba"
 
     if "manualbot_editor_open" not in st.session_state:
         st.session_state.manualbot_editor_open = False
@@ -5955,6 +6271,122 @@ def main():
                         f"📡 Dispatched to {st.session_state.fhm_last_action_count} server(s). Bots will receive and process shortly."
                     )
                     st.session_state.fhm_last_action_success = False
+
+        elif st.session_state.selected_page == "Alibaba":
+            st.title("Alibaba")
+            st.markdown("---")
+            st.subheader("Server Uptime Status")
+            server_status_df = get_alibaba_server_status_df()
+            if server_status_df.empty:
+                st.info("No Alibaba server status has been reported yet.")
+            else:
+
+                def color_server_status(column):
+                    colors = {
+                        "Good": "background-color: #166534; color: #f0fdf4; font-weight: 700;",
+                        "Mid": "background-color: #a16207; color: #fefce8; font-weight: 700;",
+                        "Offline": "background-color: #b91c1c; color: #fef2f2; font-weight: 700;",
+                    }
+                    return [colors.get(value, "") for value in column]
+
+                st.dataframe(
+                    server_status_df.style.apply(
+                        color_server_status,
+                        subset=["Server Status"],
+                        axis=0,
+                    ),
+                    width="stretch",
+                    hide_index=True,
+                )
+
+            st.divider()
+
+            if st.button("Refresh", key="refresh_alibaba_companies"):
+                st.rerun()
+            st.subheader("Companies")
+            companies_df = get_alibaba_companies_df()
+            if companies_df.empty:
+                st.info("No Alibaba companies have been added yet.")
+            else:
+                with st.container(border=True):
+                    table_columns = st.columns([2, 4, 1, 1, 1, 0.7])
+                    for column, heading in zip(
+                        table_columns,
+                        [
+                            "Company Name",
+                            "Company URL",
+                            "Date Added",
+                            "Num. Items",
+                            "Scraped",
+                            "",
+                        ],
+                    ):
+                        with column:
+                            st.markdown(
+                                f'<div class="alibaba-table-heading">{heading}</div>',
+                                unsafe_allow_html=True,
+                            )
+                    st.divider()
+
+                    for company_index, company in companies_df.iterrows():
+                        company_name = company.get("Company Name")
+                        company_url = company.get("Company URL", "")
+                        if pd.isna(company_name) or not str(company_name).strip():
+                            company_name = company_url or "company"
+                        company_columns = st.columns([2, 4, 1, 1, 1, 0.7])
+                        with company_columns[0]:
+                            st.markdown(f"**{company_name}**")
+                        with company_columns[1]:
+                            st.markdown(
+                                f'<div class="alibaba-table-url"><a href="{company_url}" target="_blank">{company_url}</a></div>',
+                                unsafe_allow_html=True,
+                            )
+                        with company_columns[2]:
+                            st.caption(str(company.get("Date Added", "")))
+                        with company_columns[3]:
+                            st.write(company.get("Num. Items", 0))
+                        with company_columns[4]:
+                            st.write(company.get("Scraped", ""))
+
+                        zip_data, zip_result = build_alibaba_company_zip(
+                            company_name, company_url
+                        )
+                        with company_columns[5]:
+                            st.download_button(
+                                "⬇",
+                                data=zip_data or b"",
+                                file_name=zip_result
+                                if zip_data is not None
+                                else f"{company_name}.zip",
+                                mime="application/zip",
+                                disabled=zip_data is None,
+                                help="Download completed items as a ZIP file",
+                                key=f"download_alibaba_company_{company_index}",
+                            )
+                        if zip_data is None:
+                            st.caption(zip_result)
+                        if company_index < companies_df.index[-1]:
+                            st.markdown(
+                                "<hr style='border-color: #273449;'>",
+                                unsafe_allow_html=True,
+                            )
+            st.divider()
+            st.subheader("Company URLs")
+            company_urls = st.text_area(
+                "Alibaba links (one per line or comma-separated)",
+                height=220,
+                placeholder="Paste one Alibaba company URL per line",
+                key="alibaba_company_urls",
+            )
+
+            if st.button("Add Alibaba Links", key="save_alibaba_links"):
+                success, message = save_alibaba_company_urls(company_urls)
+                if success:
+                    st.success(message)
+                else:
+                    st.error(message)
+
+            st.divider()
 
 
 if __name__ == "__main__":
