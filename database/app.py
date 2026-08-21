@@ -6308,6 +6308,71 @@ def main():
             if companies_df.empty:
                 st.info("No Alibaba companies have been added yet.")
             else:
+                company_search = st.text_input(
+                    "Search companies",
+                    placeholder="Search by company name or URL",
+                    key="alibaba_company_search",
+                )
+                if (
+                    st.session_state.get("alibaba_company_search_previous")
+                    != company_search
+                ):
+                    st.session_state.alibaba_company_search_previous = company_search
+                    st.session_state.alibaba_company_page = 1
+
+                if company_search.strip():
+                    search_value = company_search.strip().lower()
+                    search_matches = companies_df["Company Name"].fillna("").astype(
+                        str
+                    ).str.lower().str.contains(
+                        search_value, regex=False
+                    ) | companies_df["Company URL"].fillna("").astype(
+                        str
+                    ).str.lower().str.contains(search_value, regex=False)
+                    filtered_companies_df = companies_df[search_matches]
+                else:
+                    filtered_companies_df = companies_df
+
+                companies_per_page = 5
+                total_company_pages = max(
+                    1, math.ceil(len(filtered_companies_df) / companies_per_page)
+                )
+                current_company_page = min(
+                    st.session_state.get("alibaba_company_page", 1),
+                    total_company_pages,
+                )
+                st.session_state.alibaba_company_page = current_company_page
+                page_start = (current_company_page - 1) * companies_per_page
+                visible_companies_df = filtered_companies_df.iloc[
+                    page_start : page_start + companies_per_page
+                ]
+
+                if filtered_companies_df.empty:
+                    st.info("No companies match your search.")
+                else:
+                    pagination_columns = st.columns([1, 2, 1])
+                    with pagination_columns[0]:
+                        if st.button(
+                            "Previous",
+                            disabled=current_company_page == 1,
+                            key="previous_alibaba_company_page",
+                        ):
+                            st.session_state.alibaba_company_page -= 1
+                            st.rerun()
+                    with pagination_columns[1]:
+                        st.caption(
+                            f"Page {current_company_page} of {total_company_pages} "
+                            f"({len(filtered_companies_df)} companies)"
+                        )
+                    with pagination_columns[2]:
+                        if st.button(
+                            "Next",
+                            disabled=current_company_page == total_company_pages,
+                            key="next_alibaba_company_page",
+                        ):
+                            st.session_state.alibaba_company_page += 1
+                            st.rerun()
+
                 with st.container(border=True):
                     table_columns = st.columns([2, 4, 1, 1, 1, 0.7])
                     for column, heading in zip(
@@ -6328,7 +6393,7 @@ def main():
                             )
                     st.divider()
 
-                    for company_index, company in companies_df.iterrows():
+                    for company_index, company in visible_companies_df.iterrows():
                         company_name = company.get("Company Name")
                         company_url = company.get("Company URL", "")
                         if pd.isna(company_name) or not str(company_name).strip():
