@@ -505,7 +505,7 @@ def get_current_server_ip():
 
 
 BATCHES = ["batch_1", "batch_2", "batch_3", "batch_4", "batch_5", "batch_6", "batch_7"]
-SCHEDULER_INTERVAL = timedelta(hours=3.5)
+SCHEDULER_INTERVAL = timedelta(minutes=250)
 
 
 def get_poland_timezone():
