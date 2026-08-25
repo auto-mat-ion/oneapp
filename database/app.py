@@ -277,7 +277,7 @@ def get_alibaba_server_status_df():
                 }
             )
 
-        return pd.DataFrame(
+        uptime_df = pd.DataFrame(
             table_rows,
             columns=[
                 "Server IP",
@@ -288,6 +288,26 @@ def get_alibaba_server_status_df():
                 "Server Action Details",
             ],
         )
+
+        def get_server_name_sort_key(row):
+            name = str(row["Server Name"] or "").strip().lower()
+            match = re.fullmatch(r"(alibaba|hotmail)(\d+)", name)
+            if match:
+                group = 0 if match.group(1) == "alibaba" else 1
+                return (group, int(match.group(2)), name)
+            if name.startswith("alibaba"):
+                return (0, 10**9, name)
+            if name.startswith("hotmail"):
+                return (1, 10**9, name)
+            return (2, 0, name)
+
+        return uptime_df.sort_values(
+            by="Server Name",
+            key=lambda names: names.map(
+                lambda name: get_server_name_sort_key({"Server Name": name})
+            ),
+            kind="mergesort",
+        ).reset_index(drop=True)
     except Exception as exc:
         st.error(f"Unable to load Alibaba server status: {exc}")
         return pd.DataFrame()
@@ -357,7 +377,7 @@ def save_alibaba_company_urls(text_value):
         conn.close()
 
 
-def get_alibaba_companies_df():
+def get_alibaba_available_scraped_data_df():
     conn = get_alibaba_db_connection()
     if conn is None:
         return pd.DataFrame()
@@ -370,17 +390,23 @@ def get_alibaba_companies_df():
             SELECT
                 c.company_name,
                 c.company_url,
-                c.date_time,
                 COUNT(st.id) AS num_items,
                 SUM(
                     CASE
-                        WHEN LOWER(st.scrape_status) = 'completed' THEN 1
+                        WHEN st.scrape_status = 'completed' THEN 1
                         ELSE 0
                     END
                 ) AS completed_items
             FROM companies AS c
-            LEFT JOIN scrape_tracking AS st ON st.company_url = c.company_url
+            INNER JOIN scrape_tracking AS st ON st.company_url = c.company_url
+            WHERE COALESCE(LOWER(TRIM(c.downloaded)), 'false') = 'false'
             GROUP BY c.id, c.company_name, c.company_url, c.date_time
+            HAVING SUM(
+                CASE
+                    WHEN st.scrape_status = 'completed' THEN 1
+                    ELSE 0
+                END
+            ) / COUNT(st.id) >= 1
             ORDER BY c.date_time DESC, c.id DESC
             """
         )
@@ -393,27 +419,38 @@ def get_alibaba_companies_df():
         companies_df["completed_items"] = (
             companies_df["completed_items"].fillna(0).astype(int)
         )
+        companies_df["completion_percentage"] = (
+            companies_df["completed_items"] / companies_df["num_items"] * 100
+        ).round(1)
         companies_df["scraped"] = [
-            f"{completed}/{total} ({completed / total * 100:.1f}%)"
-            if total
-            else "0/0 (0.0%)"
-            for completed, total in zip(
-                companies_df["completed_items"], companies_df["num_items"]
+            f"{completed}/{total} ({percentage:.1f}%)"
+            for completed, total, percentage in zip(
+                companies_df["completed_items"],
+                companies_df["num_items"],
+                companies_df["completion_percentage"],
             )
         ]
         return companies_df[
-            ["company_name", "company_url", "date_time", "num_items", "scraped"]
+            [
+                "company_name",
+                "company_url",
+                "num_items",
+                "completed_items",
+                "completion_percentage",
+                "scraped",
+            ]
         ].rename(
             columns={
                 "company_name": "Company Name",
                 "company_url": "Company URL",
-                "date_time": "Date Added",
-                "num_items": "Num. Items",
+                "num_items": "Total Items",
+                "completed_items": "Items Scraped",
+                "completion_percentage": "Completion Percentage",
                 "scraped": "Scraped",
             }
         )
     except Exception as exc:
-        st.error(f"Unable to load Alibaba companies: {exc}")
+        st.error(f"Unable to load available Alibaba scraped data: {exc}")
         return pd.DataFrame()
     finally:
         if cursor is not None:
@@ -421,7 +458,118 @@ def get_alibaba_companies_df():
         conn.close()
 
 
-def build_alibaba_company_zip(company_name, company_url):
+def get_alibaba_currently_scraping_data_df():
+    conn = get_alibaba_db_connection()
+    if conn is None:
+        return pd.DataFrame()
+
+    cursor = None
+    try:
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(
+            """
+            SELECT
+                c.company_name,
+                c.company_url,
+                COUNT(st.id) AS num_items,
+                SUM(
+                    CASE
+                        WHEN st.scrape_status = 'completed' THEN 1
+                        ELSE 0
+                    END
+                ) AS completed_items
+            FROM companies AS c
+            LEFT JOIN scrape_tracking AS st ON st.company_url = c.company_url
+            WHERE COALESCE(LOWER(TRIM(c.downloaded)), 'false') = 'false'
+            GROUP BY c.id, c.company_name, c.company_url, c.date_time
+            HAVING SUM(
+                CASE
+                    WHEN st.scrape_status = 'completed' THEN 1
+                    ELSE 0
+                END
+            ) / NULLIF(COUNT(st.id), 0) < 1
+            OR COUNT(st.id) = 0
+            ORDER BY c.date_time DESC, c.id DESC
+            """
+        )
+        rows = cursor.fetchall()
+        companies_df = pd.DataFrame(rows)
+        if companies_df.empty:
+            return companies_df
+
+        companies_df["num_items"] = companies_df["num_items"].astype(int)
+        companies_df["completed_items"] = (
+            companies_df["completed_items"].fillna(0).astype(int)
+        )
+        companies_df["download_percentage"] = (
+            (companies_df["completed_items"] / companies_df["num_items"] * 100)
+            .where(companies_df["num_items"] > 0, 0)
+            .fillna(0)
+            .round(1)
+        )
+        companies_df["scraped"] = [
+            f"{completed}/{total} ({percentage:.1f}%)"
+            for completed, total, percentage in zip(
+                companies_df["completed_items"],
+                companies_df["num_items"],
+                companies_df["download_percentage"],
+            )
+        ]
+        return companies_df[
+            [
+                "company_name",
+                "company_url",
+                "num_items",
+                "completed_items",
+                "download_percentage",
+                "scraped",
+            ]
+        ].rename(
+            columns={
+                "company_name": "Company Name",
+                "company_url": "Company URL",
+                "num_items": "Total Items",
+                "completed_items": "Items Scraped",
+                "download_percentage": "Download Percentage",
+                "scraped": "Scraped",
+            }
+        )
+    except Exception as exc:
+        st.error(f"Unable to load currently scraping Alibaba data: {exc}")
+        return pd.DataFrame()
+    finally:
+        if cursor is not None:
+            cursor.close()
+        conn.close()
+
+
+def get_alibaba_downloaded_company_urls():
+    conn = get_alibaba_db_connection()
+    if conn is None:
+        return []
+
+    cursor = None
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT company_url
+            FROM companies
+            WHERE COALESCE(LOWER(TRIM(downloaded)), 'false') = 'true'
+            ORDER BY date_time DESC, id DESC
+            """
+        )
+        return [row[0] for row in cursor.fetchall() if row and row[0]]
+    except Exception as exc:
+        st.error(f"Unable to load downloaded Alibaba companies: {exc}")
+        return []
+    finally:
+        if cursor is not None:
+            cursor.close()
+        conn.close()
+
+
+def build_alibaba_available_scraped_data_zip(company_urls, progress_callback=None):
     conn = get_alibaba_db_connection()
     if conn is None:
         return None, "Unable to connect to Alibaba database."
@@ -429,53 +577,133 @@ def build_alibaba_company_zip(company_name, company_url):
     cursor = None
     try:
         cursor = conn.cursor(dictionary=True)
+        if not company_urls:
+            return None, "No companies meet the 95% completion criterion."
+
+        placeholders = ", ".join(["%s"] * len(company_urls))
         cursor.execute(
-            """
-            SELECT item_name, scrape_result
-            FROM scrape_tracking
-            WHERE company_url = %s AND LOWER(scrape_status) = 'completed'
-            ORDER BY item_name
+            f"""
+            SELECT st.company_url, c.company_name, st.item_name, st.scrape_result
+            FROM scrape_tracking AS st
+            INNER JOIN companies AS c ON c.company_url = st.company_url
+            WHERE st.company_url IN ({placeholders})
+              AND st.scrape_status = 'completed'
+            ORDER BY st.company_url, st.id
             """,
-            (company_url,),
+            tuple(company_urls),
         )
         rows = cursor.fetchall()
         if not rows:
-            return None, "No completed items found for this company."
+            return None, "No completed items found for the selected companies."
+
+        rows_by_company = {}
+        for row in rows:
+            rows_by_company.setdefault(row["company_url"], []).append(row)
 
         archive_buffer = io.BytesIO()
         with zipfile.ZipFile(
             archive_buffer, "w", compression=zipfile.ZIP_DEFLATED
         ) as archive:
-            for row in rows:
-                item_name = str(row.get("item_name") or "item").strip()
-                scrape_result = row.get("scrape_result")
-                if isinstance(scrape_result, str):
-                    try:
-                        scrape_result = json.loads(scrape_result)
-                    except json.JSONDecodeError:
-                        pass
+            used_company_names = set()
+            total_items = sum(
+                len(rows_by_company.get(company_url, []))
+                for company_url in company_urls
+            )
+            processed_items = 0
+            if progress_callback is not None:
+                progress_callback(0, total_items)
 
-                category = "Uncategorized"
-                if isinstance(scrape_result, dict):
-                    category = str(
-                        scrape_result.get("category")
-                        or scrape_result.get("category_name")
-                        or category
-                    ).strip()
+            for company_url in company_urls:
+                company_rows = rows_by_company.get(company_url, [])
+                if not company_rows:
+                    continue
 
-                safe_category = re.sub(r"[^A-Za-z0-9._ -]+", "_", category).strip()
-                safe_item_name = re.sub(r"[^A-Za-z0-9._ -]+", "_", item_name).strip()
-                archive.writestr(
-                    f"{safe_category or 'Uncategorized'}/{safe_item_name or 'item'}.json",
-                    json.dumps(scrape_result, ensure_ascii=False, indent=2),
+                company_name = str(
+                    company_rows[0].get("company_name") or company_url
+                ).strip()
+                safe_company_name = (
+                    re.sub(r"[^A-Za-z0-9._ -]+", "_", company_name).strip() or "company"
                 )
+                base_company_name = safe_company_name
+                suffix = 2
+                while safe_company_name.lower() in used_company_names:
+                    safe_company_name = f"{base_company_name}_{suffix}"
+                    suffix += 1
+                used_company_names.add(safe_company_name.lower())
+
+                company_buffer = io.BytesIO()
+                used_item_names = set()
+                with zipfile.ZipFile(
+                    company_buffer, "w", compression=zipfile.ZIP_DEFLATED
+                ) as company_archive:
+                    for row in company_rows:
+                        item_name = str(row.get("item_name") or "item").strip()
+                        safe_item_name = (
+                            re.sub(r"[^A-Za-z0-9._ -]+", "_", item_name).strip()
+                            or "item"
+                        )
+                        base_item_name = safe_item_name
+                        suffix = 2
+                        while safe_item_name.lower() in used_item_names:
+                            safe_item_name = f"{base_item_name}_{suffix}"
+                            suffix += 1
+                        used_item_names.add(safe_item_name.lower())
+
+                        scrape_result = row.get("scrape_result")
+                        if isinstance(scrape_result, str):
+                            try:
+                                scrape_result = json.loads(scrape_result)
+                            except json.JSONDecodeError:
+                                pass
+                        company_archive.writestr(
+                            f"{safe_item_name}.json",
+                            json.dumps(scrape_result, ensure_ascii=False, indent=2),
+                        )
+                        processed_items += 1
+                        if progress_callback is not None:
+                            progress_callback(processed_items, total_items)
+
+                company_buffer.seek(0)
+                archive.writestr(f"{safe_company_name}.zip", company_buffer.getvalue())
 
         archive_buffer.seek(0)
-        download_name = str(company_name or company_url or "company").strip()
-        download_name = re.sub(r"[^A-Za-z0-9._ -]+", "_", download_name).strip()
-        return archive_buffer.getvalue(), f"{download_name or 'company'}.zip"
+        return archive_buffer.getvalue(), "available_scraped_data.zip"
     except Exception as exc:
         return None, str(exc)
+    finally:
+        if cursor is not None:
+            cursor.close()
+        conn.close()
+
+
+def mark_alibaba_companies_downloaded(company_urls):
+    if not company_urls:
+        return False, "No companies were included in the download."
+
+    conn = get_alibaba_db_connection()
+    if conn is None:
+        return False, "Unable to connect to Alibaba database."
+
+    cursor = None
+    try:
+        cursor = conn.cursor()
+        placeholders = ", ".join(["%s"] * len(company_urls))
+        cursor.execute(
+            f"""
+            UPDATE companies
+            SET downloaded = 'true',
+                download_time = UTC_TIMESTAMP()
+            WHERE company_url IN ({placeholders})
+              AND COALESCE(LOWER(TRIM(downloaded)), 'false') = 'false'
+            """,
+            tuple(company_urls),
+        )
+        updated_count = cursor.rowcount
+        conn.commit()
+        return True, f"Marked {updated_count} company download(s)."
+    except Exception as exc:
+        conn.rollback()
+        return False, str(exc)
     finally:
         if cursor is not None:
             cursor.close()
@@ -6274,6 +6502,8 @@ def main():
 
         elif st.session_state.selected_page == "Alibaba":
             st.title("Alibaba")
+            if st.button("Refresh", key="refresh_alibaba_companies"):
+                st.rerun()
             st.markdown("---")
             st.subheader("Server Uptime Status")
             server_status_df = get_alibaba_server_status_df()
@@ -6300,143 +6530,217 @@ def main():
                 )
 
             st.divider()
+            ####################################
+            st.subheader("Available scrapped data")
+            available_scraped_df = get_alibaba_available_scraped_data_df()
+            total_available_companies = len(available_scraped_df)
+            total_available_items = (
+                int(available_scraped_df["Items Scraped"].sum())
+                if not available_scraped_df.empty
+                else 0
+            )
+            total_available_items_in_db = (
+                int(available_scraped_df["Total Items"].sum())
+                if not available_scraped_df.empty
+                else 0
+            )
 
-            if st.button("Refresh", key="refresh_alibaba_companies"):
-                st.rerun()
-            st.subheader("Companies")
-            companies_df = get_alibaba_companies_df()
-            if companies_df.empty:
-                st.info("No Alibaba companies have been added yet.")
-            else:
-                company_search = st.text_input(
-                    "Search companies",
-                    placeholder="Search by company name or URL",
-                    key="alibaba_company_search",
-                )
-                if (
-                    st.session_state.get("alibaba_company_search_previous")
-                    != company_search
+            summary_columns = st.columns(3)
+            with summary_columns[0]:
+                st.metric("Total companies", total_available_companies)
+            with summary_columns[1]:
+                st.metric("Total items scraped", total_available_items)
+            with summary_columns[2]:
+                st.metric("Total items", total_available_items_in_db)
+
+            if not available_scraped_df.empty:
+                if st.button(
+                    "Prepare available scraped data ZIP",
+                    key="prepare_alibaba_available_scraped_data",
                 ):
-                    st.session_state.alibaba_company_search_previous = company_search
-                    st.session_state.alibaba_company_page = 1
+                    progress_bar = st.progress(0)
+                    progress_status = st.empty()
 
-                if company_search.strip():
-                    search_value = company_search.strip().lower()
-                    search_matches = companies_df["Company Name"].fillna("").astype(
-                        str
-                    ).str.lower().str.contains(
-                        search_value, regex=False
-                    ) | companies_df["Company URL"].fillna("").astype(
-                        str
-                    ).str.lower().str.contains(search_value, regex=False)
-                    filtered_companies_df = companies_df[search_matches]
-                else:
-                    filtered_companies_df = companies_df
-
-                companies_per_page = 5
-                total_company_pages = max(
-                    1, math.ceil(len(filtered_companies_df) / companies_per_page)
-                )
-                current_company_page = min(
-                    st.session_state.get("alibaba_company_page", 1),
-                    total_company_pages,
-                )
-                st.session_state.alibaba_company_page = current_company_page
-                page_start = (current_company_page - 1) * companies_per_page
-                visible_companies_df = filtered_companies_df.iloc[
-                    page_start : page_start + companies_per_page
-                ]
-
-                if filtered_companies_df.empty:
-                    st.info("No companies match your search.")
-                else:
-                    pagination_columns = st.columns([1, 2, 1])
-                    with pagination_columns[0]:
-                        if st.button(
-                            "Previous",
-                            disabled=current_company_page == 1,
-                            key="previous_alibaba_company_page",
-                        ):
-                            st.session_state.alibaba_company_page -= 1
-                            st.rerun()
-                    with pagination_columns[1]:
-                        st.caption(
-                            f"Page {current_company_page} of {total_company_pages} "
-                            f"({len(filtered_companies_df)} companies)"
+                    def update_zip_progress(processed_items, total_items):
+                        progress = processed_items / total_items if total_items else 1.0
+                        progress_bar.progress(min(progress, 1.0))
+                        progress_status.info(
+                            f"Preparing scraped data: {processed_items:,} / "
+                            f"{total_items:,} items"
                         )
-                    with pagination_columns[2]:
-                        if st.button(
-                            "Next",
-                            disabled=current_company_page == total_company_pages,
-                            key="next_alibaba_company_page",
-                        ):
-                            st.session_state.alibaba_company_page += 1
-                            st.rerun()
 
-                with st.container(border=True):
-                    table_columns = st.columns([2, 4, 1, 1, 1, 0.7])
-                    for column, heading in zip(
-                        table_columns,
-                        [
-                            "Company Name",
-                            "Company URL",
-                            "Date Added",
-                            "Num. Items",
-                            "Scraped",
-                            "",
-                        ],
-                    ):
-                        with column:
-                            st.markdown(
-                                f'<div class="alibaba-table-heading">{heading}</div>',
-                                unsafe_allow_html=True,
+                    with st.spinner("Loading scraped data and creating ZIP..."):
+                        available_zip_data, available_zip_name = (
+                            build_alibaba_available_scraped_data_zip(
+                                available_scraped_df["Company URL"].tolist(),
+                                progress_callback=update_zip_progress,
                             )
-                    st.divider()
-
-                    for company_index, company in visible_companies_df.iterrows():
-                        company_name = company.get("Company Name")
-                        company_url = company.get("Company URL", "")
-                        if pd.isna(company_name) or not str(company_name).strip():
-                            company_name = company_url or "company"
-                        company_columns = st.columns([2, 4, 1, 1, 1, 0.7])
-                        with company_columns[0]:
-                            st.markdown(f"**{company_name}**")
-                        with company_columns[1]:
-                            st.markdown(
-                                f'<div class="alibaba-table-url"><a href="{company_url}" target="_blank">{company_url}</a></div>',
-                                unsafe_allow_html=True,
-                            )
-                        with company_columns[2]:
-                            st.caption(str(company.get("Date Added", "")))
-                        with company_columns[3]:
-                            st.write(company.get("Num. Items", 0))
-                        with company_columns[4]:
-                            st.write(company.get("Scraped", ""))
-
-                        zip_data, zip_result = build_alibaba_company_zip(
-                            company_name, company_url
                         )
-                        with company_columns[5]:
-                            st.download_button(
-                                "⬇",
-                                data=zip_data or b"",
-                                file_name=zip_result
-                                if zip_data is not None
-                                else f"{company_name}.zip",
-                                mime="application/zip",
-                                disabled=zip_data is None,
-                                help="Download completed items as a ZIP file",
-                                key=f"download_alibaba_company_{company_index}",
-                            )
-                        if zip_data is None:
-                            st.caption(zip_result)
-                        if company_index < companies_df.index[-1]:
-                            st.markdown(
-                                "<hr style='border-color: #273449;'>",
-                                unsafe_allow_html=True,
-                            )
+                    if available_zip_data is not None:
+                        st.session_state.alibaba_available_zip_data = available_zip_data
+                        st.session_state.alibaba_available_zip_name = available_zip_name
+                        progress_bar.progress(1.0)
+                        progress_status.success("Scraped data ZIP is ready.")
+                    else:
+                        st.session_state.pop("alibaba_available_zip_data", None)
+                        st.session_state.pop("alibaba_available_zip_name", None)
+                        progress_status.error(available_zip_name)
+
+                available_zip_data = st.session_state.get("alibaba_available_zip_data")
+                available_zip_name = st.session_state.get(
+                    "alibaba_available_zip_name", "available_scraped_data.zip"
+                )
+                if available_zip_data is not None:
+                    available_company_urls = available_scraped_df[
+                        "Company URL"
+                    ].tolist()
+                    st.download_button(
+                        "Download available scraped data",
+                        data=available_zip_data,
+                        file_name=available_zip_name,
+                        mime="application/zip",
+                        key="download_alibaba_available_scraped_data",
+                        on_click=mark_alibaba_companies_downloaded,
+                        args=(available_company_urls,),
+                    )
+
+                display_scraped_df = available_scraped_df.sort_values(
+                    by="Completion Percentage", ascending=False, kind="mergesort"
+                )[["Company Name", "Company URL", "Scraped"]].rename(
+                    columns={
+                        "Company Name": "Company name",
+                        "Company URL": "Company url",
+                        "Scraped": "Total items scraped/total items (percentage)",
+                    }
+                )
+                st.dataframe(
+                    display_scraped_df,
+                    width="stretch",
+                    hide_index=True,
+                )
+            else:
+                st.info("No companies meet the 95% scraped-data completion criterion.")
+
             st.divider()
-            st.subheader("Company URLs")
+            st.subheader("Currently scraping data")
+            currently_scraping_df = get_alibaba_currently_scraping_data_df()
+            total_scraping_companies = len(currently_scraping_df)
+            total_scraping_items = (
+                int(currently_scraping_df["Total Items"].sum())
+                if not currently_scraping_df.empty
+                else 0
+            )
+            total_scraped_items = (
+                int(currently_scraping_df["Items Scraped"].sum())
+                if not currently_scraping_df.empty
+                else 0
+            )
+            scraping_download_percentage = (
+                total_scraped_items / total_scraping_items * 100
+                if total_scraping_items
+                else 0
+            )
+
+            scraping_summary_columns = st.columns(4)
+            with scraping_summary_columns[0]:
+                st.metric("Total companies", total_scraping_companies)
+            with scraping_summary_columns[1]:
+                st.metric("Total items", total_scraping_items)
+            with scraping_summary_columns[2]:
+                st.metric("Total scraped items", total_scraped_items)
+            with scraping_summary_columns[3]:
+                st.metric(
+                    "Download percentage",
+                    f"{scraping_download_percentage:.1f}%",
+                )
+
+            if currently_scraping_df.empty:
+                st.info("No remaining companies are currently being scraped.")
+            else:
+                display_scraping_df = (
+                    currently_scraping_df.assign(
+                        _has_scraped_items=currently_scraping_df["Items Scraped"] > 0
+                    )
+                    .sort_values(
+                        by=["_has_scraped_items", "Download Percentage"],
+                        ascending=[False, False],
+                        kind="mergesort",
+                    )[["Company Name", "Company URL", "Scraped"]]
+                    .rename(
+                        columns={
+                            "Company Name": "Company name",
+                            "Company URL": "Company url",
+                            "Scraped": "Total items scraped/total items (percentage)",
+                        }
+                    )
+                )
+                st.dataframe(
+                    display_scraping_df,
+                    width="stretch",
+                    hide_index=True,
+                )
+
+            st.divider()
+            st.subheader("Downloaded data")
+            downloaded_company_urls = get_alibaba_downloaded_company_urls()
+            if downloaded_company_urls:
+                if st.button(
+                    "Prepare downloaded data ZIP",
+                    key="prepare_alibaba_downloaded_data",
+                ):
+                    progress_bar = st.progress(0)
+                    progress_status = st.empty()
+
+                    def update_downloaded_zip_progress(processed_items, total_items):
+                        progress = processed_items / total_items if total_items else 1.0
+                        progress_bar.progress(min(progress, 1.0))
+                        progress_status.info(
+                            f"Preparing downloaded data: {processed_items:,} / "
+                            f"{total_items:,} items"
+                        )
+
+                    with st.spinner("Loading downloaded data and creating ZIP..."):
+                        downloaded_zip_data, downloaded_zip_name = (
+                            build_alibaba_available_scraped_data_zip(
+                                downloaded_company_urls,
+                                progress_callback=update_downloaded_zip_progress,
+                            )
+                        )
+                    if downloaded_zip_data is not None:
+                        st.session_state.alibaba_downloaded_zip_data = (
+                            downloaded_zip_data
+                        )
+                        st.session_state.alibaba_downloaded_zip_name = (
+                            "downloaded_scraped_data.zip"
+                        )
+                        progress_bar.progress(1.0)
+                        progress_status.success("Downloaded data ZIP is ready.")
+                    else:
+                        st.session_state.pop("alibaba_downloaded_zip_data", None)
+                        st.session_state.pop("alibaba_downloaded_zip_name", None)
+                        progress_status.error(downloaded_zip_name)
+
+                downloaded_zip_data = st.session_state.get(
+                    "alibaba_downloaded_zip_data"
+                )
+                downloaded_zip_name = st.session_state.get(
+                    "alibaba_downloaded_zip_name", "available_scraped_data.zip"
+                )
+                if downloaded_zip_data is not None:
+                    st.download_button(
+                        "Download downloaded data",
+                        data=downloaded_zip_data,
+                        file_name=downloaded_zip_name,
+                        mime="application/zip",
+                        key="download_alibaba_downloaded_data",
+                    )
+            else:
+                st.info("No downloaded companies are available.")
+
+            ####################################
+
+            st.divider()
+            st.subheader("Upload company URLs")
             company_urls = st.text_area(
                 "Alibaba links (one per line or comma-separated)",
                 height=220,
