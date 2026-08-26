@@ -602,6 +602,9 @@ def keep_alive(retries=5, delay=3):
                     )
 
                 conn.commit()
+                print(
+                    f"keep_alive updated for server_status_family_and_hotmail at {now_utc}"
+                )
                 return True
             finally:
                 conn.close()
@@ -725,7 +728,7 @@ def connect_new_random():
                 print("Connecting to Random server")
 
         connect(random_location)
-        time.sleep(2)
+        time.sleep(5)
         keep_alive()
         VPN_CONNECTION_STATUS = "connected"
         VPN_CONNECTION_WATCHDOG_STOP.set()
