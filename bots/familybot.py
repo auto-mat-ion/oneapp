@@ -895,7 +895,6 @@ def initialize_new_profile_driver():
                     # browser="firefox",
                     # proxy=proxy,
                     binary_location=chrome_location,
-                    # user_data_dir=user_data_dir,
                     # extension_dir=extension_dir,
                     locale_code="en",
                 )
