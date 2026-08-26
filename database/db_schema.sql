@@ -752,3 +752,27 @@ CREATE TABLE
     recovery VARCHAR(255) NULL,
     country VARCHAR(255) NULL
   ) ENGINE = InnoDB;
+
+CREATE TABLE
+  IF NOT EXISTS familybot_servers_details (
+    server_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    server_ip VARCHAR(45) NULL,
+    server_type VARCHAR(50) NULL
+  ) ENGINE = InnoDB;
+
+CREATE TABLE
+  IF NOT EXISTS server_status_family_and_hotmail (
+    server_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    server_ip VARCHAR(45) NULL,
+    last_uptime DATETIME NULL,
+    current_action VARCHAR(255) NULL
+  ) ENGINE = InnoDB;
+
+CREATE TABLE
+  IF NOT EXISTS familybot_actions_tracker (
+    action_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    server_ip VARCHAR(45) NULL,
+    date_time DATETIME NULL,
+    action VARCHAR(255) NULL,
+    status VARCHAR(255) NULL
+  ) ENGINE = InnoDB;

@@ -25,9 +25,6 @@ import mysql.connector
 import random
 import msal
 
-from bots.family_and_hotmail_manager import get_signal_from_db
-
-
 lock = threading.Lock()
 load_dotenv()
 
@@ -177,8 +174,36 @@ def _check_shutdown_requested():
 
 def _shutdown_signal_active():
     try:
-        status, action, _ = get_signal_from_db()
-        return status and str(action or "").strip().lower() == "shutdown"
+        conn = get_db_connection()
+        if conn is None:
+            return False
+
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT action, date_time FROM familybot_actions_tracker ORDER BY action_id DESC LIMIT 1"
+            )
+            row = cursor.fetchone()
+            if not row:
+                return False
+
+            action = str(row[0] or "").strip().lower()
+            if action not in ["shutdown", "shutdown:all", f"shutdown:{SERVER_IP}"]:
+                return False
+
+            date_time = row[1]
+            if not isinstance(date_time, datetime):
+                return False
+
+            if date_time.tzinfo is None:
+                date_time = date_time.replace(tzinfo=timezone.utc)
+            else:
+                date_time = date_time.astimezone(timezone.utc)
+
+            now_utc = datetime.now(timezone.utc)
+            return abs((now_utc - date_time).total_seconds()) <= 180
+        finally:
+            conn.close()
     except Exception:
         return False
 
@@ -4682,13 +4707,11 @@ def get_new_profile_data():
         return False, {"email": "", "pass": ""}
 
 
-def run_hotmailbot(country=None):
+def run_hotmailbot():
     """
     Creates threads and signs in simultaneously
     """
-    global PREFERRED_SMS_COUNTRY, SHUTDOWN_REQUESTED
-    if country:
-        PREFERRED_SMS_COUNTRY = str(country).lower()
+    global SHUTDOWN_REQUESTED
     SHUTDOWN_REQUESTED = False
     _start_shutdown_watcher()
 

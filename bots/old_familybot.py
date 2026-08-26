@@ -17,7 +17,7 @@ from seleniumbase import Driver
 import pandas as pd
 import requests
 import threading
-from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
+from concurrent.futures import ThreadPoolExecutor
 import re
 import json
 import subprocess
@@ -27,18 +27,8 @@ import random
 import msal
 
 import pyautogui
-from bots.family_and_hotmail_manager import get_signal_from_db
-
 
 lock = threading.Lock()
-# Number of parallel threads participating in barriers (must match ThreadPoolExecutor max_workers)
-NUM_PARALLEL_BOTS = 3
-# Barrier for waiting after initialize across the parallel threads
-initialize_barrier = threading.Barrier(NUM_PARALLEL_BOTS)
-# Barrier used inside get__premium at the 'clicking save button' point
-save_click_barrier = threading.Barrier(NUM_PARALLEL_BOTS)
-# Optional barrier if threads should synchronize at start of get__premium
-get_premium_start_barrier = threading.Barrier(NUM_PARALLEL_BOTS)
 
 THE_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -317,8 +307,36 @@ def _check_shutdown_requested():
 
 def _shutdown_signal_active():
     try:
-        status, action, _ = get_signal_from_db()
-        return status and str(action or "").strip().lower() == "shutdown"
+        conn = get_db_connection()
+        if conn is None:
+            return False
+
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT action, date_time FROM familybot_actions_tracker ORDER BY action_id DESC LIMIT 1"
+            )
+            row = cursor.fetchone()
+            if not row:
+                return False
+
+            action = str(row[0] or "").strip().lower()
+            if action not in ["shutdown", "shutdown:all", f"shutdown:{SERVER_IP}"]:
+                return False
+
+            date_time = row[1]
+            if not isinstance(date_time, datetime):
+                return False
+
+            if date_time.tzinfo is None:
+                date_time = date_time.replace(tzinfo=timezone.utc)
+            else:
+                date_time = date_time.astimezone(timezone.utc)
+
+            now_utc = datetime.now(timezone.utc)
+            return abs((now_utc - date_time).total_seconds()) <= 180
+        finally:
+            conn.close()
     except Exception:
         return False
 
@@ -4310,7 +4328,6 @@ def re_login_existing_acc_mod(driver, new_profile_data):
 
 def logout_then_re_login_existing_acc(driver, new_profile_data):
     try:
-        _check_shutdown_requested()
         email = new_profile_data.get("email")
         password = new_profile_data.get("pass")
         recovery = new_profile_data.get("recovery_email")
@@ -4743,10 +4760,8 @@ def change_account_country(driver, new_profile_data):
             except:
                 driver.quit()
                 retries += 1
-        _check_shutdown_requested()
         while retries < num_of_retries:
             try:
-                _check_shutdown_requested()
                 email = new_profile_data.get("email")
                 password = new_profile_data.get("pass")
                 recovery = new_profile_data.get("recovery_email")
@@ -4937,7 +4952,6 @@ def change_account_language(driver, new_profile_data):
         retries = 0
         num_of_retries = 5
         while retries < num_of_retries:
-            _check_shutdown_requested()
             try:
                 email = new_profile_data.get("email")
                 password = new_profile_data.get("pass")
@@ -4967,7 +4981,6 @@ def change_account_language(driver, new_profile_data):
 
             except Exception as E:
                 retries += 1
-                _check_shutdown_requested()
                 print(
                     f"{email} : Exception error changing language: {E}. Retrying... ({retries}/{num_of_retries})"
                 )
@@ -6145,7 +6158,6 @@ def add_billing(driver, new_profile_data, card_details_dict):
         save_button_element = WebDriverWait(driver, wait_time).until(
             EC.element_to_be_clickable(SAVE_BUTTON_ELEMENT)
         )
-
         save_button_element.click()
         print(f"{email_address} : Clicked save button")
         return True
@@ -6153,7 +6165,7 @@ def add_billing(driver, new_profile_data, card_details_dict):
         return True
 
 
-def get__premium(driver, new_profile_data):
+def get_microsoft_premium(driver, new_profile_data):
     try:
         email_address = new_profile_data.get("email")
         # password = new_profile_data.get("pass")
@@ -6203,7 +6215,6 @@ def get__premium(driver, new_profile_data):
         click_signin_on_adding_card(driver)
 
         # click checkbox
-        _check_shutdown_requested()
         if PREFERRED_SMS_COUNTRY.lower() != "united states":
             try:
                 current_status = "clicking checkbox"
@@ -6468,7 +6479,7 @@ def get__premium(driver, new_profile_data):
         city_element.send_keys(card_details_dict.get("city"))
         print(f"{email_address} : Entered city: {card_details_dict.get('city')}")
         time.sleep(0.5)
-        _check_shutdown_requested()
+
         if PREFERRED_SMS_COUNTRY.lower() == "united states":
             current_status = "entering state"
 
@@ -6512,22 +6523,14 @@ def get__premium(driver, new_profile_data):
             f"{email_address} : Entered postal code: {card_details_dict.get('postal_code')}"
         )
         time.sleep(0.5)
-
         current_status = "clicking save button"
         save_button_element = WebDriverWait(driver, wait_time).until(
             EC.element_to_be_clickable(SAVE_BUTTON_ELEMENT)
         )
-        # wait for other threads to reach this save point and click together
-        try:
-            print(f"{email_address} : Waiting at save barrier before clicking Save...")
-            save_click_barrier.wait()
-        except threading.BrokenBarrierError:
-            pass
         save_button_element.click()
         print(f"{email_address} : Clicked save button")
 
         current_status = "checking if card is declined"
-        _check_shutdown_requested()
         if credit_card_is_declined(driver):
             print(f"{email_address} : Card was declined")
             # log_card_usage(card_details_dict)
@@ -6545,7 +6548,6 @@ def get__premium(driver, new_profile_data):
             return False, "Card not added to payments"
 
         current_status = "Add billing address if prompted"
-        _check_shutdown_requested()
         add_billing(driver, new_profile_data, card_details_dict)
 
         time.sleep(2)
@@ -6584,7 +6586,6 @@ def get__premium(driver, new_profile_data):
                 pass
 
         current_status = "clicking start trial button"
-        _check_shutdown_requested()
         try:
             time.sleep(4)
             print(f"{email_address} : Clicking start trial button")
@@ -6616,7 +6617,6 @@ def get__premium(driver, new_profile_data):
                 pass
 
         current_status = "checking if card is authorized"
-        _check_shutdown_requested()
         print(f"{email_address} : Waiting 5 minutes for card authorization...")
         if not affirm_congrats_card_added(driver):
             print(
@@ -7011,12 +7011,6 @@ def get_microsoft_premium_old_(driver, new_profile_data):
         save_button_element = WebDriverWait(driver, wait_time).until(
             EC.element_to_be_clickable(SAVE_BUTTON_ELEMENT)
         )
-        # wait for other threads to reach this save point and click together
-        try:
-            print(f"{email_address} : Waiting at save barrier before clicking Save...")
-            save_click_barrier.wait()
-        except threading.BrokenBarrierError:
-            pass
         save_button_element.click()
         print(f"{email_address} : Clicked save button")
 
@@ -7168,66 +7162,45 @@ def get_microsoft_premium_old_(driver, new_profile_data):
 
 
 ########### ENTURUUUUUURU ############
-def get_rec_from_db(number_records=3):
+def get_new_profile_data():
     retries = 0
     while retries < 3:
-        conn = None
         try:
             conn = mysql.connector.connect(
                 host=DB_HOST, user=DB_USER, password=DB_PASSWORD, database=DB_NAME
             )
             cursor = conn.cursor()
 
-            # Resume all records already claimed by this server before claiming new work
-            # Only resume existing processing_emails when number_records >= 3
-            rows = []
-            records = []
-            if number_records >= 3:
-                cursor.execute(
-                    "SELECT email, pass FROM processing_emails "
-                    "WHERE server_ip = %s AND bot_type = %s LIMIT %s",
-                    (SERVER_IP, BOT_TYPE, number_records),
-                )
-                rows = cursor.fetchall()
-                if rows:
-                    records = [
-                        {"email": email, "pass": password} for email, password in rows
-                    ]
-                    print(f"Found {len(records)} existing processing email(s)")
-            else:
-                # Skipping resuming processing_emails when requesting fewer than 3 records
-                print(
-                    f"Skipping resuming processing_emails because number_records={number_records} < 3"
-                )
-
-            # If no existing records (or skipped), claim the requested number of new records.
-            remaining_records = number_records - len(records)
-            if remaining_records <= 0 and records:
-                conn.close()
-                return True, records
-
+            # First, check if there's an existing record in processing_emails for this server and bot type
             cursor.execute(
-                "SELECT email, pass FROM input_emails LIMIT %s", (remaining_records,)
+                "SELECT email, pass FROM processing_emails WHERE server_ip = %s AND bot_type = %s LIMIT 1",
+                (SERVER_IP, BOT_TYPE),
             )
-            rows = cursor.fetchall()
-            if not rows:
+            row = cursor.fetchone()
+            if row:
                 conn.close()
-                return (True, records) if records else (False, [])
+                email, password = row
+                print(f"Found existing processing email: {email}")
+                return True, {"email": email, "pass": password}
 
-            for email, password in rows:
-                cursor.execute(
-                    "INSERT INTO processing_emails (email, pass, server_ip, bot_type, date_time) VALUES (%s, %s,%s, %s, %s)",
-                    (email, password, SERVER_IP, BOT_TYPE, datetime.now()),
-                )
-                cursor.execute(
-                    "DELETE FROM input_emails WHERE email = %s AND pass = %s",
-                    (email, password),
-                )
-                records.append({"email": email, "pass": password})
-
+            # If no existing record, get a new one from input_emails
+            cursor.execute("SELECT email, pass FROM input_emails LIMIT 1")
+            row = cursor.fetchone()
+            if not row:
+                conn.close()
+                return False, {}
+            email, password = row
+            cursor.execute(
+                "INSERT INTO processing_emails (email, pass, server_ip, bot_type, date_time) VALUES (%s, %s,%s, %s, %s)",
+                (email, password, SERVER_IP, BOT_TYPE, datetime.now()),
+            )
+            cursor.execute(
+                "DELETE FROM input_emails WHERE email = %s AND pass = %s",
+                (email, password),
+            )
             conn.commit()
             conn.close()
-            return True, records
+            return True, {"email": email, "pass": password}
         except Exception as e:
             if conn is not None:
                 conn.close()
@@ -7236,7 +7209,7 @@ def get_rec_from_db(number_records=3):
             time.sleep(5)
 
     print("Unable to get input email after 3 retries. Most likely no emails")
-    return False, []
+    return False, {"email": "", "pass": ""}
 
 
 def get_processing_card():
@@ -7747,31 +7720,7 @@ def get_new_family_extractor_data():
     )
 
 
-def card_management():
-    try:
-        while True:
-            card_details_dict = get_processing_card()
-            if card_details_dict:
-                return_card_to_familybot_card_details(card_details_dict)
-            else:
-                break
-        if not get_next_card():
-            print(
-                "No available cards to use for Microsoft Premium. Check logs/card_usage.log and output_data/fully_used_cards.txt for more info."
-            )
-            os._exit(1)
-            return False
-        else:
-            print("Card found for Microsoft Premium.")
-            return True
-
-    except Exception as E:
-        print(f"Error checking available cards: {E}")
-        os._exit(1)
-        return False, "Error checking available cards for Microsoft Premium"
-
-
-def initialize(new_profile_data):
+def initialize_new_profile(new_profile_data):
     """
     Creating a new chrome profile.
 
@@ -7780,6 +7729,26 @@ def initialize(new_profile_data):
     try:
         _check_shutdown_requested()
         print("\n--------------------------------------\n")
+        try:
+            while True:
+                card_details_dict = get_processing_card()
+                if card_details_dict:
+                    return_card_to_familybot_card_details(card_details_dict)
+                else:
+                    break
+            if not get_next_card():
+                print(
+                    "No available cards to use for Microsoft Premium. Check logs/card_usage.log and output_data/fully_used_cards.txt for more info."
+                )
+                os._exit(1)
+                return False, "No available cards to use for Microsoft Premium"
+        except Exception as E:
+            print(f"Error checking available cards: {E}")
+            os._exit(1)
+            return False, "Error checking available cards for Microsoft Premium"
+
+        connect_new_random()
+        _check_shutdown_requested()
 
         email_address = new_profile_data.get("email").strip()
         password = new_profile_data.get("pass").strip()
@@ -7803,7 +7772,7 @@ def initialize(new_profile_data):
             except:
                 driver.quit()
                 retries += 1
-        _check_shutdown_requested()
+
         if not driver_success:
             print(f"{email_address}: Error initializing new browser driver")
             new_profile_logger(
@@ -7812,8 +7781,6 @@ def initialize(new_profile_data):
                 "Error initializing new browser driver. Network or proxy error",
             )
             return False, "Error initializing new browser driver instance"
-
-        _check_shutdown_requested()
         if not enter_email(driver=driver, email_address=email_address):
             print(f"{email_address}: Error entering email")
             new_profile_logger(email_address, "FAIL", "Error loading login page")
@@ -7846,7 +7813,6 @@ def initialize(new_profile_data):
             return False, "Error clicking next button after entering password"
         time.sleep(1)
 
-        _check_shutdown_requested()
         click_next_if_is_updating_terms_page(driver)
 
         recovery_email_page_popped_up = "NO"
@@ -7952,7 +7918,7 @@ def initialize(new_profile_data):
                         False,
                         "Verification code not sent to number. Waiting timed out",
                     )
-        _check_shutdown_requested()
+
         if is_protect_your_account_page(driver):
             recovery_email_page_popped_up = "YES"
 
@@ -8010,7 +7976,6 @@ def initialize(new_profile_data):
                     )
                     return False, "Error clicking next after entering recovery email"
 
-                _check_shutdown_requested()
                 status, code = wait_for_code(email_token)
                 time.sleep(3)
                 if not status:
@@ -8059,7 +8024,6 @@ def initialize(new_profile_data):
         cancel_setup_passkey(driver)
         click_stay_signed_in_button(driver)
 
-        _check_shutdown_requested()
         try:
             if enter_password(driver=driver, password=password):
                 print(f"{email_address}: Reloging in with password")
@@ -8082,16 +8046,7 @@ def initialize(new_profile_data):
             recovery_phone_number=recovery_phone_number,
             joined_microsoft_premium=joined_microsoft_premium,
         )
-        # synchronize with other initialize threads so all three proceed together after init
-        try:
-            print(
-                f"{email_address}: Waiting at initialize barrier for other threads..."
-            )
-            initialize_barrier.wait()
-        except threading.BrokenBarrierError:
-            pass
 
-        _check_shutdown_requested()
         if recovery_email_page_popped_up == "NO":
             driver.get(
                 "https://account.live.com/password/Change?mkt=en-US&refd=account.microsoft.com&refp=profile"
@@ -8221,9 +8176,7 @@ def initialize(new_profile_data):
             )
             return False, "Recovery not added. Protect your account page NOT displayed"
 
-        _check_shutdown_requested()
         status, error = change_acc_pass(driver, new_profile_data)
-        _check_shutdown_requested()
         if status:
             password = error
             update_accounts_data(email=email_address, password=error)
@@ -8231,9 +8184,8 @@ def initialize(new_profile_data):
 
         # return driver
 
-        _check_shutdown_requested()
         status, driver = change_account_country(driver, new_profile_data)
-        _check_shutdown_requested()
+
         if not status:
             new_profile_logger(
                 email_address,
@@ -8247,7 +8199,6 @@ def initialize(new_profile_data):
 
         if PREFERRED_SMS_COUNTRY in ["United States", "united states"]:
             print(f"{email_address}: Changing account language to english")
-            _check_shutdown_requested()
             status = change_account_language(driver, new_profile_data)
             if not status:
                 print(f"{email_address}: Error changing account language to english")
@@ -8257,33 +8208,44 @@ def initialize(new_profile_data):
                 )
 
         # return driver
-        try:
-            print(
-                f"{email_address}: Waiting at initialize barrier for other threads..."
-            )
-            initialize_barrier.wait()
-        except threading.BrokenBarrierError:
-            pass
 
-        _check_shutdown_requested()
-        status, error = get__premium(driver, new_profile_data)
-        _check_shutdown_requested()
-
+        status, error = get_microsoft_premium(driver, new_profile_data)
         if not status:
-            new_profile_logger(
-                email_address,
-                "FAIL",
-                f"Error getting microsoft premium: {error}",
+            print(
+                f"{email_address}: Error getting microsoft premium: {error}. Retrying ..."
             )
-            return True, f"Error getting microsoft premium: {error}"
+            try:
+                if not get_next_card():
+                    print(
+                        "No available cards to use for Microsoft Premium. Check logs/card_usage.log and output_data/fully_used_cards.txt for more info."
+                    )
+                    os._exit(1)
+                    return False, "No available cards to use for Microsoft Premium"
+            except Exception as E:
+                print(f"Error checking available cards: {E}")
+                os._exit(1)
+                return False, "Error checking available cards for Microsoft Premium"
+
+            status, error = get_microsoft_premium(driver, new_profile_data)
+            if not status:
+                new_profile_logger(
+                    email_address,
+                    "FAIL",
+                    f"Error getting microsoft premium: {error}",
+                )
+                return False, f"Error getting microsoft premium: {error}"
+            else:
+                new_profile_logger(
+                    email_address, "SUCCESS", f"SUCESSFULLY GOT MICROSOFT PREMIUM"
+                )
 
         else:
             new_profile_logger(
                 email_address, "SUCCESS", f"SUCESSFULLY GOT MICROSOFT PREMIUM"
             )
 
-        return True, "Success"
-        # return driver
+        # return True, "Success"
+        return driver
 
     except Exception as E:
         try:
@@ -8306,13 +8268,11 @@ def initialize(new_profile_data):
             pass
 
 
-def run_familybot(country=None):
+def run_familybot():
     """
     Creates threads and signs in simultaneously
     """
-    global PREFERRED_SMS_COUNTRY, SHUTDOWN_REQUESTED
-    if country:
-        PREFERRED_SMS_COUNTRY = str(country).lower()
+    global SHUTDOWN_REQUESTED
     SHUTDOWN_REQUESTED = False
     _start_shutdown_watcher()
 
@@ -8323,47 +8283,12 @@ def run_familybot(country=None):
         if SHUTDOWN_REQUESTED:
             return True
 
-        status, profiles = get_rec_from_db()
+        status, new_profile_data = get_new_profile_data()
         if status:
             if SHUTDOWN_REQUESTED:
                 return True
-            if not card_management():
-                return False
-
-            time.sleep(3)
-
-            connect_new_random()
-            time.sleep(3)
             try:
-                with ThreadPoolExecutor(max_workers=3) as executor:
-                    pending = {
-                        executor.submit(initialize, profile) for profile in profiles
-                    }
-
-                    while pending:
-                        completed, pending = wait(pending, return_when=FIRST_COMPLETED)
-                        for future in completed:
-                            try:
-                                result = future.result()
-                                initialize_succeeded = (
-                                    isinstance(result, tuple)
-                                    and bool(result)
-                                    and result[0] is True
-                                )
-                            except Exception as error:
-                                print(f"Initialize thread failed: {error}")
-                                initialize_succeeded = False
-
-                            if initialize_succeeded or SHUTDOWN_REQUESTED:
-                                continue
-
-                            replacement_status, replacement_profiles = get_rec_from_db(
-                                1
-                            )
-                            if replacement_status and replacement_profiles:
-                                pending.add(
-                                    executor.submit(initialize, replacement_profiles[0])
-                                )
+                initialize_new_profile(new_profile_data)
             except InterruptedError:
                 return True
             if SHUTDOWN_REQUESTED:
