@@ -191,11 +191,24 @@ def runner():
             print(
                 f"Signal received: {action} for country: {country}\n ============================================================================="
             )
-            return run_familybot(country)
+            run_familybot(country)
+            print(
+                f"Familybot finished for country: {country}\n ============================================================================="
+            )
+            print(
+                "\n\n============================================================================\nWaiting for a signal..."
+            )
+
         if status and action == "run_hotmailbot":
             print(
                 f"Signal received: {action} for country: {country}\n ============================================================================="
             )
-            return run_hotmailbot(country)
+            run_hotmailbot(country)
+            print(
+                f"Hotmailbot finished for country: {country}\n ============================================================================="
+            )
+            print(
+                "\n\n============================================================================\nWaiting for a signal..."
+            )
 
         time.sleep(random.uniform(40, 55))

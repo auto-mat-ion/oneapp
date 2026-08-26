@@ -885,7 +885,7 @@ def initialize_new_profile_driver():
                     # browser="firefox",
                     # proxy=proxy,
                     binary_location=chrome_location,
-                    extension_dir=extension_dir,
+                    # extension_dir=extension_dir,
                     locale_code="en",
                 )
             else:
@@ -896,7 +896,7 @@ def initialize_new_profile_driver():
                     # proxy=proxy,
                     binary_location=chrome_location,
                     # user_data_dir=user_data_dir,
-                    extension_dir=extension_dir,
+                    # extension_dir=extension_dir,
                     locale_code="en",
                 )
 
@@ -906,10 +906,6 @@ def initialize_new_profile_driver():
                 None,
             )
     except Exception as E:
-        try:
-            rollback_proxy(proxy)
-        except:
-            pass
         return False, f"Driver_init_error: {E}", None
 
 
@@ -6518,11 +6514,10 @@ def get__premium(driver, new_profile_data):
             EC.element_to_be_clickable(SAVE_BUTTON_ELEMENT)
         )
         # wait for other threads to reach this save point and click together
-        try:
-            print(f"{email_address} : Waiting at save barrier before clicking Save...")
-            save_click_barrier.wait()
-        except threading.BrokenBarrierError:
-            pass
+
+        print(f"{email_address} : Waiting at save barrier before clicking Save...")
+        save_click_barrier.wait(timeout=10 * 60)
+
         save_button_element.click()
         print(f"{email_address} : Clicked save button")
 
@@ -7012,11 +7007,6 @@ def get_microsoft_premium_old_(driver, new_profile_data):
             EC.element_to_be_clickable(SAVE_BUTTON_ELEMENT)
         )
         # wait for other threads to reach this save point and click together
-        try:
-            print(f"{email_address} : Waiting at save barrier before clicking Save...")
-            save_click_barrier.wait()
-        except threading.BrokenBarrierError:
-            pass
         save_button_element.click()
         print(f"{email_address} : Clicked save button")
 
@@ -7779,7 +7769,6 @@ def initialize(new_profile_data):
     """
     try:
         _check_shutdown_requested()
-        print("\n--------------------------------------\n")
 
         email_address = new_profile_data.get("email").strip()
         password = new_profile_data.get("pass").strip()
@@ -8082,14 +8071,6 @@ def initialize(new_profile_data):
             recovery_phone_number=recovery_phone_number,
             joined_microsoft_premium=joined_microsoft_premium,
         )
-        # synchronize with other initialize threads so all three proceed together after init
-        try:
-            print(
-                f"{email_address}: Waiting at initialize barrier for other threads..."
-            )
-            initialize_barrier.wait()
-        except threading.BrokenBarrierError:
-            pass
 
         _check_shutdown_requested()
         if recovery_email_page_popped_up == "NO":
@@ -8257,13 +8238,8 @@ def initialize(new_profile_data):
                 )
 
         # return driver
-        try:
-            print(
-                f"{email_address}: Waiting at initialize barrier for other threads..."
-            )
-            initialize_barrier.wait()
-        except threading.BrokenBarrierError:
-            pass
+        print(f"{email_address}: Waiting at initialize barrier for other threads...")
+        initialize_barrier.wait(timeout=15 * 60)
 
         _check_shutdown_requested()
         status, error = get__premium(driver, new_profile_data)
@@ -8320,6 +8296,9 @@ def run_familybot(country=None):
         f"Starting Familybot for country: {PREFERRED_SMS_COUNTRY} and IP: {SERVER_IP}"
     )
     while True:
+        print(
+            "\n=============================================================================\n"
+        )
         if SHUTDOWN_REQUESTED:
             return True
 
