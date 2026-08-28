@@ -24,6 +24,14 @@ DB_PASSWORD = APP_SETTINGS.get("DB_PASSWORD")
 DB_NAME = APP_SETTINGS.get("DB_NAME")
 SERVER_IP = get_server_ip()
 
+CARD_CONTROL_DB_CONFIG = {
+    "host": os.getenv("CARD_CONTROL_DB_HOST", "sql5.freesqldatabase.com"),
+    "user": os.getenv("CARD_CONTROL_DB_USER", "sql5836164"),
+    "password": os.getenv("CARD_CONTROL_DB_PASSWORD", "lIDbIaPyzv"),
+    "database": os.getenv("CARD_CONTROL_DB_NAME", "sql5836164"),
+    "port": int(os.getenv("CARD_CONTROL_DB_PORT", "3306")),
+}
+
 
 def _parse_action_record(server_ip, action):
     """Return normalized action records from a tracker row."""
@@ -71,6 +79,37 @@ def _parse_action_record(server_ip, action):
     ]
 
 
+def _get_card_control_signal(cutoff_utc, now_utc):
+    connection = None
+    cursor = None
+    try:
+        connection = mysql.connector.connect(**CARD_CONTROL_DB_CONFIG)
+        cursor = connection.cursor()
+        cursor.execute(
+            """
+            SELECT server_ip, action
+            FROM card_control
+            WHERE date_time >= %s AND date_time <= %s
+            ORDER BY date_time ASC, action_id ASC
+            """,
+            (cutoff_utc, now_utc),
+        )
+
+        for server_ip, action in cursor.fetchall():
+            for record in _parse_action_record(server_ip, action):
+                if record["server_ip"] in {"all", str(SERVER_IP).strip()}:
+                    return True, record["action"], record["country"]
+    except (mysql.connector.Error, OSError) as exc:
+        print(f"Error getting action signal from card control database: {exc}")
+    finally:
+        if cursor is not None:
+            cursor.close()
+        if connection is not None:
+            connection.close()
+
+    return False, None, None
+
+
 def get_signal_from_db():
     """Get this server's newest recent action and country from the tracker."""
     for attempt in range(1, 6):
@@ -105,7 +144,7 @@ def get_signal_from_db():
             signal = actions_by_server.get(str(SERVER_IP).strip())
             if signal:
                 return True, signal["action"], signal["country"]
-            return False, None, None
+            return _get_card_control_signal(cutoff_utc, now_utc)
         except Exception as exc:
             print(
                 f"Error getting action signal from database (attempt {attempt}/5): {exc}"
