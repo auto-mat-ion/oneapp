@@ -318,7 +318,10 @@ def _check_shutdown_requested():
 def _shutdown_signal_active():
     try:
         status, action, _ = get_signal_from_db()
-        return status and str(action or "").strip().lower() == "shutdown"
+        return status and str(action or "").strip().lower() in {
+            "shutdown",
+            "shutdown_all",
+        }
     except Exception:
         return False
 

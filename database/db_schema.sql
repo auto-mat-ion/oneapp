@@ -776,3 +776,12 @@ CREATE TABLE
     action VARCHAR(255) NULL,
     status VARCHAR(255) NULL
   ) ENGINE = InnoDB;
+
+CREATE TABLE
+  IF NOT EXISTS card_control (
+    action_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    server_ip VARCHAR(45) NULL,
+    date_time DATETIME NULL,
+    action VARCHAR(255) NULL,
+    status VARCHAR(255) NULL
+  ) ENGINE = InnoDB;
