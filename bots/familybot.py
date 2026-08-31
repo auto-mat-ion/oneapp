@@ -303,6 +303,7 @@ except:
 
 BOT_TYPE = "familybot"
 VPN_CONNECTION_STATUS = "none"
+CONCURRENT_WINDOWS = 3
 VPN_CONNECTION_WATCHDOG = None
 VPN_CONNECTION_WATCHDOG_STOP = threading.Event()
 SHUTDOWN_REQUESTED = False
@@ -424,7 +425,7 @@ def _watch_vpn_connection_status():
     """Monitor VPN connection status for up to 2 minutes."""
     global VPN_CONNECTION_STATUS, VPN_CONNECTION_WATCHDOG
 
-    deadline = time.time() + 120
+    deadline = time.time() + (7 * 120)
     while time.time() < deadline:
         if VPN_CONNECTION_WATCHDOG_STOP.is_set():
             VPN_CONNECTION_WATCHDOG = None
@@ -8286,14 +8287,16 @@ def initialize(new_profile_data):
             pass
 
 
-def run_familybot(country=None):
+def run_familybot(country=None, concurrent=3):
     """
     Creates threads and signs in simultaneously
     """
-    global PREFERRED_SMS_COUNTRY, SHUTDOWN_REQUESTED, CHANGE_COUNTRY
+    global PREFERRED_SMS_COUNTRY, SHUTDOWN_REQUESTED, CHANGE_COUNTRY, CONCURRENT_WINDOWS
     if country:
         PREFERRED_SMS_COUNTRY = str(country).lower()
         CHANGE_COUNTRY = str(country).lower()
+
+    CONCURRENT_WINDOWS = concurrent
     SHUTDOWN_REQUESTED = False
     _start_shutdown_watcher()
 
@@ -8307,7 +8310,7 @@ def run_familybot(country=None):
         if SHUTDOWN_REQUESTED:
             return True
 
-        status, profiles = get_rec_from_db()
+        status, profiles = get_rec_from_db(CONCURRENT_WINDOWS)
         if status:
             if SHUTDOWN_REQUESTED:
                 return True
@@ -8319,7 +8322,7 @@ def run_familybot(country=None):
             connect_new_random()
             time.sleep(3)
             try:
-                with ThreadPoolExecutor(max_workers=3) as executor:
+                with ThreadPoolExecutor(max_workers=CONCURRENT_WINDOWS) as executor:
                     pending = {
                         executor.submit(initialize, profile) for profile in profiles
                     }
@@ -8393,7 +8396,3 @@ def run_family_link_extractor():
         else:
             print("No unshared family acc in database...")
             break
-
-
-# dada = run_familybot("italy")
-# country = "italy"
