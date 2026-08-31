@@ -119,6 +119,7 @@ try:
 except:
     MAX_SIGNIN_THREADS = 5
 
+# Supported countries: netherlands, poland, poland2, sweden, united states, italy, and others from microsoft_country_codes.csv
 try:
     PREFERRED_SMS_COUNTRY = str(
         get_setting("PREFERRED_SMS_COUNTRY", "netherlands")

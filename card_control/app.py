@@ -13,7 +13,7 @@ DB_CONFIG = {
     "password": os.getenv("CARD_CONTROL_DB_PASSWORD", "lIDbIaPyzv"),
     "port": int(os.getenv("CARD_CONTROL_DB_PORT", "3306")),
 }
-COUNTRIES = ("poland", "poland2", "sweden")
+COUNTRIES = ("poland", "poland2", "sweden", "italy")
 
 
 def get_utc_datetime():

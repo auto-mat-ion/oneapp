@@ -256,6 +256,7 @@ try:
 except:
     MAX_SIGNIN_THREADS = 5
 
+# Supported countries: netherlands, poland, poland2, sweden, united states, italy, and others from microsoft_country_codes.csv
 try:
     PREFERRED_SMS_COUNTRY = str(
         get_setting("PREFERRED_SMS_COUNTRY", "netherlands")
@@ -6099,7 +6100,7 @@ def add_billing(driver, new_profile_data, card_details_dict):
         print(f"{email_address} : Entered city: {card_details_dict.get('city')}")
         time.sleep(0.5)
 
-        if PREFERRED_SMS_COUNTRY.lower() == "united states":
+        if PREFERRED_SMS_COUNTRY.lower() in ["united states", "italy"]:
             current_status = "entering state"
 
             state_element = WebDriverWait(driver, wait_time).until(
@@ -6173,6 +6174,8 @@ def get__premium(driver, new_profile_data):
             print(f"{email_address} : Error getting next card: {E}")
             return False, current_status
 
+        print(f"{email_address} : Using card: {card_details_dict.get('card_number')}")
+
         if PREFERRED_SMS_COUNTRY.lower() == "poland2":
             country_ = "poland"
 
@@ -6225,21 +6228,24 @@ def get__premium(driver, new_profile_data):
                 checkbox_element.click()
 
             except:
-                current_status = "clicking checkbox"
-                time.sleep(1)
-                CHECKBOX_ELEMENT = (
-                    By.CSS_SELECTOR,
-                    'i[data-icon-name="CheckMark"]',
-                )
-                checkbox_element = WebDriverWait(driver, wait_time).until(
-                    EC.presence_of_element_located(CHECKBOX_ELEMENT)
-                )
-                driver.execute_script(
-                    "arguments[0].scrollIntoView({ behavior: 'smooth', block: 'center' });",
-                    checkbox_element,
-                )
-                time.sleep(1)
-                checkbox_element.click()
+                try:
+                    current_status = "clicking checkbox"
+                    time.sleep(1)
+                    CHECKBOX_ELEMENT = (
+                        By.CSS_SELECTOR,
+                        'i[data-icon-name="CheckMark"]',
+                    )
+                    checkbox_element = WebDriverWait(driver, wait_time).until(
+                        EC.presence_of_element_located(CHECKBOX_ELEMENT)
+                    )
+                    driver.execute_script(
+                        "arguments[0].scrollIntoView({ behavior: 'smooth', block: 'center' });",
+                        checkbox_element,
+                    )
+                    time.sleep(1)
+                    checkbox_element.click()
+                except:
+                    pass
 
         time.sleep(1)
         # click next btn
@@ -6470,7 +6476,7 @@ def get__premium(driver, new_profile_data):
         print(f"{email_address} : Entered city: {card_details_dict.get('city')}")
         time.sleep(0.5)
         _check_shutdown_requested()
-        if PREFERRED_SMS_COUNTRY.lower() == "united states":
+        if PREFERRED_SMS_COUNTRY.lower() in ["united states", "italy"]:
             current_status = "entering state"
 
             state_element = WebDriverWait(driver, wait_time).until(
@@ -8278,22 +8284,16 @@ def initialize(new_profile_data):
             processed_email(new_profile_data_original)
         except:
             pass
-        try:
-            card_details_dict = get_processing_card()
-            if card_details_dict:
-                return_card_to_familybot_card_details(card_details_dict)
-        except Exception as E:
-            # print(f"Error returning card to familybot_card_details: {E}")
-            pass
 
 
 def run_familybot(country=None):
     """
     Creates threads and signs in simultaneously
     """
-    global PREFERRED_SMS_COUNTRY, SHUTDOWN_REQUESTED
+    global PREFERRED_SMS_COUNTRY, SHUTDOWN_REQUESTED, CHANGE_COUNTRY
     if country:
         PREFERRED_SMS_COUNTRY = str(country).lower()
+        CHANGE_COUNTRY = str(country).lower()
     SHUTDOWN_REQUESTED = False
     _start_shutdown_watcher()
 
@@ -8356,6 +8356,13 @@ def run_familybot(country=None):
             print("No input emails in database...")
             return True
 
+        try:
+            card_details_dict = get_processing_card()
+            if card_details_dict:
+                return_card_to_familybot_card_details(card_details_dict)
+        except Exception as E:
+            pass
+
 
 def run_familybot_share():
     """
@@ -8386,3 +8393,7 @@ def run_family_link_extractor():
         else:
             print("No unshared family acc in database...")
             break
+
+
+# dada = run_familybot("italy")
+# country = "italy"
