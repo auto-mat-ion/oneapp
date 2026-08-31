@@ -139,6 +139,7 @@ def get_fakey_data(driver, country="united states"):
             "sweden": "https://www.fakexy.com/fake-address-generator-se",
             "poland": "https://www.fakexy.com/fake-address-generator-pl",
             "norway": "https://www.fakexy.com/fake-address-generator-no",
+            "italy": "https://www.fakexy.com/fake-address-generator-it",
         }
 
         # url = "https://www.fakexy.com/fake-address-generator-se"
@@ -259,12 +260,13 @@ def get_fakey_data(driver, country="united states"):
         close_other_tabs(driver)
 
 
-AVAILABLE_COUNTRIES = ["united states", "sweden", "poland", "norway"]
+AVAILABLE_COUNTRIES = ["united states", "sweden", "poland", "norway", "italy"]
 COUNTRY_DISPLAY = {
     "united states": "United States",
     "sweden": "Sweden",
     "poland": "Poland",
     "norway": "Norway",
+    "italy": "Italy",
 }
 
 

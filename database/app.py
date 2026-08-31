@@ -3331,6 +3331,7 @@ def general_uploader():
         "Poland",
         "Sweden",
         "United Kingdom",
+        "Italy",
     ]
     if table_name == "familybot_card_details":
         country_options = [
@@ -3339,6 +3340,7 @@ def general_uploader():
             "Poland2",
             "Sweden",
             "United Kingdom",
+            "Italy",
         ]
 
     selected_country = None
@@ -3477,6 +3479,7 @@ def email_sender_uploader():
         "Poland",
         "Sweden",
         "United Kingdom",
+        "Italy",
     ]
 
     # Initialize session state keys at function start
@@ -6337,7 +6340,7 @@ def main():
                     if preset_action != "—" and preset_action != "shutdown":
                         preset_country = st.selectbox(
                             "Preset Country",
-                            ["—", "poland", "poland2", "sweden"],
+                            ["—", "poland", "poland2", "sweden", "italy"],
                             key="fhm_preset_country_sel",
                             label_visibility="collapsed",
                         )
