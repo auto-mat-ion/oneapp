@@ -32,7 +32,7 @@ from bots.family_and_hotmail_manager import get_signal_from_db
 
 lock = threading.Lock()
 # Number of parallel threads participating in barriers (must match ThreadPoolExecutor max_workers)
-CONCURRENT_WINDOWS = 3
+CONCURRENT_WINDOWS = 2
 # Barrier for waiting after initialize across the parallel threads
 initialize_barrier = threading.Barrier(CONCURRENT_WINDOWS)
 # Barrier used inside get__premium at the 'clicking save button' point
@@ -8954,12 +8954,24 @@ def run_familybot(country=None, concurrent=2):
     """
     Creates threads and signs in simultaneously
     """
-    global PREFERRED_SMS_COUNTRY, SHUTDOWN_REQUESTED, CHANGE_COUNTRY, CONCURRENT_WINDOWS
+    global \
+        PREFERRED_SMS_COUNTRY, \
+        SHUTDOWN_REQUESTED, \
+        CHANGE_COUNTRY, \
+        CONCURRENT_WINDOWS, \
+        initialize_barrier, \
+        save_click_barrier, \
+        get_premium_start_barrier
     if country:
         PREFERRED_SMS_COUNTRY = str(country).lower()
         CHANGE_COUNTRY = str(country).lower()
 
     CONCURRENT_WINDOWS = concurrent
+    initialize_barrier = threading.Barrier(CONCURRENT_WINDOWS)
+    # Barrier used inside get__premium at the 'clicking save button' point
+    save_click_barrier = threading.Barrier(CONCURRENT_WINDOWS)
+    # Optional barrier if threads should synchronize at start of get__premium
+    get_premium_start_barrier = threading.Barrier(CONCURRENT_WINDOWS)
     SHUTDOWN_REQUESTED = False
     _start_shutdown_watcher()
 
