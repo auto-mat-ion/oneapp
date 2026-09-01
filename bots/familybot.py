@@ -7009,6 +7009,11 @@ def get__premium_italy(driver, new_profile_data):
             By.CSS_SELECTOR,
             'button[aria-label="Subscribe"]',
         )
+
+        print(
+            f"{email_address} : Waiting each other to enter card details at the same time..."
+        )
+        save_click_barrier.wait(timeout=10 * 60)
         # ENTERING CARD DETAILS
         current_status = "entering card number"
         card_number_element = WebDriverWait(driver, wait_time).until(
@@ -7280,8 +7285,6 @@ def get__premium_italy(driver, new_profile_data):
             except:
                 pass
 
-        # return True
-
         current_status = "checking if card is authorized"
         _check_shutdown_requested()
         print(f"{email_address} : Waiting 5 minutes for card authorization...")
@@ -7386,19 +7389,11 @@ def get__premium_italy(driver, new_profile_data):
         except:
             pass
         return False, f"Error occurred: {E} at step: {current_status}"
-    # finally:
-    #     try:
-    #         if current_status != "checking if card is declined":
-    #             return_card_to_familybot_card_details(card_details_dict)
-    #     except Exception as E:
-    #         print(f"Error returning card to familybot_card_details: {E}")
 
 
 def get_microsoft_premium_old_(driver, new_profile_data):
     try:
         email_address = new_profile_data.get("email")
-        # password = new_profile_data.get("pass")
-        # recovery_email = new_profile_data.get("recovery_email")
 
         current_status = "getting card details"
         try:
@@ -8916,7 +8911,7 @@ def initialize(new_profile_data):
         print(f"{email_address}: Waiting at initialize barrier for other threads...")
         initialize_barrier.wait(timeout=15 * 60)
 
-        return driver, new_profile_data
+        # return driver, new_profile_data
 
         _check_shutdown_requested()
         if PREFERRED_SMS_COUNTRY in ["italy", "Italy"]:
