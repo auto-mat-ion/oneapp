@@ -8950,7 +8950,7 @@ def initialize(new_profile_data):
             pass
 
 
-def run_familybot(country=None, concurrent=3):
+def run_familybot(country=None, concurrent=2):
     """
     Creates threads and signs in simultaneously
     """
