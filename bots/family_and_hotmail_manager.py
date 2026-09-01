@@ -230,7 +230,7 @@ def runner():
             print(
                 f"Signal received: {action} for country: {country}\n ============================================================================="
             )
-            run_familybot(country)
+            run_familybot(country, 2)
             print(
                 f"Familybot finished for country: {country}\n ============================================================================="
             )
