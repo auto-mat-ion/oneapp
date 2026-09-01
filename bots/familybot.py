@@ -32,7 +32,7 @@ from bots.family_and_hotmail_manager import get_signal_from_db
 
 lock = threading.Lock()
 # Number of parallel threads participating in barriers (must match ThreadPoolExecutor max_workers)
-CONCURRENT_WINDOWS = 2
+CONCURRENT_WINDOWS = 3
 # Barrier for waiting after initialize across the parallel threads
 initialize_barrier = threading.Barrier(CONCURRENT_WINDOWS)
 # Barrier used inside get__premium at the 'clicking save button' point
@@ -303,7 +303,7 @@ except:
 
 BOT_TYPE = "familybot"
 VPN_CONNECTION_STATUS = "none"
-CONCURRENT_WINDOWS = 2
+# CONCURRENT_WINDOWS = 2
 VPN_CONNECTION_WATCHDOG = None
 VPN_CONNECTION_WATCHDOG_STOP = threading.Event()
 SHUTDOWN_REQUESTED = False
@@ -5877,6 +5877,84 @@ def affirm_congrats_card_added(driver):
         return False
 
 
+def affirm_congrats_card_added_italy(driver):
+    try:
+        time_in_sec = 200
+        while time_in_sec > 0:
+            try:
+                AFFIRM_CONGRATS_ELEMENT = (
+                    By.CSS_SELECTOR,
+                    'h2[role="presentation"]',
+                )
+
+                START_BTN_ELEMENT = (
+                    By.CSS_SELECTOR,
+                    'button[id*="primaryButton"]',
+                )
+
+                CONTINUE_BTN_ELEMENT = (
+                    By.CSS_SELECTOR,
+                    'div[data-testid="ModalContent"] >div button',
+                )
+
+                affirm_congrats_element = WebDriverWait(driver, 1).until(
+                    EC.visibility_of_element_located(AFFIRM_CONGRATS_ELEMENT)
+                )
+
+                if (
+                    "grazie per esserti abbonato a microsoft 365"
+                    in affirm_congrats_element.text.lower()
+                ):
+                    time.sleep(2)
+                    try:
+                        start_btn_element = WebDriverWait(driver, 1).until(
+                            EC.visibility_of_element_located(START_BTN_ELEMENT)
+                        )
+
+                        start_btn_element.click()
+                    except:
+                        pass
+                    try:
+                        continue_btn_element = WebDriverWait(driver, 1).until(
+                            EC.visibility_of_element_located(CONTINUE_BTN_ELEMENT)
+                        )
+
+                        continue_btn_element.click()
+                    except:
+                        pass
+
+                    return True
+
+            except:
+                try:
+                    AFFIRM_CONGRATS_ELEMENT = (
+                        By.CSS_SELECTOR,
+                        'span[class*="errorText"]',
+                    )
+
+                    affirm_congrats_element = WebDriverWait(driver, 1).until(
+                        EC.visibility_of_element_located(AFFIRM_CONGRATS_ELEMENT)
+                    )
+
+                    if (
+                        "there is an issue with your payment method"
+                        in affirm_congrats_element.text.lower()
+                    ):
+                        time.sleep(2)
+                        return False
+
+                except:
+                    pass
+
+            time.sleep(1)
+            time_in_sec -= 1
+
+        return False
+
+    except:
+        return False
+
+
 def store_extracted_link(new_profile_data, link, card_details_dict):
     try:
         email = new_profile_data.get("email")
@@ -6756,7 +6834,9 @@ def get__premium_italy(driver, new_profile_data):
             country_ = "poland"
 
         driver.get("https://www.microsoft.com/it-it/microsoft-365/try")
-        time.sleep(1)
+        time.sleep(3)
+        driver.refresh()
+        time.sleep(3)
 
         current_status = "clicking premium element"
         PREMIUM_ELEMENT = (
@@ -7200,10 +7280,12 @@ def get__premium_italy(driver, new_profile_data):
             except:
                 pass
 
+        # return True
+
         current_status = "checking if card is authorized"
         _check_shutdown_requested()
         print(f"{email_address} : Waiting 5 minutes for card authorization...")
-        if not affirm_congrats_card_added(driver):
+        if not affirm_congrats_card_added_italy(driver):
             print(
                 f"{email_address} : Card not authorized or payment method issue error"
             )
@@ -7212,24 +7294,26 @@ def get__premium_italy(driver, new_profile_data):
             log_card_usage(card_details_dict)
 
         time.sleep(2)
+        driver.get("https://account.microsoft.com/services/microsoft365/details")
 
-        try:
-            current_status = "clicking start sharing button"
-            START_SHARING_ELEMENT = (
-                By.CSS_SELECTOR,
-                'button[type="button"]',
-            )
-            name_on_card_elements = WebDriverWait(driver, wait_time).until(
-                EC.presence_of_all_elements_located(START_SHARING_ELEMENT)
-            )
+        # try:
+        #     current_status = "clicking start sharing button"
+        #     START_SHARING_ELEMENT = (
+        #         By.CSS_SELECTOR,
+        #         'button[type="button"]',
+        #     )
+        #     name_on_card_elements = WebDriverWait(driver, wait_time).until(
+        #         EC.presence_of_all_elements_located(START_SHARING_ELEMENT)
+        #     )
 
-            [i for i in name_on_card_elements if i.text.lower() == "start sharing"][
-                0
-            ].click()
-            print(f"{email_address} : Clicked start sharing button")
-        except:
-            print(f"{email_address} : Start sharing button not found")
-            return False, "error clicking start sharing button"
+        #     [i for i in name_on_card_elements if i.text.lower() == "start sharing"][
+        #         0
+        #     ].click()
+        #     print(f"{email_address} : Clicked start sharing button")
+        # except:
+        #     pass
+        #     print(f"{email_address} : Start sharing button not found")
+        # return False, "error clicking start sharing button"?
 
         time.sleep(2)
         try:
@@ -7260,6 +7344,7 @@ def get__premium_italy(driver, new_profile_data):
 
             share_btn_element.click()
             print(f"{email_address} : Clicked share button")
+
             time.sleep(2)
             current_status = "clicking copy link button"
             copy_btn_element = WebDriverWait(driver, wait_time).until(
@@ -7301,12 +7386,12 @@ def get__premium_italy(driver, new_profile_data):
         except:
             pass
         return False, f"Error occurred: {E} at step: {current_status}"
-    finally:
-        try:
-            if current_status != "checking if card is declined":
-                return_card_to_familybot_card_details(card_details_dict)
-        except Exception as E:
-            print(f"Error returning card to familybot_card_details: {E}")
+    # finally:
+    #     try:
+    #         if current_status != "checking if card is declined":
+    #             return_card_to_familybot_card_details(card_details_dict)
+    #     except Exception as E:
+    #         print(f"Error returning card to familybot_card_details: {E}")
 
 
 def get_microsoft_premium_old_(driver, new_profile_data):
@@ -8831,8 +8916,10 @@ def initialize(new_profile_data):
         print(f"{email_address}: Waiting at initialize barrier for other threads...")
         initialize_barrier.wait(timeout=15 * 60)
 
+        return driver, new_profile_data
+
         _check_shutdown_requested()
-        if PREFFERED_SMS_COUNTRY in ["italy", "Italy"]:
+        if PREFERRED_SMS_COUNTRY in ["italy", "Italy"]:
             status, error = get__premium_italy(driver, new_profile_data)
         else:
             status, error = get__premium(driver, new_profile_data)
@@ -8862,13 +8949,13 @@ def initialize(new_profile_data):
         return False, f"Undocumented_error: {E}"
     finally:
         try:
-            driver.quit()
+            # driver.quit()
             processed_email(new_profile_data_original)
         except:
             pass
 
 
-def run_familybot(country=None, concurrent=2):
+def run_familybot(country=None, concurrent=3):
     """
     Creates threads and signs in simultaneously
     """
@@ -8980,3 +9067,15 @@ def run_family_link_extractor():
 
 
 # run_familybot(country=None, concurrent=1)
+
+
+# card_management()
+# connect_new_random()
+# status, profiles = get_rec_from_db(CONCURRENT_WINDOWS)
+# new_p = profiles[1]
+# res = initialize(new_p)
+
+# driver = res[0]
+# npd = res[1]
+
+# rsrs = get__premium_italy(driver, new_p)
