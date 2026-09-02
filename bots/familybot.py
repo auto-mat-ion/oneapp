@@ -32,7 +32,7 @@ from bots.family_and_hotmail_manager import get_signal_from_db
 
 lock = threading.Lock()
 # Number of parallel threads participating in barriers (must match ThreadPoolExecutor max_workers)
-CONCURRENT_WINDOWS = 2
+CONCURRENT_WINDOWS = 1
 # Barrier for waiting after initialize across the parallel threads
 initialize_barrier = threading.Barrier(CONCURRENT_WINDOWS)
 # Barrier used inside get__premium at the 'clicking save button' point
@@ -4268,7 +4268,16 @@ def email_login_limit_reached(driver):
             return False
 
     except:
-        return False
+        try:
+            INPUT_ELEMENT = (By.CSS_SELECTOR, 'input[id="codeEntry-0"]')
+
+            input_element = WebDriverWait(driver, wait_time).until(
+                EC.visibility_of_element_located(INPUT_ELEMENT)
+            )
+
+            return False
+        except:
+            return True
 
 
 def re_login_existing_acc(driver, new_profile_data):
@@ -9656,7 +9665,7 @@ def initialize(new_profile_data):
             pass
 
 
-def run_familybot(country=None, concurrent=2):
+def run_familybot(country=None, concurrent=1):
     """
     Creates threads and signs in simultaneously
     """
@@ -9777,21 +9786,3 @@ def run_family_link_extractor():
         else:
             print("No unshared family acc in database...")
             break
-
-
-# run_familybot(country=None, concurrent=1)
-
-
-# card_management()
-# connect_new_random()
-# status, profiles = get_rec_from_db(CONCURRENT_WINDOWS)
-# new_p = profiles[0]
-# res = initialize(new_p)
-
-# driver = res[0]
-# new_profile_data = res[1]
-
-# rsrs = get__premium_italy(driver, new_p)
-
-# def use_password_banner():
-#      h1[data-testid="title"] -> You've reached your limit with this sign-in method
