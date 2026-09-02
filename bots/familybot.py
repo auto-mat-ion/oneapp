@@ -4285,11 +4285,10 @@ def re_login_existing_acc(driver, new_profile_data):
                 status, code = wait_for_code_by_recovery_mail(recovery)
                 if not status:
                     print("Code not sent to recovery email!")
-
                     return False
                 enter_code_and_click_next_after_pass_change(driver, code)
             click_stay_signed_in_button(driver)
-        return False
+        return True
     except:
         return False
 
@@ -7518,7 +7517,7 @@ def get__premium_italy(driver, new_profile_data):
                 if PREFERRED_SMS_COUNTRY.lower() == "italy":
                     driver.get("https://www.microsoft.com/it-it/microsoft-365/try")
                     time.sleep(3)
-                    driver.refresh()
+                    # driver.refresh()
                 elif PREFERRED_SMS_COUNTRY.lower() in ["poland2", "poland"]:
                     driver.get("https://www.microsoft.com/pl-pl/microsoft-365/try")
 
