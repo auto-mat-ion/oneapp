@@ -4775,6 +4775,7 @@ def login_on_country_page(driver, new_profile_data):
 
 def change_account_country(driver, new_profile_data):
     try:
+        driver__retries = 0
         retries = 0
         num_of_retries = 7
         try:
@@ -4782,7 +4783,7 @@ def change_account_country(driver, new_profile_data):
         except:
             pass
         driver_success = False
-        while (retries < 3) and (not driver_success):
+        while (driver__retries < 3) and (not driver_success):
             try:
                 status, driverdata, error = initialize_new_profile_driver()
                 if status:
@@ -4796,8 +4797,8 @@ def change_account_country(driver, new_profile_data):
                     driver_success = True
             except:
                 driver.quit()
-                retries += 1
-        retries = 0
+                driver__retries += 1
+        driver__retries = 0
 
         _check_shutdown_requested()
 
@@ -4881,7 +4882,8 @@ def change_account_country(driver, new_profile_data):
                 except:
                     pass
                 driver_success = False
-                while (retries < 3) and (not driver_success):
+                driver__retries = 0
+                while (driver__retries < 3) and (not driver_success):
                     try:
                         status, driverdata, error = initialize_new_profile_driver()
                         if status:
@@ -4895,8 +4897,8 @@ def change_account_country(driver, new_profile_data):
                             driver_success = True
                     except:
                         driver.quit()
-                        retries += 1
-                retries = 0
+                        driver__retries += 1
+                driver__retries = 0
 
                 print(
                     f"{email} : Attempting retry {retries}/{num_of_retries} for changing country"
