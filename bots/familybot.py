@@ -4729,7 +4729,10 @@ def change_account_country(driver, new_profile_data):
     try:
         retries = 0
         num_of_retries = 7
-        driver.quit()
+        try:
+            driver.quit()
+        except:
+            pass
         driver_success = False
         while (retries < 3) and (not driver_success):
             try:
@@ -4746,7 +4749,10 @@ def change_account_country(driver, new_profile_data):
             except:
                 driver.quit()
                 retries += 1
+        retries = 0
+
         _check_shutdown_requested()
+
         while retries < num_of_retries:
             try:
                 _check_shutdown_requested()
@@ -4822,7 +4828,10 @@ def change_account_country(driver, new_profile_data):
 
             except Exception as E:
                 retries += 1
-                driver.quit()
+                try:
+                    driver.quit()
+                except:
+                    pass
                 driver_success = False
                 while (retries < 3) and (not driver_success):
                     try:
@@ -4839,6 +4848,8 @@ def change_account_country(driver, new_profile_data):
                     except:
                         driver.quit()
                         retries += 1
+                retries = 0
+
                 print(
                     f"{email} : Attempting retry {retries}/{num_of_retries} for changing country"
                 )
@@ -6809,7 +6820,7 @@ def get__premium(driver, new_profile_data):
             print(f"Error returning card to familybot_card_details: {E}")
 
 
-def get__premium_italy(driver, new_profile_data):
+def get__premium_italy_1(driver, new_profile_data):
     try:
         email_address = new_profile_data.get("email")
         # password = new_profile_data.get("pass")
@@ -7317,6 +7328,635 @@ def get__premium_italy(driver, new_profile_data):
         #     pass
         #     print(f"{email_address} : Start sharing button not found")
         # return False, "error clicking start sharing button"?
+
+        time.sleep(2)
+        try:
+            current_status = "clicking share button"
+            SHARE_ELEMENT = (
+                By.CSS_SELECTOR,
+                'button[aria-label="Share subscription"]',
+            )
+
+            COPY_BUTTON_ELEMENT = (
+                By.CSS_SELECTOR,
+                'button[aria-label="Copy link"]',
+            )
+
+            LINK_INPUT_ELEMENT = (
+                By.CSS_SELECTOR,
+                'input[aria-label="Sharing link"]',
+            )
+
+            share_btn_element = WebDriverWait(driver, wait_time).until(
+                EC.visibility_of_element_located(SHARE_ELEMENT)
+            )
+            # scroll into center view
+            driver.execute_script(
+                "arguments[0].scrollIntoView({block: 'center'});", share_btn_element
+            )
+            time.sleep(1)
+
+            share_btn_element.click()
+            print(f"{email_address} : Clicked share button")
+
+            time.sleep(2)
+            current_status = "clicking copy link button"
+            copy_btn_element = WebDriverWait(driver, wait_time).until(
+                EC.visibility_of_element_located(COPY_BUTTON_ELEMENT)
+            )
+            copy_btn_element.click()
+            print(f"{email_address} : Clicked copy link button")
+
+            time.sleep(5)
+            current_status = "retrieving sharing link"
+            link_input_element = WebDriverWait(driver, wait_time + 40).until(
+                EC.visibility_of_element_located(LINK_INPUT_ELEMENT)
+            )
+            link = link_input_element.get_attribute("value")
+            print(f"{email_address} : Retrieved sharing link: {link}")
+            store_extracted_link(new_profile_data, link, card_details_dict)
+            time.sleep(4)
+
+            print(f"{email_address} : Stored extracted link successfully")
+            return True, "Success"
+        except Exception as E:
+            print(f"{email_address} : Error copying sharing link: {E}")
+            return False, "Error copying sharing link"
+
+    except Exception as E:
+        print(
+            f"{email_address} : Exception error occurred at step: {current_status}:\nError: {E} "
+        )
+        # create screenshot directory if not exists
+        try:
+            os.makedirs("../utils/screenshots", exist_ok=True)
+            driver.save_screenshot(
+                f"../utils/screenshots/{email_address.split('@')[0]}_{current_status}_error.png".replace(
+                    " ", "_"
+                )
+                .replace(":", "")
+                .replace("@", "")
+            )
+        except:
+            pass
+        return False, f"Error occurred: {E} at step: {current_status}"
+
+
+def relogin_and_signin_premium(driver, new_profile_data):
+    try:
+        driver.quit()
+        driver_success = False
+        retries = 0
+        while (retries < 3) and (not driver_success):
+            try:
+                status, driverdata, error = initialize_new_profile_driver()
+                if status:
+                    driver, user_path, proxy = driverdata.values()
+
+                    time.sleep(0.5)
+                    driver.maximize_window()
+                    time.sleep(0.5)
+                    driver.get(MICROSOFT_LOGIN_URL)
+                    time.sleep(1)
+                    driver_success = True
+            except:
+                driver.quit()
+                retries += 1
+
+        _check_shutdown_requested()
+
+        try:
+            _check_shutdown_requested()
+            email = new_profile_data.get("email")
+            password = new_profile_data.get("pass")
+            recovery = new_profile_data.get("recovery_email")
+            bring_to_front(driver)
+
+            driver.get("https://account.microsoft.com/profile")
+
+            login_on_country_page(driver, new_profile_data)
+
+            return driver
+        except:
+            return driver
+    except:
+        return driver
+
+
+def get__premium_italy(driver, new_profile_data):
+    try:
+        email_address = new_profile_data.get("email")
+        current_status = "getting card details"
+        try:
+            card_details_dict = get_processing_card()
+            # get_next_card()
+            if not card_details_dict:
+                print(
+                    f"{email_address} : No available cards to use. Check logs/card_usage.log and output_data/fully_used_cards.txt for more info."
+                )
+                return False, "No available cards to use"
+        except Exception as E:
+            print(f"{email_address} : Error getting next card: {E}")
+            return False, current_status
+
+        print(f"{email_address} : Using card: {card_details_dict.get('card_number')}")
+
+        if PREFERRED_SMS_COUNTRY.lower() == "poland2":
+            country_ = "poland"
+
+        element_retries = 5
+        while element_retries > 0:
+            try:
+                if PREFERRED_SMS_COUNTRY.lower() == "italy":
+                    driver.get("https://www.microsoft.com/it-it/microsoft-365/try")
+                    time.sleep(3)
+                    driver.refresh()
+                elif PREFERRED_SMS_COUNTRY.lower() in ["poland2", "poland"]:
+                    driver.get("https://www.microsoft.com/pl-pl/microsoft-365/try")
+
+                time.sleep(3)
+
+                current_status = "clicking premium element"
+                PREMIUM_ELEMENT = (
+                    By.CSS_SELECTOR,
+                    'a[aria-label*="Microsoft 365 Family."]',
+                )
+
+                premium_element = WebDriverWait(driver, wait_time).until(
+                    EC.visibility_of_element_located(PREMIUM_ELEMENT)
+                )
+                premium_element.click()
+
+                time.sleep(1)
+
+                break
+            except:
+                if element_retries <= 2:
+                    driver = relogin_and_signin_premium(driver, new_profile_data)
+                else:
+                    driver.get("https://account.microsoft.com/profile")
+                time.sleep(10)
+                element_retries -= 1
+
+        _check_shutdown_requested()
+        if PREFERRED_SMS_COUNTRY.lower() != "united states":
+            try:
+                current_status = "clicking checkbox"
+                time.sleep(1)
+                CHECKBOX_ELEMENT = (
+                    By.CSS_SELECTOR,
+                    'i[data-icon-name="CheckMark"]',
+                )
+                checkbox_element = WebDriverWait(driver, wait_time).until(
+                    EC.presence_of_element_located(CHECKBOX_ELEMENT)
+                )
+                # scroll_into_view(driver, checkbox_element)
+                driver.execute_script(
+                    "arguments[0].scrollIntoView({ behavior: 'smooth', block: 'center' });",
+                    checkbox_element,
+                )
+                time.sleep(1)
+                checkbox_element.click()
+
+            except:
+                try:
+                    current_status = "clicking checkbox"
+                    time.sleep(1)
+                    CHECKBOX_ELEMENT = (
+                        By.CSS_SELECTOR,
+                        'i[data-icon-name="CheckMark"]',
+                    )
+                    checkbox_element = WebDriverWait(driver, wait_time).until(
+                        EC.presence_of_element_located(CHECKBOX_ELEMENT)
+                    )
+                    driver.execute_script(
+                        "arguments[0].scrollIntoView({ behavior: 'smooth', block: 'center' });",
+                        checkbox_element,
+                    )
+                    time.sleep(1)
+                    checkbox_element.click()
+                except:
+                    pass
+
+        time.sleep(1)
+        # click next btn
+        current_status = "clicking next button after checkbox"
+        if PREFERRED_SMS_COUNTRY.lower() == "italy":
+            NEXT_BTN_ELEMENT = (
+                By.CSS_SELECTOR,
+                'button[aria-label="Avanti"]',
+            )
+        elif PREFERRED_SMS_COUNTRY.lower() in ["poland2", "poland"]:
+            NEXT_BTN_ELEMENT = (
+                By.CSS_SELECTOR,
+                'button[aria-label="Next"]',
+            )
+
+        next_btn_element = WebDriverWait(driver, wait_time).until(
+            EC.element_to_be_clickable(NEXT_BTN_ELEMENT)
+        )
+        next_btn_element.click()
+        time.sleep(1)
+
+        # click card btn
+        current_status = "clicking card button"
+        if PREFERRED_SMS_COUNTRY.lower() == "italy":
+            CARD_BTN_ELEMENT = (
+                By.CSS_SELECTOR,
+                'button[aria-label="Carta di credito o di debito"]',
+            )
+        elif PREFERRED_SMS_COUNTRY.lower() in ["poland2", "poland"]:
+            CARD_BTN_ELEMENT = (
+                By.CSS_SELECTOR,
+                'button[aria-label="Credit card or debit card"]',
+            )
+        try:
+            card_btn_element = WebDriverWait(driver, wait_time).until(
+                EC.element_to_be_clickable(CARD_BTN_ELEMENT)
+            )
+        except:
+            try:
+                CARD_BTN_ELEMENT = (
+                    By.CSS_SELECTOR,
+                    'button[aria-label="Credit card or debit card"]',
+                )
+                card_btn_element = WebDriverWait(driver, wait_time).until(
+                    EC.element_to_be_clickable(CARD_BTN_ELEMENT)
+                )
+            except:
+                pass
+
+        card_btn_element.click()
+        time.sleep(1)
+
+        # INPUT ELEMENTS FOR CARD DETAILS
+        current_status = "entering card details"
+        CREDIT_CARD_NUMBER_ELEMENT = (
+            By.CSS_SELECTOR,
+            'input[id="accountToken"]',
+        )
+        NAME_ON_CARD_ELEMENT = (
+            By.CSS_SELECTOR,
+            'input[id="accountHolderName"]',
+        )
+
+        EXPIRY_MONTH_ELEMENT = (
+            By.CSS_SELECTOR,
+            'span[id="input_expiryMonth-option"]',
+        )
+
+        EXPIRY_YEAR_ELEMENT = (
+            By.CSS_SELECTOR,
+            'span[id="input_expiryYear-option"]',
+        )
+        CVV_ELEMENT = (
+            By.CSS_SELECTOR,
+            'input[id="cvvToken"]',
+        )
+
+        ADDRESS_LINE1_ELEMENT = (
+            By.CSS_SELECTOR,
+            'input[id="address_line1"]',
+        )
+        CITY_ELEMENT = (
+            By.CSS_SELECTOR,
+            'input[id="city"]',
+        )
+        STATE_CLICK_ELEMENT = (
+            By.CSS_SELECTOR,
+            'div[id="input_region"]',
+        )
+
+        STATE_OPTIONS_ELEMENT = (
+            By.CSS_SELECTOR,
+            'button[id*="input_region-list"]',
+        )
+
+        POSTAL_CODE_ELEMENT = (
+            By.CSS_SELECTOR,
+            'input[id="postal_code"]',
+        )
+
+        if PREFERRED_SMS_COUNTRY.lower() == "italy":
+            SAVE_BUTTON_ELEMENT = (
+                By.CSS_SELECTOR,
+                'button[aria-label="Salva"]',
+            )
+        elif PREFERRED_SMS_COUNTRY.lower() in ["poland2", "poland"]:
+            SAVE_BUTTON_ELEMENT = (
+                By.CSS_SELECTOR,
+                'button[aria-label="Save"]',
+            )
+
+        SCROLL_DOWN_BUTTON_ELEMENT = (
+            By.CSS_SELECTOR,
+            'button[aria-label="Scroll Down"]',
+        )
+
+        if PREFERRED_SMS_COUNTRY.lower() == "italy":
+            START_TRIAL_BUTTON_ELEMENT = (
+                By.CSS_SELECTOR,
+                'button[aria-label*="Avvia la versione di prova, paga in seguito"]',
+            )
+        elif PREFERRED_SMS_COUNTRY.lower() in ["poland2", "poland"]:
+            START_TRIAL_BUTTON_ELEMENT = (
+                By.CSS_SELECTOR,
+                'button[aria-label*="Start trial, pay later"]',
+            )
+
+        START_TRIAL2_BUTTON_ELEMENT = (
+            By.CSS_SELECTOR,
+            'button[aria-label="Subscribe"]',
+        )
+
+        print(
+            f"{email_address} : Waiting each other to enter card details at the same time..."
+        )
+        save_click_barrier.wait(timeout=10 * 60)
+        # ENTERING CARD DETAILS
+        current_status = "entering card number"
+        card_number_element = WebDriverWait(driver, wait_time).until(
+            EC.visibility_of_element_located(CREDIT_CARD_NUMBER_ELEMENT)
+        )
+        card_number_element.clear()
+        time.sleep(0.5)
+        card_number_element.send_keys(
+            card_details_dict.get("card_number").replace(" ", "")
+        )
+        print(
+            f"{email_address} : Entered card number: {card_details_dict.get('card_number')}"
+        )
+
+        time.sleep(0.5)
+        current_status = "entering name on card"
+        name_on_card_element = WebDriverWait(driver, wait_time).until(
+            EC.visibility_of_element_located(NAME_ON_CARD_ELEMENT)
+        )
+        name_on_card_element.clear()
+        time.sleep(1)
+        name_on_card_element.send_keys(card_details_dict.get("name_on_card"))
+        print(
+            f"{email_address} : Entered name on card: {card_details_dict.get('name_on_card')}"
+        )
+
+        time.sleep(1)
+
+        # use keyboard to press tab and enter
+
+        print(
+            f"{email_address} : Selecting expiry month: {card_details_dict.get('expiry_month')}"
+        )
+
+        # expiry_month_element = WebDriverWait(driver, wait_time).until(
+        #     EC.visibility_of_element_located(EXPIRY_MONTH_ELEMENT)
+        # )
+        # # scroll into view
+        # driver.execute_script(
+        #     "arguments[0].scrollIntoView({ behavior: 'smooth', block: 'center' });",
+        #     expiry_month_element,
+        # )
+        # time.sleep(0.5)
+        # expiry_month_element.click()
+        action = ActionChains(driver)
+        action.send_keys(Keys.TAB).perform()
+        action.send_keys(Keys.ENTER).perform()
+        time.sleep(1.3)
+
+        # button[data-index=f"{int(card_details_dict.get('expiry_month'))-1}"] element
+        current_status = "selecting expiry month"
+        print(f"{email_address} : Selecting expiry month option")
+        expiry_month_option_element = WebDriverWait(driver, wait_time).until(
+            EC.element_to_be_clickable(
+                (
+                    By.CSS_SELECTOR,
+                    f"""button[data-index="{int(card_details_dict.get("expiry_month")) - 1}"]""",
+                )
+            )
+        )
+        expiry_month_option_element.click()
+        print(
+            f"{email_address} : Selected expiry month: {card_details_dict.get('expiry_month')}"
+        )
+
+        time.sleep(1)
+        current_status = "selecting expiry year"
+        # expiry_year_element = WebDriverWait(driver, wait_time).until(
+        #     EC.visibility_of_element_located(EXPIRY_YEAR_ELEMENT)
+        # )
+        # # scroll into view
+        # driver.execute_script(
+        #     "arguments[0].scrollIntoView({ behavior: 'smooth', block: 'center' });",
+        #     expiry_year_element,
+        # )
+        # time.sleep(0.5)
+        # expiry_year_element.click()
+        action = ActionChains(driver)
+        action.send_keys(Keys.TAB).perform()
+        action.send_keys(Keys.ENTER).perform()
+        time.sleep(1)
+        expiry_year_option_element = WebDriverWait(driver, wait_time).until(
+            EC.element_to_be_clickable(
+                (
+                    By.CSS_SELECTOR,
+                    f"""button[data-index="{int(card_details_dict.get("expiry_year")) - 2026}"]""",
+                )
+            )
+        )
+        expiry_year_option_element.click()
+        print(
+            f"{email_address} : Selected expiry year: {card_details_dict.get('expiry_year')}"
+        )
+        time.sleep(0.5)
+        current_status = "entering cvv"
+        cvv_element = WebDriverWait(driver, wait_time).until(
+            EC.visibility_of_element_located(CVV_ELEMENT)
+        )
+        cvv_element.clear()
+        time.sleep(0.5)
+        cvv_element.send_keys(card_details_dict.get("cvv"))
+        print(f"{email_address} : Entered CVV: {card_details_dict.get('cvv')}")
+        time.sleep(1)
+
+        current_status = "entering address line 1"
+        address_line1_element = WebDriverWait(driver, wait_time).until(
+            EC.visibility_of_element_located(ADDRESS_LINE1_ELEMENT)
+        )
+        address_line1_element.clear()
+        time.sleep(0.5)
+        address_line1_element.send_keys(card_details_dict.get("address_line1"))
+        print(
+            f"{email_address} : Entered address line 1: {card_details_dict.get('address_line1')}"
+        )
+        time.sleep(0.5)
+        current_status = "entering city"
+
+        city_element = WebDriverWait(driver, wait_time).until(
+            EC.visibility_of_element_located(CITY_ELEMENT)
+        )
+        city_element.clear()
+        time.sleep(0.5)
+        city_element.send_keys(card_details_dict.get("city"))
+        print(f"{email_address} : Entered city: {card_details_dict.get('city')}")
+        time.sleep(0.5)
+        _check_shutdown_requested()
+        if PREFERRED_SMS_COUNTRY.lower() in ["united states", "italy"]:
+            current_status = "entering state"
+
+            state_element = WebDriverWait(driver, wait_time).until(
+                EC.visibility_of_element_located(STATE_CLICK_ELEMENT)
+            )
+
+            time.sleep(3)
+            state_element.click()
+            time.sleep(0.5)
+
+            state_options_element = WebDriverWait(driver, wait_time).until(
+                EC.visibility_of_all_elements_located(STATE_OPTIONS_ELEMENT)
+            )
+
+            city_element = [
+                i
+                for i in state_options_element
+                if i.text.lower() == card_details_dict.get("state", "").lower()
+            ][0]
+
+            # scroll into view
+            driver.execute_script(
+                "arguments[0].scrollIntoView({ behavior: 'smooth', block: 'center' });",
+                city_element,
+            )
+            time.sleep(1)
+            city_element.click()
+
+            print(f"{email_address} : Entered state: {card_details_dict.get('state')}")
+            time.sleep(0.5)
+
+        current_status = "entering postal code"
+        postal_code_element = WebDriverWait(driver, wait_time).until(
+            EC.visibility_of_element_located(POSTAL_CODE_ELEMENT)
+        )
+        postal_code_element.clear()
+        time.sleep(0.5)
+        postal_code_element.send_keys(card_details_dict.get("postal_code"))
+        print(
+            f"{email_address} : Entered postal code: {card_details_dict.get('postal_code')}"
+        )
+        time.sleep(0.5)
+
+        current_status = "clicking save button"
+        save_button_element = WebDriverWait(driver, wait_time).until(
+            EC.element_to_be_clickable(SAVE_BUTTON_ELEMENT)
+        )
+        # wait for other threads to reach this save point and click together
+
+        print(f"{email_address} : Waiting at save barrier before clicking Save...")
+        save_click_barrier.wait(timeout=10 * 60)
+
+        save_button_element.click()
+        print(f"{email_address} : Clicked save button")
+
+        current_status = "checking if card is declined"
+        _check_shutdown_requested()
+        if credit_card_is_declined(driver):
+            print(f"{email_address} : Card was declined")
+            # log_card_usage(card_details_dict)
+            mark_card_failed(card_details_dict)
+
+            return False, "Card was declined"
+        else:
+            print(f"{email_address} : Card not declined.")
+
+        current_status = "checking if card is added to payments"
+        if affirm_card_is_added(driver, card_details_dict.get("name_on_card")):
+            print(f"{email_address} : Affirm Card added to payments successfully.")
+        else:
+            print(f"{email_address} : Card not added to payments.")
+            return False, "Card not added to payments"
+
+        current_status = "Add billing address if prompted"
+        _check_shutdown_requested()
+        add_billing(driver, new_profile_data, card_details_dict)
+
+        time.sleep(2)
+        try:
+            current_status = "clicking scroll down button"
+            scroll_button_element = WebDriverWait(driver, wait_time).until(
+                EC.element_to_be_clickable(SCROLL_DOWN_BUTTON_ELEMENT)
+            )
+
+            scroll_button_element.click()
+            print(f"{email_address} : Clicked scroll down button")
+        except:
+            pass
+
+        # click checkbox
+        if PREFERRED_SMS_COUNTRY.lower() == "united states":
+            try:
+                current_status = "clicking checkbox"
+                time.sleep(1)
+                CHECKBOX_ELEMENT = (
+                    By.CSS_SELECTOR,
+                    'i[data-icon-name="CheckMark"]',
+                )
+                checkbox_element = WebDriverWait(driver, wait_time).until(
+                    EC.presence_of_element_located(CHECKBOX_ELEMENT)
+                )
+                # scroll_into_view(driver, checkbox_element)
+                driver.execute_script(
+                    "arguments[0].scrollIntoView({ behavior: 'smooth', block: 'center' });",
+                    checkbox_element,
+                )
+                time.sleep(1)
+                checkbox_element.click()
+
+            except:
+                pass
+
+        current_status = "clicking start trial button"
+        _check_shutdown_requested()
+        try:
+            time.sleep(4)
+            print(f"{email_address} : Clicking start trial button")
+
+            start_trial_button_element = WebDriverWait(driver, wait_time).until(
+                EC.element_to_be_clickable(START_TRIAL_BUTTON_ELEMENT)
+            )
+            time.sleep(0.5)
+            start_trial_button_element = WebDriverWait(driver, wait_time).until(
+                EC.element_to_be_clickable(START_TRIAL_BUTTON_ELEMENT)
+            )
+            start_trial_button_element.click()
+            print(f"{email_address} : Clicked start trial button")
+        except:
+            try:
+                time.sleep(4)
+                print(f"{email_address} : Clicking start trial button")
+
+                start_trial_button_element = WebDriverWait(driver, wait_time).until(
+                    EC.element_to_be_clickable(START_TRIAL2_BUTTON_ELEMENT)
+                )
+                time.sleep(0.5)
+                start_trial_button_element = WebDriverWait(driver, wait_time).until(
+                    EC.element_to_be_clickable(START_TRIAL2_BUTTON_ELEMENT)
+                )
+                start_trial_button_element.click()
+                print(f"{email_address} : Clicked start trial button")
+            except:
+                pass
+
+        current_status = "checking if card is authorized"
+        _check_shutdown_requested()
+        print(f"{email_address} : Waiting 5 minutes for card authorization...")
+        if not affirm_congrats_card_added_italy(driver):
+            print(
+                f"{email_address} : Card not authorized or payment method issue error"
+            )
+            return False, "card not authorized"
+        else:
+            log_card_usage(card_details_dict)
+
+        time.sleep(2)
+        driver.get("https://account.microsoft.com/services/microsoft365/details")
 
         time.sleep(2)
         try:
@@ -8914,7 +9554,14 @@ def initialize(new_profile_data):
         # return driver, new_profile_data
 
         _check_shutdown_requested()
-        if PREFERRED_SMS_COUNTRY in ["italy", "Italy"]:
+        if PREFERRED_SMS_COUNTRY in [
+            "italy",
+            "Italy",
+            "poland",
+            "Poland",
+            "poland2",
+            "Poland2",
+        ]:
             status, error = get__premium_italy(driver, new_profile_data)
         else:
             status, error = get__premium(driver, new_profile_data)
@@ -9079,10 +9726,13 @@ def run_family_link_extractor():
 # card_management()
 # connect_new_random()
 # status, profiles = get_rec_from_db(CONCURRENT_WINDOWS)
-# new_p = profiles[1]
+# new_p = profiles[0]
 # res = initialize(new_p)
 
 # driver = res[0]
-# npd = res[1]
+# new_profile_data = res[1]
 
 # rsrs = get__premium_italy(driver, new_p)
+
+# def use_password_banner():
+#      h1[data-testid="title"] -> You've reached your limit with this sign-in method

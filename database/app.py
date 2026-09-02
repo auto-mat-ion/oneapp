@@ -186,18 +186,43 @@ def get_db_connection():
         return None
 
 
+def retry_db_operation(operation_name, operation, retries=5, delay_seconds=1.0):
+    last_error = None
+    for attempt in range(1, retries + 1):
+        try:
+            return operation()
+        except Exception as exc:
+            last_error = exc
+            if attempt < retries:
+                time.sleep(delay_seconds)
+                continue
+    raise RuntimeError(
+        f"{operation_name} failed after {retries} attempts: {last_error}"
+    ) from last_error
+
+
 def get_alibaba_db_connection():
     if mysql is None:
         st.error(
             "mysql-connector-python is not installed. Install it with `pip install mysql-connector-python`."
         )
         return None
-    try:
-        config = get_db_config()
-        config["database"] = "alibaba"
+
+    config = get_db_config()
+    config["database"] = "alibaba"
+
+    def connect_attempt():
         return mysql.connector.connect(**config)
+
+    try:
+        return retry_db_operation(
+            "Alibaba database connection",
+            connect_attempt,
+            retries=5,
+            delay_seconds=1,
+        )
     except Exception as exc:
-        st.error(f"Unable to connect to Alibaba database: {exc}")
+        st.error(f"Unable to connect to Alibaba database after 5 attempts: {exc}")
         return None
 
 
@@ -384,73 +409,85 @@ def get_alibaba_available_scraped_data_df():
 
     cursor = None
     try:
-        cursor = conn.cursor(dictionary=True)
-        cursor.execute(
-            """
-            SELECT
-                c.company_name,
-                c.company_url,
-                COUNT(st.id) AS num_items,
-                SUM(
+
+        def fetch_rows():
+            nonlocal cursor
+            cursor = conn.cursor(dictionary=True)
+            cursor.execute(
+                """
+                SELECT
+                    c.company_name,
+                    c.company_url,
+                    COUNT(st.id) AS num_items,
+                    SUM(
+                        CASE
+                            WHEN st.scrape_status = 'completed' THEN 1
+                            ELSE 0
+                        END
+                    ) AS completed_items
+                FROM companies AS c
+                INNER JOIN scrape_tracking AS st ON st.company_url = c.company_url
+                WHERE COALESCE(LOWER(TRIM(c.downloaded)), 'false') = 'false'
+                GROUP BY c.id, c.company_name, c.company_url, c.date_time
+                HAVING SUM(
                     CASE
                         WHEN st.scrape_status = 'completed' THEN 1
                         ELSE 0
                     END
-                ) AS completed_items
-            FROM companies AS c
-            INNER JOIN scrape_tracking AS st ON st.company_url = c.company_url
-            WHERE COALESCE(LOWER(TRIM(c.downloaded)), 'false') = 'false'
-            GROUP BY c.id, c.company_name, c.company_url, c.date_time
-            HAVING SUM(
-                CASE
-                    WHEN st.scrape_status = 'completed' THEN 1
-                    ELSE 0
-                END
-            ) / COUNT(st.id) >= 1
-            ORDER BY c.date_time DESC, c.id DESC
-            """
-        )
-        rows = cursor.fetchall()
-        companies_df = pd.DataFrame(rows)
-        if companies_df.empty:
-            return companies_df
-
-        companies_df["num_items"] = companies_df["num_items"].astype(int)
-        companies_df["completed_items"] = (
-            companies_df["completed_items"].fillna(0).astype(int)
-        )
-        companies_df["completion_percentage"] = (
-            companies_df["completed_items"] / companies_df["num_items"] * 100
-        ).round(1)
-        companies_df["scraped"] = [
-            f"{completed}/{total} ({percentage:.1f}%)"
-            for completed, total, percentage in zip(
-                companies_df["completed_items"],
-                companies_df["num_items"],
-                companies_df["completion_percentage"],
+                ) / COUNT(st.id) >= 1
+                ORDER BY c.date_time DESC, c.id DESC
+                """
             )
-        ]
-        return companies_df[
-            [
-                "company_name",
-                "company_url",
-                "num_items",
-                "completed_items",
-                "completion_percentage",
-                "scraped",
+            rows = cursor.fetchall()
+            companies_df = pd.DataFrame(rows)
+            if companies_df.empty:
+                return companies_df
+
+            companies_df["num_items"] = companies_df["num_items"].astype(int)
+            companies_df["completed_items"] = (
+                companies_df["completed_items"].fillna(0).astype(int)
+            )
+            companies_df["completion_percentage"] = (
+                companies_df["completed_items"] / companies_df["num_items"] * 100
+            ).round(1)
+            companies_df["scraped"] = [
+                f"{completed}/{total} ({percentage:.1f}%)"
+                for completed, total, percentage in zip(
+                    companies_df["completed_items"],
+                    companies_df["num_items"],
+                    companies_df["completion_percentage"],
+                )
             ]
-        ].rename(
-            columns={
-                "company_name": "Company Name",
-                "company_url": "Company URL",
-                "num_items": "Total Items",
-                "completed_items": "Items Scraped",
-                "completion_percentage": "Completion Percentage",
-                "scraped": "Scraped",
-            }
+            return companies_df[
+                [
+                    "company_name",
+                    "company_url",
+                    "num_items",
+                    "completed_items",
+                    "completion_percentage",
+                    "scraped",
+                ]
+            ].rename(
+                columns={
+                    "company_name": "Company Name",
+                    "company_url": "Company URL",
+                    "num_items": "Total Items",
+                    "completed_items": "Items Scraped",
+                    "completion_percentage": "Completion Percentage",
+                    "scraped": "Scraped",
+                }
+            )
+
+        return retry_db_operation(
+            "Available Alibaba scraped data query",
+            fetch_rows,
+            retries=5,
+            delay_seconds=1,
         )
     except Exception as exc:
-        st.error(f"Unable to load available Alibaba scraped data: {exc}")
+        st.error(
+            f"Unable to load available Alibaba scraped data after 5 attempts: {exc}"
+        )
         return pd.DataFrame()
     finally:
         if cursor is not None:
@@ -576,100 +613,113 @@ def build_alibaba_available_scraped_data_zip(company_urls, progress_callback=Non
 
     cursor = None
     try:
-        cursor = conn.cursor(dictionary=True)
-        if not company_urls:
-            return None, "No companies meet the 95% completion criterion."
 
-        placeholders = ", ".join(["%s"] * len(company_urls))
-        cursor.execute(
-            f"""
-            SELECT st.company_url, c.company_name, st.item_name, st.scrape_result
-            FROM scrape_tracking AS st
-            INNER JOIN companies AS c ON c.company_url = st.company_url
-            WHERE st.company_url IN ({placeholders})
-              AND st.scrape_status = 'completed'
-            ORDER BY st.company_url, st.id
-            """,
-            tuple(company_urls),
-        )
-        rows = cursor.fetchall()
-        if not rows:
-            return None, "No completed items found for the selected companies."
+        def fetch_zip_data():
+            nonlocal cursor
+            cursor = conn.cursor(dictionary=True)
+            if not company_urls:
+                return None, "No companies meet the 95% completion criterion."
 
-        rows_by_company = {}
-        for row in rows:
-            rows_by_company.setdefault(row["company_url"], []).append(row)
-
-        archive_buffer = io.BytesIO()
-        with zipfile.ZipFile(
-            archive_buffer, "w", compression=zipfile.ZIP_DEFLATED
-        ) as archive:
-            used_company_names = set()
-            total_items = sum(
-                len(rows_by_company.get(company_url, []))
-                for company_url in company_urls
+            placeholders = ", ".join(["%s"] * len(company_urls))
+            cursor.execute(
+                f"""
+                SELECT st.company_url, c.company_name, st.item_name, st.scrape_result
+                FROM scrape_tracking AS st
+                INNER JOIN companies AS c ON c.company_url = st.company_url
+                WHERE st.company_url IN ({placeholders})
+                  AND st.scrape_status = 'completed'
+                ORDER BY st.company_url, st.id
+                """,
+                tuple(company_urls),
             )
-            processed_items = 0
-            if progress_callback is not None:
-                progress_callback(0, total_items)
+            rows = cursor.fetchall()
+            if not rows:
+                return None, "No completed items found for the selected companies."
 
-            for company_url in company_urls:
-                company_rows = rows_by_company.get(company_url, [])
-                if not company_rows:
-                    continue
+            rows_by_company = {}
+            for row in rows:
+                rows_by_company.setdefault(row["company_url"], []).append(row)
 
-                company_name = str(
-                    company_rows[0].get("company_name") or company_url
-                ).strip()
-                safe_company_name = (
-                    re.sub(r"[^A-Za-z0-9._ -]+", "_", company_name).strip() or "company"
+            archive_buffer = io.BytesIO()
+            with zipfile.ZipFile(
+                archive_buffer, "w", compression=zipfile.ZIP_DEFLATED
+            ) as archive:
+                used_company_names = set()
+                total_items = sum(
+                    len(rows_by_company.get(company_url, []))
+                    for company_url in company_urls
                 )
-                base_company_name = safe_company_name
-                suffix = 2
-                while safe_company_name.lower() in used_company_names:
-                    safe_company_name = f"{base_company_name}_{suffix}"
-                    suffix += 1
-                used_company_names.add(safe_company_name.lower())
+                processed_items = 0
+                if progress_callback is not None:
+                    progress_callback(0, total_items)
 
-                company_buffer = io.BytesIO()
-                used_item_names = set()
-                with zipfile.ZipFile(
-                    company_buffer, "w", compression=zipfile.ZIP_DEFLATED
-                ) as company_archive:
-                    for row in company_rows:
-                        item_name = str(row.get("item_name") or "item").strip()
-                        safe_item_name = (
-                            re.sub(r"[^A-Za-z0-9._ -]+", "_", item_name).strip()
-                            or "item"
-                        )
-                        base_item_name = safe_item_name
-                        suffix = 2
-                        while safe_item_name.lower() in used_item_names:
-                            safe_item_name = f"{base_item_name}_{suffix}"
-                            suffix += 1
-                        used_item_names.add(safe_item_name.lower())
+                for company_url in company_urls:
+                    company_rows = rows_by_company.get(company_url, [])
+                    if not company_rows:
+                        continue
 
-                        scrape_result = row.get("scrape_result")
-                        if isinstance(scrape_result, str):
-                            try:
-                                scrape_result = json.loads(scrape_result)
-                            except json.JSONDecodeError:
-                                pass
-                        company_archive.writestr(
-                            f"{safe_item_name}.json",
-                            json.dumps(scrape_result, ensure_ascii=False, indent=2),
-                        )
-                        processed_items += 1
-                        if progress_callback is not None:
-                            progress_callback(processed_items, total_items)
+                    company_name = str(
+                        company_rows[0].get("company_name") or company_url
+                    ).strip()
+                    safe_company_name = (
+                        re.sub(r"[^A-Za-z0-9._ -]+", "_", company_name).strip()
+                        or "company"
+                    )
+                    base_company_name = safe_company_name
+                    suffix = 2
+                    while safe_company_name.lower() in used_company_names:
+                        safe_company_name = f"{base_company_name}_{suffix}"
+                        suffix += 1
+                    used_company_names.add(safe_company_name.lower())
 
-                company_buffer.seek(0)
-                archive.writestr(f"{safe_company_name}.zip", company_buffer.getvalue())
+                    company_buffer = io.BytesIO()
+                    used_item_names = set()
+                    with zipfile.ZipFile(
+                        company_buffer, "w", compression=zipfile.ZIP_DEFLATED
+                    ) as company_archive:
+                        for row in company_rows:
+                            item_name = str(row.get("item_name") or "item").strip()
+                            safe_item_name = (
+                                re.sub(r"[^A-Za-z0-9._ -]+", "_", item_name).strip()
+                                or "item"
+                            )
+                            base_item_name = safe_item_name
+                            suffix = 2
+                            while safe_item_name.lower() in used_item_names:
+                                safe_item_name = f"{base_item_name}_{suffix}"
+                                suffix += 1
+                            used_item_names.add(safe_item_name.lower())
 
-        archive_buffer.seek(0)
-        return archive_buffer.getvalue(), "available_scraped_data.zip"
+                            scrape_result = row.get("scrape_result")
+                            if isinstance(scrape_result, str):
+                                try:
+                                    scrape_result = json.loads(scrape_result)
+                                except json.JSONDecodeError:
+                                    pass
+                            company_archive.writestr(
+                                f"{safe_item_name}.json",
+                                json.dumps(scrape_result, ensure_ascii=False, indent=2),
+                            )
+                            processed_items += 1
+                            if progress_callback is not None:
+                                progress_callback(processed_items, total_items)
+
+                    company_buffer.seek(0)
+                    archive.writestr(
+                        f"{safe_company_name}.zip", company_buffer.getvalue()
+                    )
+
+            archive_buffer.seek(0)
+            return archive_buffer.getvalue(), "available_scraped_data.zip"
+
+        return retry_db_operation(
+            "Alibaba available scraped data ZIP build",
+            fetch_zip_data,
+            retries=5,
+            delay_seconds=1,
+        )
     except Exception as exc:
-        return None, str(exc)
+        return None, f"Unable to prepare available scraped data after 5 attempts: {exc}"
     finally:
         if cursor is not None:
             cursor.close()
@@ -2149,6 +2199,18 @@ def parse_email_file(uploaded_file):
     return pd.DataFrame(data)
 
 
+def normalize_card_number(value):
+    if value is None or pd.isna(value):
+        return None
+
+    text = str(value)
+    text = text.translate({ord(ch): None for ch in " \t\r\n\u00a0\u200b\u2060"})
+    digits = re.sub(r"\D", "", text)
+    if not digits:
+        return None
+    return int(digits)
+
+
 def parse_card_file(uploaded_file):
     content = uploaded_file.read().decode("utf-8", errors="replace")
     rows = [row.strip() for row in content.splitlines() if row.strip()]
@@ -2156,10 +2218,13 @@ def parse_card_file(uploaded_file):
     for line in rows:
         parts = [part.strip() for part in line.split(",")]
         if len(parts) >= 3:
+            card_number = normalize_card_number(parts[0])
+            if card_number is None:
+                continue
             try:
                 data.append(
                     {
-                        "card_number": int(parts[0]),
+                        "card_number": card_number,
                         "expiry_month_year": parts[1],
                         "cvv": str(parts[2]),
                     }
@@ -3038,6 +3103,10 @@ def insert_into_db(
         return False, "No database connection"
     try:
         if table_name == "familybot_card_details":
+            if "card_number" in df.columns:
+                df = df.copy()
+                df["card_number"] = df["card_number"].map(normalize_card_number)
+                df = df.dropna(subset=["card_number"]).copy()
             success, enriched = enrich_familybot_card_details(df)
             if not success:
                 return False, enriched
@@ -3412,8 +3481,15 @@ def general_uploader():
             else:
                 df["country"] = selected_country
 
-        st.subheader("Preview top 10 files")
-        st.dataframe(df.head(10), width="stretch")
+        if table_name == "familybot_card_details":
+            preview_df = df.copy()
+            if "card_number" in preview_df.columns:
+                preview_df["card_number"] = preview_df["card_number"].astype(str)
+            st.subheader("Preview all card rows")
+            st.dataframe(preview_df, width="stretch")
+        else:
+            st.subheader("Preview top 10 files")
+            st.dataframe(df.head(10), width="stretch")
 
         valid, message = validate_dataframe(table_name, df)
         if not valid:
@@ -3428,10 +3504,15 @@ def general_uploader():
                 return
             df = enriched_df
             st.success("Enriched card details are ready.")
-            st.subheader("Preview top 10 enriched card rows")
-            st.dataframe(df.head(10), width="stretch")
+            st.subheader("Preview all enriched card rows")
+            preview_enriched_df = df.copy()
+            if "card_number" in preview_enriched_df.columns:
+                preview_enriched_df["card_number"] = preview_enriched_df[
+                    "card_number"
+                ].astype(str)
+            st.dataframe(preview_enriched_df, width="stretch")
             st.info(
-                "These rows include the assigned name_on_card, state, city, address_line1, and postal_code."
+                "These rows include the card number, assigned name_on_card, state, city, address_line1, and postal_code."
             )
         else:
             st.success(message)
