@@ -125,7 +125,7 @@
     "OUTLOOK_URL": "https://outlook.live.com/",
     "BITLY_SIGNUP_PAGE": "https://bitly.com/a/sign_up",
     "MAX_SIGNIN_THREADS": 1,
-    "PREFERRED_SMS_COUNTRY": "italy",
+    "PREFERRED_SMS_COUNTRY": "poland",
     "EMAIL_WAIT_TIME": 120,
     "CATCHA_WAIT_TIME": 300,
     "SAVE_COOKIES": false,
@@ -134,6 +134,7 @@
     "CACHE_PATH": "../cache_folder/msal_cache.bin",
     "CREDIT_CARD_INTERVAL_HRS": 48
   },
+
   "hotmailbot": {
     "HERO_SMS_API_KEY": "34b95f20cb1c18b178c53bAd5018fdb1",
     "EMAILS_TXT_FILE": "../input_data/emails.txt",
