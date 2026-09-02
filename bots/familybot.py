@@ -4247,6 +4247,23 @@ def change_acc_pass(driver, new_profile_data):
         return False, f"Exception during changing password: {str(e)}"
 
 
+def email_login_limit_reached(driver):
+    try:
+        LIMIT_ELEMENT = (By.CSS_SELECTOR, 'h1[data-testid="title"]')
+
+        password_input_elements = WebDriverWait(driver, wait_time).until(
+            EC.visibility_of_all_elements_located(LIMIT_ELEMENT)
+        )
+
+        if "limit with this sign-in method" in password_input_elements[0].text.lower():
+            return True
+        else:
+            return False
+
+    except:
+        return False
+
+
 def re_login_existing_acc(driver, new_profile_data):
     try:
         email = new_profile_data.get("email")
@@ -4259,11 +4276,35 @@ def re_login_existing_acc(driver, new_profile_data):
             click_send_code_to_recovery_email_button(driver)
             enter_recovery_email_2(driver, recovery)
             click_password_next_button(driver)
-            status, code = wait_for_code_by_recovery_mail(recovery)
-            if not status:
-                print("Code not sent to recovery email!")
-                return False
-            enter_code_and_click_next_after_pass_change(driver, code)
+            if email_login_limit_reached(driver):
+                print(f"{email} : Login limit reached. Using password.")
+                click_use_your_password_button(driver)
+                enter_password(driver=driver, password=password)
+                click_password_next_button(driver=driver)
+            else:
+                status, code = wait_for_code_by_recovery_mail(recovery)
+                if not status:
+                    print("Code not sent to recovery email!")
+
+                    return False
+                enter_code_and_click_next_after_pass_change(driver, code)
+            click_stay_signed_in_button(driver)
+        return False
+    except:
+        return False
+
+
+def re_login_existing_acc_use_password(driver, new_profile_data):
+    try:
+        email = new_profile_data.get("email")
+        password = new_profile_data.get("pass")
+        recovery = new_profile_data.get("recovery_email")
+
+        if click_existing_account_smtp(
+            driver, wait_time=2
+        ) or enter_email_and_click_next(driver, email):
+            enter_password(driver=driver, password=password)
+            click_password_next_button(driver=driver)
             click_stay_signed_in_button(driver)
         return False
     except:
@@ -5913,8 +5954,15 @@ def affirm_congrats_card_added_italy(driver):
                 )
 
                 if (
-                    "grazie per esserti abbonato a microsoft 365"
-                    in affirm_congrats_element.text.lower()
+                    (
+                        "grazie per esserti abbonato a microsoft 365"
+                        in affirm_congrats_element.text.lower()
+                    )
+                    or (
+                        "thank you for subscribing to microsoft 365"
+                        in affirm_congrats_element.text.lower()
+                    )
+                    or ("microsoft 365" in affirm_congrats_element.text.lower())
                 ):
                     time.sleep(2)
                     try:
@@ -8009,7 +8057,9 @@ def get__premium_italy(driver, new_profile_data):
             print(f"{email_address} : Stored extracted link successfully")
             return True, "Success"
         except Exception as E:
-            print(f"{email_address} : Error copying sharing link: {E}")
+            print(
+                f"{email_address} : Error copying sharing link or card not authorised: {E}"
+            )
             return False, "Error copying sharing link"
 
     except Exception as E:
