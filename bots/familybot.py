@@ -4251,11 +4251,18 @@ def email_login_limit_reached(driver):
     try:
         LIMIT_ELEMENT = (By.CSS_SELECTOR, 'h1[data-testid="title"]')
 
-        password_input_elements = WebDriverWait(driver, wait_time).until(
-            EC.visibility_of_all_elements_located(LIMIT_ELEMENT)
+        password_input_elements = WebDriverWait(driver, 15).until(
+            EC.visibility_of_element_located(LIMIT_ELEMENT)
         )
 
-        if "limit with this sign-in method" in password_input_elements[0].text.lower():
+        time.sleep(5)
+        password_input_elements = WebDriverWait(driver, 5).until(
+            EC.visibility_of_element_located(LIMIT_ELEMENT)
+        )
+
+        if password_input_elements.text.lower().startswith(
+            "you've reached your limit with this sign-in method"
+        ):
             return True
         else:
             return False
@@ -4278,6 +4285,7 @@ def re_login_existing_acc(driver, new_profile_data):
             click_password_next_button(driver)
             if email_login_limit_reached(driver):
                 print(f"{email} : Login limit reached. Using password.")
+                time.sleep(3)
                 click_use_your_password_button(driver)
                 enter_password(driver=driver, password=password)
                 click_password_next_button(driver=driver)
