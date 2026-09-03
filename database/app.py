@@ -1155,7 +1155,7 @@ def get_server_uptime_status_df():
             if pd.isna(seconds):
                 return "offline"
             if seconds < (60 * 2):
-                return "online"
+                return "good"
             if seconds <= (60 * 3):
                 return "mid"
             return "offline"
@@ -1178,7 +1178,7 @@ def get_server_uptime_status_df():
                 return (2, number, name)
             return (3, 10**9, name)
 
-        status_order = {"online": 0, "mid": 1, "offline": 2}
+        status_order = {"good": 0, "mid": 1, "offline": 2}
         df["status_rank"] = df["status"].map(status_order)
         df["server_sort_key"] = df["server_type"].apply(get_server_sort_key)
         df = df.sort_values(
