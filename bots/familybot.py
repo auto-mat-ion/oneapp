@@ -9149,7 +9149,6 @@ def card_management():
             print(
                 "No available cards to use for Microsoft Premium. Check logs/card_usage.log and output_data/fully_used_cards.txt for more info."
             )
-            os._exit(1)
             return False
         else:
             print("Card found for Microsoft Premium.")
@@ -9157,8 +9156,7 @@ def card_management():
 
     except Exception as E:
         print(f"Error checking available cards: {E}")
-        os._exit(1)
-        return False, "Error checking available cards for Microsoft Premium"
+        return False
 
 
 def initialize(new_profile_data):
