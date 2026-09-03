@@ -326,6 +326,7 @@ def _check_pause_requested():
     print("pause initiated!")
     while True:
         time.sleep(random.uniform(20, 30))
+        keep_alive(current_action="paused")
         action = get_signal_from_db()[1]
         if action == "resume":
             print("resume initiated!")
@@ -444,7 +445,7 @@ def _watch_vpn_connection_status():
     """Monitor VPN connection status for up to 2 minutes."""
     global VPN_CONNECTION_STATUS, VPN_CONNECTION_WATCHDOG
 
-    deadline = time.time() + (7 * 120)
+    deadline = time.time() + (10 * 60)
     while time.time() < deadline:
         if VPN_CONNECTION_WATCHDOG_STOP.is_set():
             VPN_CONNECTION_WATCHDOG = None
@@ -583,7 +584,7 @@ THE_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 utils_dir = os.path.normpath(os.path.join(THE_BASE_DIR, "../utils"))
 
 
-def keep_alive(retries=5, delay=3):
+def keep_alive(retries=5, delay=3, current_action=None):
     """Update the family/hotmail server heartbeat row in the database."""
     attempt = 1
     while attempt <= retries:
@@ -611,7 +612,8 @@ def keep_alive(retries=5, delay=3):
                         "UPDATE server_status_family_and_hotmail SET last_uptime = %s, current_action = %s WHERE server_ip = %s",
                         (
                             now_utc,
-                            f"running familybot: {PREFERRED_SMS_COUNTRY}",
+                            current_action
+                            or f"running familybot: {PREFERRED_SMS_COUNTRY}",
                             server_ip,
                         ),
                     )
@@ -621,7 +623,8 @@ def keep_alive(retries=5, delay=3):
                         (
                             server_ip,
                             now_utc,
-                            f"running familybot: {PREFERRED_SMS_COUNTRY}",
+                            current_action
+                            or f"running familybot: {PREFERRED_SMS_COUNTRY}",
                         ),
                     )
 

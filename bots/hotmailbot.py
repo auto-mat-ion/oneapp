@@ -185,6 +185,7 @@ def _check_pause_requested():
     print("pause initiated!")
     while True:
         time.sleep(random.uniform(20, 30))
+        keep_alive(current_action="paused")
         action = get_signal_from_db()[1]
         if action == "resume":
             print("resume initiated!")
@@ -301,7 +302,7 @@ def _watch_vpn_connection_status():
     """Monitor VPN connection status for up to 2 minutes."""
     global VPN_CONNECTION_STATUS, VPN_CONNECTION_WATCHDOG
 
-    deadline = time.time() + 30
+    deadline = time.time() + (10 * 60)  # 10 minutes
     while time.time() < deadline:
         if VPN_CONNECTION_WATCHDOG_STOP.is_set():
             VPN_CONNECTION_WATCHDOG = None
@@ -416,7 +417,7 @@ def wait_for_code(email_token, timeout=120, poll_interval=3):
     return False, ""
 
 
-def keep_alive(retries=5, delay=3):
+def keep_alive(retries=5, delay=3, current_action=None):
     """Update the family/hotmail server heartbeat row in the database."""
     attempt = 1
     while attempt <= retries:
@@ -444,7 +445,8 @@ def keep_alive(retries=5, delay=3):
                         "UPDATE server_status_family_and_hotmail SET last_uptime = %s, current_action = %s WHERE server_ip = %s",
                         (
                             now_utc,
-                            f"running hotmailbot: {PREFERRED_SMS_COUNTRY}",
+                            current_action
+                            or f"running hotmailbot: {PREFERRED_SMS_COUNTRY}",
                             server_ip,
                         ),
                     )
@@ -454,7 +456,8 @@ def keep_alive(retries=5, delay=3):
                         (
                             server_ip,
                             now_utc,
-                            f"running hotmailbot: {PREFERRED_SMS_COUNTRY}",
+                            current_action
+                            or f"running hotmailbot: {PREFERRED_SMS_COUNTRY}",
                         ),
                     )
 
@@ -2232,7 +2235,7 @@ def use_link_to_join_family_acc(driver, new_profile_data):
                 except:
                     pass
                 # os._exit(1)
-                return False
+                return "NO_LINK"
             else:
                 print("Unable to get family url.")
                 return False
@@ -2245,7 +2248,14 @@ def use_link_to_join_family_acc(driver, new_profile_data):
 def join_family_acc(driver, new_profile_data):
     retries = 0
     while retries < 5:
-        if use_link_to_join_family_acc(driver, new_profile_data):
+        join_status = use_link_to_join_family_acc(driver, new_profile_data)
+        if join_status == "NO_LINK" or (
+            isinstance(join_status, tuple)
+            and len(join_status) > 1
+            and join_status[1] == "NO_LINK"
+        ):
+            return "NO_LINK"
+        if join_status is True:
             return True
 
         retries += 1
@@ -4606,10 +4616,16 @@ def initialize_new_profile(new_profile_data):
         print(f"{email_address}: Joining microsoft premium")
         driver.refresh()
         _check_shutdown_requested()
-        if join_family_acc(driver, new_profile_data):
+        join_status = join_family_acc(driver, new_profile_data)
+        if join_status is True:
             joined_microsoft_premium = "YES"
             premium_logger(email_address, password, temp_email)
             print(f"{email_address}: Successfully joined microsoft premium")
+        elif join_status == "NO_LINK":
+            print(
+                f"{email_address}: No family links available. Returning to signal wait."
+            )
+            return False, "NO_LINK"
         else:
             print(f"{email_address}: Unable to join microsoft premium after 3 retries.")
             new_profile_logger(
@@ -4637,7 +4653,7 @@ def initialize_new_profile(new_profile_data):
             update_accounts_data(email=email_address, save_smtp="YES")
             print(f"{email_address}: Successfully set up SMTP")
 
-            return True, driver
+            return True, "success"
         else:
             print(f"{email_address}: Error setting up SMTP: {error}")
             new_profile_logger(
@@ -4732,7 +4748,10 @@ def run_hotmailbot(country=None):
             if SHUTDOWN_REQUESTED:
                 return True
             try:
-                initialize_new_profile(new_profile_data)
+                _, initialize_result = initialize_new_profile(new_profile_data)
+                if initialize_result == "NO_LINK":
+                    print("No family links available. Returning to signal wait.")
+                    return True
             except InterruptedError:
                 return True
             if SHUTDOWN_REQUESTED:
