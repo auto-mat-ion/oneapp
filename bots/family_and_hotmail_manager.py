@@ -110,6 +110,14 @@ def _get_card_control_signal(cutoff_utc, now_utc):
     return False, None, None
 
 
+def get_card_control_action():
+    """Return the current global action from the card-control table."""
+    now_utc = datetime.now(timezone.utc)
+    cutoff_utc = now_utc - timedelta(minutes=3)
+    status, action, _ = _get_card_control_signal(cutoff_utc, now_utc)
+    return str(action or "").strip().lower() if status else None
+
+
 def get_signal_from_db():
     """Get this server's newest recent action and country from the tracker."""
     for attempt in range(1, 6):

@@ -27,7 +27,7 @@ import random
 import msal
 
 import pyautogui
-from bots.family_and_hotmail_manager import get_signal_from_db
+from bots.family_and_hotmail_manager import get_card_control_action, get_signal_from_db
 
 
 lock = threading.Lock()
@@ -315,6 +315,25 @@ def _check_shutdown_requested():
     if SHUTDOWN_REQUESTED:
         print("shutdown initiated!")
         raise InterruptedError("shutdown initiated")
+    _check_pause_requested()
+
+
+def _check_pause_requested():
+    global SHUTDOWN_REQUESTED
+    if get_card_control_action() != "pause":
+        return
+
+    print("pause initiated!")
+    while True:
+        time.sleep(random.uniform(20, 30))
+        action = get_card_control_action()
+        if action == "resume":
+            print("resume initiated!")
+            return
+        if action in {"shutdown", "shutdown_all"}:
+            SHUTDOWN_REQUESTED = True
+            print("shutdown initiated!")
+            raise InterruptedError("shutdown initiated")
 
 
 def _shutdown_signal_active():
