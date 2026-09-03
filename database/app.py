@@ -6420,13 +6420,20 @@ def main():
                 with pcol6:
                     preset_action = st.selectbox(
                         "Preset Action",
-                        ["—", "shutdown", "run familybot", "run hotmailbot"],
+                        [
+                            "—",
+                            "pause",
+                            "resume",
+                            "shutdown",
+                            "run familybot",
+                            "run hotmailbot",
+                        ],
                         key="fhm_preset_action_sel",
                         label_visibility="collapsed",
                     )
                     st.session_state.fhm_preset_action = preset_action
                 with pcol7:
-                    if preset_action != "—" and preset_action != "shutdown":
+                    if preset_action not in {"—", "pause", "resume", "shutdown"}:
                         preset_country = st.selectbox(
                             "Preset Country",
                             ["—", "poland", "poland2", "sweden", "italy"],
@@ -6486,7 +6493,8 @@ def main():
                         if (
                             preset_checked
                             and st.session_state.fhm_preset_action != "—"
-                            and st.session_state.fhm_preset_action != "shutdown"
+                            and st.session_state.fhm_preset_action
+                            not in {"pause", "resume", "shutdown"}
                         ):
                             st.write(
                                 st.session_state.fhm_preset_country
@@ -6526,7 +6534,7 @@ def main():
                             country_value = None
 
                             if (
-                                action_value != "shutdown"
+                                action_value not in {"pause", "resume", "shutdown"}
                                 and st.session_state.fhm_preset_country != "—"
                             ):
                                 country_value = st.session_state.fhm_preset_country
@@ -6538,6 +6546,10 @@ def main():
                                 # Format action
                                 if action_value == "shutdown":
                                     formatted_action = f"shutdown"
+                                elif action_value == "pause":
+                                    formatted_action = "pause"
+                                elif action_value == "resume":
+                                    formatted_action = "resume"
                                 elif action_value == "run familybot":
                                     formatted_action = f"run_familybot"
                                 elif action_value == "run hotmailbot":
@@ -6571,7 +6583,11 @@ def main():
 
                             if success:
                                 st.session_state.fhm_last_action_success = True
-                                st.session_state.fhm_last_action_message = message
+                                signal_name = actions_to_insert[0]["action"]
+                                st.session_state.fhm_last_action_message = (
+                                    f"Send {signal_name} signal to {len(actions_to_insert)} "
+                                    "servers successfully."
+                                )
                                 st.session_state.fhm_last_action_count = len(
                                     actions_to_insert
                                 )
@@ -6586,12 +6602,10 @@ def main():
 
                 # Display persistent success message if available (below the button)
                 if st.session_state.fhm_last_action_success:
-                    st.success(
-                        f"✅ Signal sent! {st.session_state.fhm_last_action_message}"
-                    )
-                    st.info(
-                        f"📡 Dispatched to {st.session_state.fhm_last_action_count} server(s). Bots will receive and process shortly."
-                    )
+                    st.success(st.session_state.fhm_last_action_message)
+                    # st.info(
+                    #     f"📡 Dispatched to {st.session_state.fhm_last_action_count} server(s). Bots will receive and process shortly."
+                    # )
                     st.session_state.fhm_last_action_success = False
 
         elif st.session_state.selected_page == "Alibaba":
