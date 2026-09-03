@@ -25,7 +25,7 @@ import mysql.connector
 import random
 import msal
 
-from bots.family_and_hotmail_manager import get_signal_from_db
+from bots.family_and_hotmail_manager import get_card_control_action, get_signal_from_db
 
 
 lock = threading.Lock()
@@ -174,6 +174,25 @@ def _check_shutdown_requested():
     if SHUTDOWN_REQUESTED:
         print("shutdown initiated!")
         raise InterruptedError("shutdown initiated")
+    _check_pause_requested()
+
+
+def _check_pause_requested():
+    global SHUTDOWN_REQUESTED
+    if get_card_control_action() != "pause":
+        return
+
+    print("pause initiated!")
+    while True:
+        time.sleep(random.uniform(20, 30))
+        action = get_card_control_action()
+        if action == "resume":
+            print("resume initiated!")
+            return
+        if action in {"shutdown", "shutdown_all"}:
+            SHUTDOWN_REQUESTED = True
+            print("shutdown initiated!")
+            raise InterruptedError("shutdown initiated")
 
 
 def _shutdown_signal_active():
@@ -2212,7 +2231,7 @@ def use_link_to_join_family_acc(driver, new_profile_data):
                     driver.quit()
                 except:
                     pass
-                os._exit(1)
+                # os._exit(1)
                 return False
             else:
                 print("Unable to get family url.")
@@ -4154,6 +4173,7 @@ def initialize_new_profile(new_profile_data):
                     pass
                 retries += 1
 
+        _check_shutdown_requested()
         if not driver_success:
             print(f"{email_address}: Error initializing new browser driver")
             new_profile_logger(
@@ -4176,6 +4196,7 @@ def initialize_new_profile(new_profile_data):
             return False, "Error clicking next button after entering email"
         time.sleep(1)
 
+        _check_shutdown_requested()
         if not enter_password(driver=driver, password=password):
             print(f"{email_address}: Error entering password")
             new_profile_logger(email_address, "FAIL", "Error Entering password")
@@ -4194,6 +4215,7 @@ def initialize_new_profile(new_profile_data):
             return False, "Error clicking next button after entering password"
         time.sleep(1)
 
+        _check_shutdown_requested()
         click_next_if_is_updating_terms_page(driver)
 
         recovery_email_page_popped_up = "NO"
@@ -4201,6 +4223,7 @@ def initialize_new_profile(new_profile_data):
 
         has_recovery_phone = "NO"
         recovery_phone_number = ""
+        _check_shutdown_requested()
         if is_your_account_has_been_locked_page(driver):
             print(
                 f"{email_address}: Your account has been locked page displayed. Using phone number from hero-sms-api"
@@ -4300,6 +4323,7 @@ def initialize_new_profile(new_profile_data):
                         "Verification code not sent to number. Waiting timed out",
                     )
 
+        _check_shutdown_requested()
         if is_protect_your_account_page(driver):
             recovery_email_page_popped_up = "YES"
 
@@ -4408,6 +4432,8 @@ def initialize_new_profile(new_profile_data):
             # return False, "Recovery not added. Protect your account page NOT displayed"
 
         print(f"{email_address}:Finalizing signin")
+        _check_shutdown_requested()
+
         close_other_tabs(driver)
         click_next_if_a_quick_note_page(driver)
         click_stay_signed_in_button(driver)
@@ -4422,7 +4448,7 @@ def initialize_new_profile(new_profile_data):
 
         joined_microsoft_premium = "NO"
         print(f"{email_address}: SUCCESSFULL LOGIN!")
-
+        _check_shutdown_requested()
         update_accounts_data(
             email=email_address,
             profile_dir="NONE",
@@ -4443,6 +4469,7 @@ def initialize_new_profile(new_profile_data):
             if is_protect_your_account_page(driver):
                 recovery_email_page_popped_up = "YES"
 
+                _check_shutdown_requested()
                 lets_protect_your_account_banner_page(driver)
                 print(f"{email_address}: Protect your account page")
                 if not select_alternate_email_option(driver=driver):
@@ -4561,7 +4588,7 @@ def initialize_new_profile(new_profile_data):
                 "Recovery not added. Protect your account page NOT displayed",
             )
             return False, "Recovery not added. Protect your account page NOT displayed"
-
+        _check_shutdown_requested()
         status, error = change_acc_pass(driver, new_profile_data)
         if status:
             update_accounts_data(email=email_address, password=error)
@@ -4578,7 +4605,7 @@ def initialize_new_profile(new_profile_data):
 
         print(f"{email_address}: Joining microsoft premium")
         driver.refresh()
-
+        _check_shutdown_requested()
         if join_family_acc(driver, new_profile_data):
             joined_microsoft_premium = "YES"
             premium_logger(email_address, password, temp_email)

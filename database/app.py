@@ -1155,7 +1155,7 @@ def get_server_uptime_status_df():
             if pd.isna(seconds):
                 return "offline"
             if seconds < (60 * 2):
-                return "good"
+                return "online"
             if seconds <= (60 * 3):
                 return "mid"
             return "offline"
@@ -1178,7 +1178,7 @@ def get_server_uptime_status_df():
                 return (2, number, name)
             return (3, 10**9, name)
 
-        status_order = {"good": 0, "mid": 1, "offline": 2}
+        status_order = {"online": 0, "mid": 1, "offline": 2}
         df["status_rank"] = df["status"].map(status_order)
         df["server_sort_key"] = df["server_type"].apply(get_server_sort_key)
         df = df.sort_values(
@@ -1223,6 +1223,7 @@ def get_family_hotmail_uptime_status_df():
             columns=[
                 "server_number",
                 "server_ip",
+                "server_type",
                 "status",
                 "current_action",
                 "last_update_time_utc",
@@ -1236,6 +1237,7 @@ def get_family_hotmail_uptime_status_df():
             SELECT
                 sd.server_id,
                 sd.server_ip,
+                sd.server_type,
                 ss.last_uptime AS last_update_time_utc,
                 ss.current_action
             FROM familybot_servers_details sd
@@ -1252,6 +1254,7 @@ def get_family_hotmail_uptime_status_df():
                 columns=[
                     "server_number",
                     "server_ip",
+                    "server_type",
                     "status",
                     "current_action",
                     "last_update_time_utc",
@@ -1260,6 +1263,9 @@ def get_family_hotmail_uptime_status_df():
 
         df = pd.DataFrame(rows)
         df["server_ip"] = df["server_ip"].fillna("")
+        df["server_type"] = (
+            df["server_type"].fillna("undefined").replace({"": "undefined"})
+        )
         df["current_action"] = df["current_action"].fillna("—")
         df["last_update_time_utc"] = pd.to_datetime(
             df["last_update_time_utc"], errors="coerce", utc=True
@@ -1270,12 +1276,12 @@ def get_family_hotmail_uptime_status_df():
 
         def get_status(seconds):
             if pd.isna(seconds):
-                return "red"
-            if seconds < (60 * 5):
-                return "green"
-            if seconds <= (60 * 12):
-                return "yellow"
-            return "red"
+                return "offline"
+            if seconds < (60 * 10):
+                return "online"
+            if seconds <= (60 * 15):
+                return "mid"
+            return "offline"
 
         df["status"] = df["last_update_seconds"].apply(get_status)
         df["last_update_time_utc"] = df["last_update_time_utc"].dt.strftime(
@@ -1287,6 +1293,7 @@ def get_family_hotmail_uptime_status_df():
             [
                 "server_number",
                 "server_ip",
+                "server_type",
                 "status",
                 "current_action",
                 "last_update_time_utc",
@@ -1298,6 +1305,7 @@ def get_family_hotmail_uptime_status_df():
             columns=[
                 "server_number",
                 "server_ip",
+                "server_type",
                 "status",
                 "current_action",
                 "last_update_time_utc",
@@ -6449,11 +6457,13 @@ def main():
                     with col2:
                         st.write(str(row["server_number"]))
                     with col3:
-                        st.write(str(row["server_ip"]))
+                        st.write(f"{row['server_type']} - {row['server_ip']}")
                     with col4:
-                        status_icon = {"green": "🟢", "yellow": "🟡", "red": "🔴"}.get(
-                            row["status"], "—"
-                        )
+                        status_icon = {
+                            "online": "🟢",
+                            "mid": "🟡",
+                            "offline": "🔴",
+                        }.get(row["status"], "—")
                         st.write(f"{status_icon} {row['status']}")
                     with col5:
                         st.write(str(row["current_action"] or "—"))

@@ -52,20 +52,40 @@ st.title("Control")
 st.caption("Send a command to all card-control workers.")
 
 country = st.selectbox("Country", COUNTRIES)
-start_clicked, shutdown_clicked = st.columns(2)
+start_clicked, pause_clicked, resume_clicked, shutdown_clicked = st.columns(4)
 
 with start_clicked:
     if st.button("Start", type="primary", use_container_width=True):
         try:
-            record_action("run_familybot", country)
+            with st.spinner("Sending start command..."):
+                record_action("run_familybot", country)
             st.success(f"Start command sent for {country}.")
         except mysql.connector.Error as error:
             st.error(f"Could not send start command: {error}")
 
+with pause_clicked:
+    if st.button("Pause", use_container_width=True):
+        try:
+            with st.spinner("Sending pause command..."):
+                record_action("pause")
+            st.success("Pause command sent.")
+        except mysql.connector.Error as error:
+            st.error(f"Could not send pause command: {error}")
+
+with resume_clicked:
+    if st.button("Resume", use_container_width=True):
+        try:
+            with st.spinner("Sending resume command..."):
+                record_action("resume")
+            st.success("Resume command sent.")
+        except mysql.connector.Error as error:
+            st.error(f"Could not send resume command: {error}")
+
 with shutdown_clicked:
     if st.button("Shutdown", use_container_width=True):
         try:
-            record_action("shutdown")
+            with st.spinner("Sending shutdown command..."):
+                record_action("shutdown")
             st.success("Shutdown command sent.")
         except mysql.connector.Error as error:
             st.error(f"Could not send shutdown command: {error}")
