@@ -987,6 +987,23 @@ def click_next_button(driver):
         return False
 
 
+def click_looks_good_button(driver):
+    """
+    Clicks the next button
+    """
+    try:
+        NEXT_BUTTON_ELEMENT = (By.CSS_SELECTOR, 'input[id="iLooksGood"]')
+
+        next_button = WebDriverWait(driver, wait_time / 2).until(
+            EC.visibility_of_element_located(NEXT_BUTTON_ELEMENT)
+        )
+
+        next_button.click()
+        return True
+    except:
+        return False
+
+
 def enter_email_and_click_next(driver, email_address):
     try:
         """
@@ -1711,7 +1728,19 @@ def is_protect_your_account_page(driver):
         else:
             return False
     except:
-        return False
+        try:
+            TITLE_ELEMENT = (By.CSS_SELECTOR, 'h1[data-testid="title"]')
+
+            title_element = WebDriverWait(driver, wait_time).until(
+                EC.visibility_of_element_located(TITLE_ELEMENT)
+            )
+            if "help protect your account" in title_element.text.lower():
+                click_password_next_button(driver)
+                return True
+            else:
+                return False
+        except:
+            return False
 
 
 def lets_protect_your_account_banner_page(driver):
@@ -1776,12 +1805,20 @@ def select_alternate_email_option(driver):
         try:
             PROTECTION_OPTIONS_ELEMENT = (By.CSS_SELECTOR, 'input[type="email"]')
 
-            options_element = WebDriverWait(driver, wait_time).until(
+            options_element = WebDriverWait(driver, wait_time / 2).until(
                 EC.visibility_of_element_located(PROTECTION_OPTIONS_ELEMENT)
             )
             return True
         except:
-            return False
+            try:
+                PROTECTION_OPTIONS_ELEMENT = (By.CSS_SELECTOR, 'input[type="text"]')
+
+                options_element = WebDriverWait(driver, wait_time / 2).until(
+                    EC.visibility_of_element_located(PROTECTION_OPTIONS_ELEMENT)
+                )
+                return True
+            except:
+                return False
 
 
 def accept_tempmail_consent(driver):
@@ -4155,7 +4192,7 @@ def click_use_your_password_button(driver):
 
 def click_send_code_to_recovery_email_button(driver):
     """
-    Clicks the use your password button
+    Clicks the send a code to recovery email button
     """
     try:
         BUTTON_ELEMENT = (By.CSS_SELECTOR, 'span[role="button"]')
@@ -4190,6 +4227,7 @@ def change_acc_pass(driver, new_profile_data):
         driver.get(pass_change_url)
 
         time.sleep(2)
+        click_next_if_a_quick_note_page(driver)
 
         new_pass = password + ".!Ze8"
 
@@ -4326,6 +4364,8 @@ def re_login_existing_acc(driver, new_profile_data):
                     print("Code not sent to recovery email!")
                     return False
                 enter_code_and_click_next_after_pass_change(driver, code)
+
+            click_next_if_a_quick_note_page(driver)
             click_stay_signed_in_button(driver)
         return True
     except:
@@ -4938,6 +4978,145 @@ def change_account_country(driver, new_profile_data):
         return False, driver
     except:
         return False, driver
+
+
+def change_account_language_chinese(driver, new_profile_data):
+    try:
+        retries = 0
+        num_of_retries = 5
+        while retries < num_of_retries:
+            try:
+                email = new_profile_data.get("email")
+                password = new_profile_data.get("pass")
+                recovery = new_profile_data.get("recovery_email")
+                bring_to_front(driver)
+
+                driver.get("https://account.microsoft.com/profile")
+
+                login_on_country_page(driver, new_profile_data)
+
+                if language_lingo_is_the_desired(driver):
+                    return True
+
+                COUNTRY_EDIT_BUTTON_ELEMENT = (
+                    By.CSS_SELECTOR,
+                    'div[id="profile.langsettings.language-info.edit-msa-language"]',
+                )
+
+                country_edit_button = WebDriverWait(driver, wait_time).until(
+                    EC.element_to_be_clickable(COUNTRY_EDIT_BUTTON_ELEMENT)
+                )
+
+                # scroll to view first
+                driver.execute_script(
+                    "arguments[0].scrollIntoView({ behavior: 'smooth', block: 'center' });",
+                    country_edit_button,
+                )
+                time.sleep(1)
+                country_edit_button.click()
+                time.sleep(1)
+
+                ###
+
+                COUNTRY_INPUT_ELEMENT = (
+                    By.CSS_SELECTOR,
+                    'div[id="profile.landing-page.display-language.edit-msa-display-language"]',
+                )
+
+                country_input_element = WebDriverWait(driver, wait_time).until(
+                    EC.visibility_of_element_located(COUNTRY_INPUT_ELEMENT)
+                )
+
+                # data[0]
+                country_input_element.click()
+                time.sleep(1.5)
+
+                COUNTRY_INPUT_ELEMENT = (
+                    By.CSS_SELECTOR,
+                    'input[type="search"]',
+                )
+
+                country_input_element = WebDriverWait(driver, wait_time).until(
+                    EC.visibility_of_element_located(COUNTRY_INPUT_ELEMENT)
+                )
+
+                # data[0]
+                country_input_element.click()
+
+                # re_login_existing_acc(driver, new_profile_data)
+                # time.sleep(0.5)
+                country_input_element.send_keys(Keys.BACK_SPACE * 50)
+                time.sleep(0.5)
+                country_input_element.send_keys("ENGLISH (UNITED STATES)")
+                time.sleep(2.5)
+                country_input_element.send_keys(Keys.ENTER)
+                time.sleep(1)
+
+                COUNTRY_INPUT_ELEMENT = (
+                    By.CSS_SELECTOR,
+                    'div[lang="en-US"]',
+                )
+
+                country_input_element = WebDriverWait(driver, wait_time).until(
+                    EC.visibility_of_element_located(COUNTRY_INPUT_ELEMENT)
+                )
+
+                # data[0]
+                country_input_element.click()
+
+                try:
+                    SAVE_BUTTON_ELEMENT = (
+                        By.CSS_SELECTOR,
+                        'button[data-bi-id*="change-display-language"]',
+                    )
+
+                    save_button_element = WebDriverWait(driver, wait_time / 2).until(
+                        EC.element_to_be_clickable(SAVE_BUTTON_ELEMENT)
+                    )
+
+                    save_button_element.click()
+                    time.sleep(2)
+                    SAVE_BUTTON_ELEMENT = (
+                        By.CSS_SELECTOR,
+                        'button[data-bi-id*="confirm-dialog.ok"]',
+                    )
+
+                    save_button_element = WebDriverWait(driver, wait_time / 2).until(
+                        EC.element_to_be_clickable(SAVE_BUTTON_ELEMENT)
+                    )
+
+                    save_button_element.click()
+                    time.sleep(2)
+                    SAVE_BUTTON_ELEMENT = (
+                        By.CSS_SELECTOR,
+                        'button[data-bi-id*="language-changed.ok"]',
+                    )
+
+                    save_button_element = WebDriverWait(driver, wait_time / 2).until(
+                        EC.element_to_be_clickable(SAVE_BUTTON_ELEMENT)
+                    )
+
+                    save_button_element.click()
+                except:
+                    logout_then_re_login_existing_acc(driver, new_profile_data)
+
+                if country_is_the_desired(driver):
+                    return True
+                else:
+                    print(
+                        f"{email} : Country not changed. Retrying... ({retries}/{num_of_retries})"
+                    )
+                    retries += 1
+
+            except Exception as E:
+                retries += 1
+                print(
+                    f"{email} : Exception error changing country. Retrying... ({retries}/{num_of_retries})"
+                )
+
+        return False
+    except:
+        return False
 
 
 def change_account_language_lingo(driver, new_profile_data):
@@ -7531,6 +7710,109 @@ def relogin_and_signin_premium(driver, new_profile_data):
         return driver
 
 
+def regroup_for_reauthentication(driver, new_profile_data):
+    try:
+        element_retries = 5
+        while element_retries > 0:
+            try:
+                if PREFERRED_SMS_COUNTRY.lower() == "italy":
+                    driver.get("https://www.microsoft.com/it-it/microsoft-365/try")
+                    time.sleep(3)
+                    # driver.refresh()
+                elif PREFERRED_SMS_COUNTRY.lower() in ["poland2", "poland"]:
+                    driver.get("https://www.microsoft.com/pl-pl/microsoft-365/try")
+
+                time.sleep(3)
+
+                current_status = "clicking premium element"
+                PREMIUM_ELEMENT = (
+                    By.CSS_SELECTOR,
+                    'a[aria-label*="Microsoft 365 Family."]',
+                )
+
+                premium_element = WebDriverWait(driver, wait_time).until(
+                    EC.visibility_of_element_located(PREMIUM_ELEMENT)
+                )
+                premium_element.click()
+
+                time.sleep(1)
+
+                break
+            except:
+                if element_retries <= 2:
+                    try:
+                        driver.quit()
+                    except:
+                        pass
+                    driver = relogin_and_signin_premium(driver, new_profile_data)
+                else:
+                    driver.get("https://account.microsoft.com/profile")
+                time.sleep(10)
+                element_retries -= 1
+
+        _check_shutdown_requested()
+        if PREFERRED_SMS_COUNTRY.lower() != "united states":
+            try:
+                current_status = "clicking checkbox"
+                time.sleep(1)
+                CHECKBOX_ELEMENT = (
+                    By.CSS_SELECTOR,
+                    'i[data-icon-name="CheckMark"]',
+                )
+                checkbox_element = WebDriverWait(driver, wait_time).until(
+                    EC.presence_of_element_located(CHECKBOX_ELEMENT)
+                )
+                # scroll_into_view(driver, checkbox_element)
+                driver.execute_script(
+                    "arguments[0].scrollIntoView({ behavior: 'smooth', block: 'center' });",
+                    checkbox_element,
+                )
+                time.sleep(1)
+                checkbox_element.click()
+
+            except:
+                try:
+                    current_status = "clicking checkbox"
+                    time.sleep(1)
+                    CHECKBOX_ELEMENT = (
+                        By.CSS_SELECTOR,
+                        'i[data-icon-name="CheckMark"]',
+                    )
+                    checkbox_element = WebDriverWait(driver, wait_time).until(
+                        EC.presence_of_element_located(CHECKBOX_ELEMENT)
+                    )
+                    driver.execute_script(
+                        "arguments[0].scrollIntoView({ behavior: 'smooth', block: 'center' });",
+                        checkbox_element,
+                    )
+                    time.sleep(1)
+                    checkbox_element.click()
+                except:
+                    pass
+
+        time.sleep(1)
+        # click next btn
+        current_status = "clicking next button after checkbox"
+        if PREFERRED_SMS_COUNTRY.lower() == "italy":
+            NEXT_BTN_ELEMENT = (
+                By.CSS_SELECTOR,
+                'button[aria-label="Avanti"]',
+            )
+        elif PREFERRED_SMS_COUNTRY.lower() in ["poland2", "poland"]:
+            NEXT_BTN_ELEMENT = (
+                By.CSS_SELECTOR,
+                'button[aria-label="Next"]',
+            )
+
+        next_btn_element = WebDriverWait(driver, wait_time).until(
+            EC.element_to_be_clickable(NEXT_BTN_ELEMENT)
+        )
+        next_btn_element.click()
+        time.sleep(1)
+    except:
+        pass
+
+
 def get__premium_italy(driver, new_profile_data):
     try:
         email_address = new_profile_data.get("email")
@@ -8000,48 +8282,53 @@ def get__premium_italy(driver, new_profile_data):
             except:
                 pass
 
-        current_status = "clicking start trial button"
-        _check_shutdown_requested()
-        try:
-            time.sleep(4)
-            print(f"{email_address} : Clicking start trial button")
+        ##################
+        retries = 5
+        card_success = False
 
-            start_trial_button_element = WebDriverWait(driver, wait_time).until(
-                EC.element_to_be_clickable(START_TRIAL_BUTTON_ELEMENT)
-            )
-            time.sleep(0.5)
-            start_trial_button_element = WebDriverWait(driver, wait_time).until(
-                EC.element_to_be_clickable(START_TRIAL_BUTTON_ELEMENT)
-            )
-            start_trial_button_element.click()
-            print(f"{email_address} : Clicked start trial button")
-        except:
+        while retries > 0:
             try:
+                current_status = "clicking start trial button"
+                _check_shutdown_requested()
                 time.sleep(4)
                 print(f"{email_address} : Clicking start trial button")
 
                 start_trial_button_element = WebDriverWait(driver, wait_time).until(
-                    EC.element_to_be_clickable(START_TRIAL2_BUTTON_ELEMENT)
+                    EC.element_to_be_clickable(START_TRIAL_BUTTON_ELEMENT)
                 )
                 time.sleep(0.5)
                 start_trial_button_element = WebDriverWait(driver, wait_time).until(
-                    EC.element_to_be_clickable(START_TRIAL2_BUTTON_ELEMENT)
+                    EC.element_to_be_clickable(START_TRIAL_BUTTON_ELEMENT)
                 )
                 start_trial_button_element.click()
                 print(f"{email_address} : Clicked start trial button")
-            except:
-                pass
+                current_status = "checking if card is authorized"
 
-        current_status = "checking if card is authorized"
-        _check_shutdown_requested()
-        print(f"{email_address} : Waiting 5 minutes for card authorization...")
-        if not affirm_congrats_card_added_italy(driver):
-            print(
-                f"{email_address} : Card not authorized or payment method issue error"
-            )
+                print(f"{email_address} : Waiting 5 minutes for card authorization...")
+                if not affirm_congrats_card_added_italy(driver):
+                    print(
+                        f"{email_address} : Card not authorised. Retrying card auth. retries left: {retries}"
+                    )
+                    retries -= 1
+                    regroup_for_reauthentication(driver, new_profile_data)
+
+                else:
+                    card_success = True
+                    log_card_usage(card_details_dict)
+                    retries = 0
+                    break
+
+            except:
+                print(
+                    f"{email_address} : Card not authorised.Retrying card auth. retries left: {retries}"
+                )
+                regroup_for_reauthentication(driver, new_profile_data)
+                retries -= 1
+
+        if not card_success:
             return False, "card not authorized"
         else:
-            log_card_usage(card_details_dict)
+            print(f"{email_address} : Card authorized successfully.")
 
         time.sleep(2)
         driver.get("https://account.microsoft.com/services/microsoft365/details")
@@ -9236,114 +9523,118 @@ def initialize(new_profile_data):
         _check_shutdown_requested()
         click_next_if_is_updating_terms_page(driver)
 
+        # return driver
+
         recovery_email_page_popped_up = "NO"
         temp_email = ""
 
         has_recovery_phone = "NO"
         recovery_phone_number = ""
-        if is_your_account_has_been_locked_page(driver):
-            print(
-                f"{email_address}: Your account has been locked page displayed. Using phone number from hero-sms-api"
-            )
-            time.sleep(1)
+        # if is_your_account_has_been_locked_page(driver):
+        #     print(
+        #         f"{email_address}: Your account has been locked page displayed. Using phone number from hero-sms-api"
+        #     )
+        #     time.sleep(1)
 
-            click_next_button_locked_page(driver)
-            time.sleep(1)
+        #     click_next_button_locked_page(driver)
+        #     time.sleep(1)
 
-            phone_retries = 0
-            phone_status = False
-            while phone_retries < 5 and not phone_status:
-                phone_status, activation_id, recovery_phone_number = (
-                    get_number_for_verification()
-                )
-                phone_retries += 1
+        #     phone_retries = 0
+        #     phone_status = False
+        #     while phone_retries < 5 and not phone_status:
+        #         phone_status, activation_id, recovery_phone_number = (
+        #             get_number_for_verification()
+        #         )
+        #         phone_retries += 1
 
-            if not phone_status:
-                print(f"{email_address}: Unable to get phone number from hero-api")
-                new_profile_logger(
-                    email_address,
-                    "FAIL",
-                    "Unable to get phone number from hero-api",
-                )
-                return False, "Unable to get phone number from hero-api"
+        #     if not phone_status:
+        #         print(f"{email_address}: Unable to get phone number from hero-api")
+        #         new_profile_logger(
+        #             email_address,
+        #             "FAIL",
+        #             "Unable to get phone number from hero-api",
+        #         )
+        #         return False, "Unable to get phone number from hero-api"
 
-            else:
-                print(
-                    f"{email_address}: Using phone number from hero-api to unlock: {recovery_phone_number}"
-                )
+        #     else:
+        #         print(
+        #             f"{email_address}: Using phone number from hero-api to unlock: {recovery_phone_number}"
+        #         )
 
-                has_recovery_phone = "YES"
-                phone_number = recovery_phone_number
-                bring_to_front(driver)
-                enter_phone_number_and_click_next_microsoft(driver, phone_number)
-                bring_to_front(driver)
-                if funcaptcha_present(driver):
-                    print(
-                        f"{email_address}: Captcha detected. {CATCHA_WAIT_TIME} seconds to bypass"
-                    )
-                    wait_funcaptcha_bypass(driver)
-                    time.sleep(1)
-                    if bypassed_funcaptcha_to_code_page(driver):
-                        print(
-                            f"{email_address}: Bypassed captcha successfully! Waiting for OTP"
-                        )
-                    else:
-                        print(f"{email_address}: Unable to bypass captcha")
-                        new_profile_logger(
-                            email_address,
-                            "FAIL",
-                            "Unable to bypass captcha or phone verification unavailable",
-                        )
-                        return False, "Unable to bypass captcha"
-                else:
-                    print(f"{email_address}: Captcha not present")
-                    if is_try_another_verification_method(driver):
-                        print(f"{email_address}: Unable to verify phone number.")
-                        return (
-                            False,
-                            "Unable to verify phone number. Try another method",
-                        )
+        #         has_recovery_phone = "YES"
+        #         phone_number = recovery_phone_number
+        #         bring_to_front(driver)
+        #         enter_phone_number_and_click_next_microsoft(driver, phone_number)
+        #         bring_to_front(driver)
+        #         if funcaptcha_present(driver):
+        #             print(
+        #                 f"{email_address}: Captcha detected. {CATCHA_WAIT_TIME} seconds to bypass"
+        #             )
+        #             wait_funcaptcha_bypass(driver)
+        #             time.sleep(1)
+        #             if bypassed_funcaptcha_to_code_page(driver):
+        #                 print(
+        #                     f"{email_address}: Bypassed captcha successfully! Waiting for OTP"
+        #                 )
+        #             else:
+        #                 print(f"{email_address}: Unable to bypass captcha")
+        #                 new_profile_logger(
+        #                     email_address,
+        #                     "FAIL",
+        #                     "Unable to bypass captcha or phone verification unavailable",
+        #                 )
+        #                 return False, "Unable to bypass captcha"
+        #         else:
+        #             print(f"{email_address}: Captcha not present")
+        #             if is_try_another_verification_method(driver):
+        #                 print(f"{email_address}: Unable to verify phone number.")
+        #                 return (
+        #                     False,
+        #                     "Unable to verify phone number. Try another method",
+        #                 )
 
-                print(f"{email_address}: Waiting for sms verification code")
+        #         print(f"{email_address}: Waiting for sms verification code")
 
-                code_status, code = get_code(activation_id=activation_id)
-                if code_status:
-                    print(f"{email_address}: Code received: {code}. Verifying...")
-                    enter_sent_code(driver, code)
-                    click_next_if_acc_unblocked(driver)
-                    click_next_if_is_updating_terms_page(driver)
-                    update_accounts_data(
-                        date_time=datetime.now(tz=timezone.utc),
-                        email=email_address,
-                        profile_dir=user_path,
-                        proxy_used=proxy,
-                        password=password,
-                        has_recovery_email=recovery_email_page_popped_up,
-                        recovery_email=temp_email,
-                        has_recovery_phone=has_recovery_phone,
-                        recovery_phone_number=recovery_phone_number,
-                        joined_microsoft_premium="NO",
-                    )
-                    print(f"{email_address}: Successfully verified mobile number")
-                else:
-                    cancel_number(activation_id=activation_id)
-                    print(
-                        f"{email_address}: Verification code not sent to number. Waiting timed out"
-                    )
-                    new_profile_logger(
-                        email_address,
-                        "FAIL",
-                        "Verification code not sent to number. Waiting timed out",
-                    )
-                    return (
-                        False,
-                        "Verification code not sent to number. Waiting timed out",
-                    )
+        #         code_status, code = get_code(activation_id=activation_id)
+        #         if code_status:
+        #             print(f"{email_address}: Code received: {code}. Verifying...")
+        #             enter_sent_code(driver, code)
+        #             click_next_if_acc_unblocked(driver)
+        #             click_next_if_is_updating_terms_page(driver)
+        #             update_accounts_data(
+        #                 date_time=datetime.now(tz=timezone.utc),
+        #                 email=email_address,
+        #                 profile_dir=user_path,
+        #                 proxy_used=proxy,
+        #                 password=password,
+        #                 has_recovery_email=recovery_email_page_popped_up,
+        #                 recovery_email=temp_email,
+        #                 has_recovery_phone=has_recovery_phone,
+        #                 recovery_phone_number=recovery_phone_number,
+        #                 joined_microsoft_premium="NO",
+        #             )
+        #             print(f"{email_address}: Successfully verified mobile number")
+        #         else:
+        #             cancel_number(activation_id=activation_id)
+        #             print(
+        #                 f"{email_address}: Verification code not sent to number. Waiting timed out"
+        #             )
+        #             new_profile_logger(
+        #                 email_address,
+        #                 "FAIL",
+        #                 "Verification code not sent to number. Waiting timed out",
+        #             )
+        #             return (
+        #                 False,
+        #                 "Verification code not sent to number. Waiting timed out",
+        #             )
+        # _check_shutdown_requested()
         _check_shutdown_requested()
+
         if is_protect_your_account_page(driver):
             recovery_email_page_popped_up = "YES"
 
-            lets_protect_your_account_banner_page(driver)
+            # lets_protect_your_account_banner_page(driver)
             print(f"{email_address}: Protect your account page")
             if not select_alternate_email_option(driver=driver):
                 print(f"{email_address}: Error selecting an alternate email option")
@@ -9372,7 +9663,30 @@ def initialize(new_profile_data):
 
             else:
                 print(f"{email_address}: got email from temp-mail. Verifying..")
-                if not enter_email(driver=driver, email_address=temp_email):
+                if enter_email(driver=driver, email_address=temp_email):
+                    time.sleep(0.5)
+                    bring_to_front(driver)
+                    time.sleep(1)
+                    sss, er = click_next_button_rec_email(driver)
+                    if not sss:
+                        os.makedirs("screenshots", exist_ok=True)
+                        driver.save_screenshot(f"screenshots/{email_address}_error.png")
+                        print(
+                            f"{email_address}: Error clicking next after entering recovery email: {er}"
+                        )
+                        new_profile_logger(
+                            email_address,
+                            "FAIL",
+                            "Error clicking next after entering recovery email",
+                        )
+                        return (
+                            False,
+                            "Error clicking next after entering recovery email",
+                        )
+
+                elif enter_recovery_email_2(driver, temp_email):
+                    click_password_next_button(driver)
+                else:
                     print(f"{email_address}: Error entering recovery email")
                     new_profile_logger(
                         email_address,
@@ -9380,22 +9694,6 @@ def initialize(new_profile_data):
                         "Error entering recovery email",
                     )
                     return False, "Error entering recovery email"
-                time.sleep(0.5)
-                bring_to_front(driver)
-                time.sleep(1)
-                sss, er = click_next_button_rec_email(driver)
-                if not sss:
-                    os.makedirs("screenshots", exist_ok=True)
-                    driver.save_screenshot(f"screenshots/{email_address}_error.png")
-                    print(
-                        f"{email_address}: Error clicking next after entering recovery email: {er}"
-                    )
-                    new_profile_logger(
-                        email_address,
-                        "FAIL",
-                        "Error clicking next after entering recovery email",
-                    )
-                    return False, "Error clicking next after entering recovery email"
 
                 _check_shutdown_requested()
                 status, code = wait_for_code(email_token)
@@ -9410,7 +9708,19 @@ def initialize(new_profile_data):
                     return False, "Error getting code from tempmail. Timeout"
                 else:
                     print(f"{email_address}: Code received from tempmail: {code}")
-                if not enter_code(driver, code):
+                if enter_code(driver, code):
+                    if not click_next_button(driver):
+                        print(
+                            f"{email_address}: Error clicking next after entering otp"
+                        )
+                        new_profile_logger(
+                            email_address,
+                            "FAIL",
+                            "Error clicking next after entering otp",
+                        )
+                        return False, "Error clicking next after entering otp"
+
+                elif not enter_code_and_click_next_after_pass_change(driver, code):
                     print(f"{email_address}: Error entering email verification code")
                     new_profile_logger(
                         email_address,
@@ -9418,15 +9728,6 @@ def initialize(new_profile_data):
                         "Error entering email verification code",
                     )
                     return False, "Error entering email verification code"
-
-                if not click_next_button(driver):
-                    print(f"{email_address}: Error clicking next after entering otp")
-                    new_profile_logger(
-                        email_address,
-                        "FAIL",
-                        "Error clicking next after entering otp",
-                    )
-                    return False, "Error clicking next after entering otp"
 
                 if invalid_code(driver):
                     print(f"{email_address}: OTP ENTERED IS INCORRECT")
@@ -9442,10 +9743,12 @@ def initialize(new_profile_data):
         print(f"{email_address}:Finalizing signin")
         close_other_tabs(driver)
         # click_next_if_is_updating_terms_page(driver)
-        click_next_if_a_quick_note_page(driver)
+        time.sleep(1)
+        click_looks_good_button(driver)
         cancel_setup_passkey(driver)
-        click_stay_signed_in_button(driver)
 
+        click_next_if_a_quick_note_page(driver)
+        click_stay_signed_in_button(driver)
         _check_shutdown_requested()
         try:
             if enter_password(driver=driver, password=password):
@@ -9457,6 +9760,8 @@ def initialize(new_profile_data):
 
         joined_microsoft_premium = "NO"
         print(f"{email_address}: SUCCESSFULL LOGIN!")
+
+        # return driver
 
         update_accounts_data(
             email=email_address,
@@ -9479,19 +9784,19 @@ def initialize(new_profile_data):
             if is_protect_your_account_page(driver):
                 recovery_email_page_popped_up = "YES"
 
-                lets_protect_your_account_banner_page(driver)
+                # lets_protect_your_account_banner_page(driver)
                 print(f"{email_address}: Protect your account page")
                 if not select_alternate_email_option(driver=driver):
                     print(f"{email_address}: Error selecting an alternate email option")
-                    # return driver
-                    # new_profile_logger(
-                    #     email_address,
-                    #     "FAIL",
-                    #     "Error selecting an alternate email option",
-                    # )
-                    # return False, "Error selecting an alternate email option"
+                    new_profile_logger(
+                        email_address,
+                        "FAIL",
+                        "Error selecting an alternate email option",
+                    )
+                    return False, "Error selecting an alternate email option"
 
                 status, temp_email, email_token = create_email()
+                new_profile_data["recovery_email"] = temp_email
                 if not status:
                     print(
                         f"{email_address}: Error getting a temp mail from temp-mail. Tempmail unresponsive"
@@ -9508,7 +9813,32 @@ def initialize(new_profile_data):
 
                 else:
                     print(f"{email_address}: got email from temp-mail. Verifying..")
-                    if not enter_email(driver=driver, email_address=temp_email):
+                    if enter_email(driver=driver, email_address=temp_email):
+                        time.sleep(0.5)
+                        bring_to_front(driver)
+                        time.sleep(1)
+                        sss, er = click_next_button_rec_email(driver)
+                        if not sss:
+                            os.makedirs("screenshots", exist_ok=True)
+                            driver.save_screenshot(
+                                f"screenshots/{email_address}_error.png"
+                            )
+                            print(
+                                f"{email_address}: Error clicking next after entering recovery email: {er}"
+                            )
+                            new_profile_logger(
+                                email_address,
+                                "FAIL",
+                                "Error clicking next after entering recovery email",
+                            )
+                            return (
+                                False,
+                                "Error clicking next after entering recovery email",
+                            )
+
+                    elif enter_recovery_email_2(driver, temp_email):
+                        click_password_next_button(driver)
+                    else:
                         print(f"{email_address}: Error entering recovery email")
                         new_profile_logger(
                             email_address,
@@ -9516,26 +9846,8 @@ def initialize(new_profile_data):
                             "Error entering recovery email",
                         )
                         return False, "Error entering recovery email"
-                    time.sleep(0.5)
-                    bring_to_front(driver)
-                    time.sleep(1)
-                    sss, er = click_next_button_rec_email(driver)
-                    if not sss:
-                        os.makedirs("screenshots", exist_ok=True)
-                        driver.save_screenshot(f"screenshots/{email_address}_error.png")
-                        print(
-                            f"{email_address}: Error clicking next after entering recovery email: {er}"
-                        )
-                        new_profile_logger(
-                            email_address,
-                            "FAIL",
-                            "Error clicking next after entering recovery email",
-                        )
-                        return (
-                            False,
-                            "Error clicking next after entering recovery email",
-                        )
 
+                    _check_shutdown_requested()
                     status, code = wait_for_code(email_token)
                     time.sleep(3)
                     if not status:
@@ -9548,7 +9860,19 @@ def initialize(new_profile_data):
                         return False, "Error getting code from tempmail. Timeout"
                     else:
                         print(f"{email_address}: Code received from tempmail: {code}")
-                    if not enter_code(driver, code):
+                    if enter_code(driver, code):
+                        if not click_next_button(driver):
+                            print(
+                                f"{email_address}: Error clicking next after entering otp"
+                            )
+                            new_profile_logger(
+                                email_address,
+                                "FAIL",
+                                "Error clicking next after entering otp",
+                            )
+                            return False, "Error clicking next after entering otp"
+
+                    elif not enter_code_and_click_next_after_pass_change(driver, code):
                         print(
                             f"{email_address}: Error entering email verification code"
                         )
@@ -9558,17 +9882,6 @@ def initialize(new_profile_data):
                             "Error entering email verification code",
                         )
                         return False, "Error entering email verification code"
-
-                    if not click_next_button(driver):
-                        print(
-                            f"{email_address}: Error clicking next after entering otp"
-                        )
-                        new_profile_logger(
-                            email_address,
-                            "FAIL",
-                            "Error clicking next after entering otp",
-                        )
-                        return False, "Error clicking next after entering otp"
 
                     if invalid_code(driver):
                         print(f"{email_address}: OTP ENTERED IS INCORRECT")
@@ -9580,6 +9893,112 @@ def initialize(new_profile_data):
                         return False, "OTP ENTERED IS INCORRECT"
                     else:
                         print(f"{email_address}: OTP verified successfully")
+
+            # if is_protect_your_account_page(driver):
+            #     recovery_email_page_popped_up = "YES"
+
+            #     lets_protect_your_account_banner_page(driver)
+            #     print(f"{email_address}: Protect your account page")
+            #     if not select_alternate_email_option(driver=driver):
+            #         print(f"{email_address}: Error selecting an alternate email option")
+            #         # return driver
+            #         # new_profile_logger(
+            #         #     email_address,
+            #         #     "FAIL",
+            #         #     "Error selecting an alternate email option",
+            #         # )
+            #         # return False, "Error selecting an alternate email option"
+
+            #     status, temp_email, email_token = create_email()
+            #     if not status:
+            #         print(
+            #             f"{email_address}: Error getting a temp mail from temp-mail. Tempmail unresponsive"
+            #         )
+            #         new_profile_logger(
+            #             email_address,
+            #             "FAIL",
+            #             "Error getting email from tempmail",
+            #         )
+            #         return (
+            #             False,
+            #             "Error getting a temp mail from temp-mail. Tempmail unresponsive",
+            #         )
+
+            #     else:
+            #         print(f"{email_address}: got email from temp-mail. Verifying..")
+            #         if not enter_email(driver=driver, email_address=temp_email):
+            #             print(f"{email_address}: Error entering recovery email")
+            #             new_profile_logger(
+            #                 email_address,
+            #                 "FAIL",
+            #                 "Error entering recovery email",
+            #             )
+            #             return False, "Error entering recovery email"
+            #         time.sleep(0.5)
+            #         bring_to_front(driver)
+            #         time.sleep(1)
+            #         sss, er = click_next_button_rec_email(driver)
+            #         if not sss:
+            #             os.makedirs("screenshots", exist_ok=True)
+            #             driver.save_screenshot(f"screenshots/{email_address}_error.png")
+            #             print(
+            #                 f"{email_address}: Error clicking next after entering recovery email: {er}"
+            #             )
+            #             new_profile_logger(
+            #                 email_address,
+            #                 "FAIL",
+            #                 "Error clicking next after entering recovery email",
+            #             )
+            #             return (
+            #                 False,
+            #                 "Error clicking next after entering recovery email",
+            #             )
+
+            #         status, code = wait_for_code(email_token)
+            #         time.sleep(3)
+            #         if not status:
+            #             print(f"{email_address}: Error getting code from tempmail")
+            #             new_profile_logger(
+            #                 email_address,
+            #                 "FAIL",
+            #                 "Error getting code from tempmail. Timed out without receiving code",
+            #             )
+            #             return False, "Error getting code from tempmail. Timeout"
+            #         else:
+            #             print(f"{email_address}: Code received from tempmail: {code}")
+            #         if not enter_code(driver, code):
+            #             print(
+            #                 f"{email_address}: Error entering email verification code"
+            #             )
+            #             new_profile_logger(
+            #                 email_address,
+            #                 "FAIL",
+            #                 "Error entering email verification code",
+            #             )
+            #             return False, "Error entering email verification code"
+
+            #         if not click_next_button(driver):
+            #             print(
+            #                 f"{email_address}: Error clicking next after entering otp"
+            #             )
+            #             new_profile_logger(
+            #                 email_address,
+            #                 "FAIL",
+            #                 "Error clicking next after entering otp",
+            #             )
+            #             return False, "Error clicking next after entering otp"
+
+            #         if invalid_code(driver):
+            #             print(f"{email_address}: OTP ENTERED IS INCORRECT")
+            #             new_profile_logger(
+            #                 email_address,
+            #                 "FAIL",
+            #                 "Otp sent is incorrect",
+            #             )
+            #             return False, "OTP ENTERED IS INCORRECT"
+            #         else:
+            #             print(f"{email_address}: OTP verified successfully")
+
             else:
                 pass
 
@@ -9611,8 +10030,13 @@ def initialize(new_profile_data):
         # return driver
 
         _check_shutdown_requested()
+        change_account_language_chinese(driver, new_profile_data)
+        _check_shutdown_requested()
+
         status, driver = change_account_country(driver, new_profile_data)
         _check_shutdown_requested()
+
+        # return driver
         if not status:
             new_profile_logger(
                 email_address,
@@ -9639,8 +10063,6 @@ def initialize(new_profile_data):
         print(f"{email_address}: Waiting at initialize barrier for other threads...")
         initialize_barrier.wait(timeout=15 * 60)
 
-        # return driver, new_profile_data
-
         _check_shutdown_requested()
         if PREFERRED_SMS_COUNTRY in [
             "italy",
@@ -9654,6 +10076,8 @@ def initialize(new_profile_data):
         else:
             status, error = get__premium(driver, new_profile_data)
         _check_shutdown_requested()
+
+        # return driver, new_profile_data
 
         if not status:
             new_profile_logger(
@@ -9725,7 +10149,10 @@ def run_familybot(country=None, concurrent=1):
             if SHUTDOWN_REQUESTED:
                 return True
             if not card_management():
-                return False
+                current_action = "No available cards: waiting for signal"
+                print(current_action)
+                keep_alive(current_action=current_action)
+                return "NO_CARDS"
 
             time.sleep(3)
 

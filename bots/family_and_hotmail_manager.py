@@ -168,7 +168,7 @@ def get_signal_from_db():
     return False, None, None
 
 
-def keep_alive(retries=5, delay=3):
+def keep_alive(retries=5, delay=3, current_action="waiting for signal"):
     """Update this server's status while the manager waits for a signal."""
     for attempt in range(1, retries + 1):
         connection = None
@@ -187,7 +187,6 @@ def keep_alive(retries=5, delay=3):
                 (SERVER_IP,),
             )
             existing_row = cursor.fetchone()
-
             if existing_row:
                 cursor.execute(
                     """
@@ -195,7 +194,7 @@ def keep_alive(retries=5, delay=3):
                     SET last_uptime = %s, current_action = %s
                     WHERE server_ip = %s
                     """,
-                    (now_utc, "waiting for signal", SERVER_IP),
+                    (now_utc, current_action, SERVER_IP),
                 )
             else:
                 cursor.execute(
@@ -204,7 +203,7 @@ def keep_alive(retries=5, delay=3):
                     (server_ip, last_uptime, current_action)
                     VALUES (%s, %s, %s)
                     """,
-                    (SERVER_IP, now_utc, "waiting for signal"),
+                    (SERVER_IP, now_utc, current_action),
                 )
 
             connection.commit()
@@ -230,15 +229,29 @@ def runner():
     print(
         "\n\n============================================================================\nWaiting for a signal..."
     )
-
+    result = "None"
     while True:
-        keep_alive()
+        current_action = (
+            "No available cards: waiting for signal"
+            if result == "NO_CARDS"
+            else "No more links: waiting for signal"
+            if result == "NO_LINKS"
+            else "waiting for signal"
+        )
+        keep_alive(current_action=current_action)
+        # keep_alive()
         status, action, country = get_signal_from_db()
         if status and action == "run_familybot":
             print(
                 f"Signal received: {action} for country: {country}\n ============================================================================="
             )
-            run_familybot(country)
+            result = run_familybot(country)
+            current_action = (
+                "No available cards: waiting for signal"
+                if result == "NO_CARDS"
+                else "waiting for signal"
+            )
+            keep_alive(current_action=current_action)
             print(
                 f"Familybot finished for country: {country}\n ============================================================================="
             )
@@ -250,7 +263,13 @@ def runner():
             print(
                 f"Signal received: {action} for country: {country}\n ============================================================================="
             )
-            run_hotmailbot(country)
+            result = run_hotmailbot(country)
+            current_action = (
+                "No more links, waiting for signal"
+                if result == "NO_LINKS"
+                else "waiting for signal"
+            )
+            keep_alive(current_action=current_action)
             print(
                 f"Hotmailbot finished for country: {country}\n ============================================================================="
             )
