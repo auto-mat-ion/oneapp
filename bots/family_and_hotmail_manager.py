@@ -154,9 +154,10 @@ def get_signal_from_db():
                 return True, signal["action"], signal["country"]
             return _get_card_control_signal(cutoff_utc, now_utc)
         except Exception as exc:
-            print(
-                f"Error getting action signal from database (attempt {attempt}/5): {exc}"
-            )
+            if attempt >= 3:
+                print(
+                    f"Error getting action signal from database (attempt {attempt}/5): {exc}"
+                )
             if attempt < 5:
                 time.sleep(1)
         finally:
@@ -209,7 +210,8 @@ def keep_alive(retries=5, delay=3, current_action="waiting for signal"):
             connection.commit()
             return True
         except (mysql.connector.Error, OSError) as exc:
-            print(f"Manager keep_alive failed (attempt {attempt}/{retries}): {exc}")
+            if attempt >= 3:
+                print(f"Manager keep_alive failed (attempt {attempt}/{retries}): {exc}")
             if attempt < retries:
                 time.sleep(delay)
         finally:
