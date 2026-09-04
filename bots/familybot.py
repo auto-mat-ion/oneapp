@@ -4213,6 +4213,33 @@ def click_send_code_to_recovery_email_button(driver):
         return False
 
 
+def click_personal_account_button(driver):
+    """
+    Clicks the personal account button
+    """
+    try:
+        BUTTON_ELEMENT = (By.CSS_SELECTOR, 'div[id="msaTileTitle"]')
+
+        button_elements = WebDriverWait(driver, wait_time / 2).until(
+            EC.visibility_of_element_located(BUTTON_ELEMENT)
+        )
+
+        # button_element = button_elements[
+        #     [
+        #         i.text.lower().startswith("send a code to") for i in button_elements
+        #     ].index(True)
+        # ]
+        time.sleep(2)
+        button_elements = WebDriverWait(driver, wait_time / 2).until(
+            EC.visibility_of_element_located(BUTTON_ELEMENT)
+        )
+
+        button_elements.click()
+        return True
+    except:
+        return False
+
+
 def change_acc_pass(driver, new_profile_data):
     try:
         password = new_profile_data.get("pass")
@@ -4349,6 +4376,7 @@ def re_login_existing_acc(driver, new_profile_data):
         if click_existing_account_smtp(
             driver, wait_time=2
         ) or enter_email_and_click_next(driver, email):
+            click_personal_account_button(driver)
             click_send_code_to_recovery_email_button(driver)
             enter_recovery_email_2(driver, recovery)
             click_password_next_button(driver)
