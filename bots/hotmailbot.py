@@ -4971,7 +4971,7 @@ def initialize_new_profile(new_profile_data):
         return False, f"Undocumented_error: {E}"
     finally:
         try:
-            # driver.quit()
+            driver.quit()
             processed_email(new_profile_data_original)
 
             pass
