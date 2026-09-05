@@ -557,17 +557,19 @@ def wait_for_code_by_recovery_mail(recovery_email, timeout=120, poll_interval=1)
                 last_message.get("receivedAt"), "%Y-%m-%d %H:%M:%S"
             ).replace(tzinfo=timezone(timedelta(hours=-7)))
 
-            if (
-                (
-                    last_message["from"].lower()
-                    in ["microsoft account team", "microsoft 帐户团队"]
-                )
-                and (
-                    last_message["subject"].lower()
-                    in ["your single-use code", "你的一次性代码"]
-                )
-                and (((current_time - message_send_time).total_seconds()) < 15)
-            ):
+            # if (
+            #     (
+            #         last_message["from"].lower()
+            #         in ["microsoft account team", "microsoft 帐户团队"]
+            #     )
+            #     and (
+            #         last_message["subject"].lower()
+            #         in ["your single-use code", "你的一次性代码"]
+            #     )
+            #     and (((current_time - message_send_time).total_seconds()) < 15)
+            # )
+
+            if (current_time - message_send_time).total_seconds() < 15:
                 plain = re.sub(
                     r"<[^>]+>", " ", last_message.get("content")
                 )  # strip HTML
