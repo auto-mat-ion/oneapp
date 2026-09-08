@@ -971,7 +971,7 @@ def enter_email(driver, email_address):
         """
         Enters the email address in the email input box
         """
-        wait_time = 60
+        wait_time = 15
         EMAIL_INPUT_ELEMENT = (By.CSS_SELECTOR, 'input[type="email"]')
 
         email_input_element = WebDriverWait(driver, wait_time).until(
