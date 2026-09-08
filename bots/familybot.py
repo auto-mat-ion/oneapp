@@ -4943,7 +4943,7 @@ def change_account_country(driver, new_profile_data):
 
                 COUNTRY_INPUT_ELEMENT = (
                     By.CSS_SELECTOR,
-                    'input[id="profile.edit-profile-info.region-input"]',
+                    'input[id*="profile.edit-profile-info.region"]',
                 )
 
                 country_input_element = WebDriverWait(driver, wait_time).until(

@@ -4046,7 +4046,7 @@ def email_sender_uploader():
             # Distribution method
             dist_method = st.radio(
                 "Server distribution method",
-                ["Manual", "Equal"],
+                ["Manual", "Equal", "Autoequal"],
                 key=f"dist_method_{table_name}",
                 horizontal=True,
             )
@@ -4075,6 +4075,127 @@ def email_sender_uploader():
                     st.session_state[dist_key] = distribution
                     st.success("Distributed equally across servers.")
                     st.rerun()
+            elif dist_method == "Autoequal":
+                st.write(
+                    "Autoequal fills each selected server up to the current highest server total, then distributes any remaining rows so final totals differ by at most one where possible."
+                )
+                if st.button(
+                    "Autoequal Across Servers",
+                    key=f"autoequal_dist_{table_name}",
+                ):
+                    conn = get_db_connection()
+                    if conn is None:
+                        st.error(
+                            "Unable to connect to the database for autoequal distribution."
+                        )
+                    else:
+                        try:
+                            placeholders = ", ".join(["%s"] * len(selected_servers))
+                            cursor = conn.cursor(dictionary=True)
+                            cursor.execute(
+                                f"SELECT server_ip AS server, batch, COUNT(*) AS row_count "
+                                f"FROM oneapp.sender_input_accounts "
+                                f"WHERE server_ip IN ({placeholders}) "
+                                f"GROUP BY server_ip, batch",
+                                tuple(selected_servers),
+                            )
+                            existing_rows = cursor.fetchall()
+
+                            existing_batches = {
+                                server: {} for server in selected_servers
+                            }
+                            for row in existing_rows:
+                                server = str(row.get("server", "")).strip()
+                                batch = str(row.get("batch", "")).strip()
+                                if server in existing_batches and batch:
+                                    existing_batches[server][batch] = int(
+                                        row.get("row_count") or 0
+                                    )
+
+                            existing_totals = {
+                                server: sum(existing_batches[server].values())
+                                for server in selected_servers
+                            }
+                            highest_total = max(existing_totals.values(), default=0)
+                            total_to_assign = len(df)
+                            server_assignments = {
+                                server: 0 for server in selected_servers
+                            }
+                            remaining = total_to_assign
+
+                            while remaining > 0:
+                                below_highest = [
+                                    server
+                                    for server in selected_servers
+                                    if existing_totals[server]
+                                    + server_assignments[server]
+                                    < highest_total
+                                ]
+                                eligible_servers = below_highest or selected_servers
+                                target_server = min(
+                                    eligible_servers,
+                                    key=lambda server: (
+                                        existing_totals[server]
+                                        + server_assignments[server],
+                                        selected_servers.index(server),
+                                    ),
+                                )
+                                server_assignments[target_server] += 1
+                                remaining -= 1
+
+                            distribution = []
+                            for server in selected_servers:
+                                assigned_count = server_assignments[server]
+                                num_batches = server_batches[server]
+                                batch_totals = {
+                                    f"batch_{index + 1}": existing_batches[server].get(
+                                        f"batch_{index + 1}", 0
+                                    )
+                                    for index in range(num_batches)
+                                }
+                                batch_assignments = {batch: 0 for batch in batch_totals}
+
+                                for _ in range(assigned_count):
+                                    target_batch = min(
+                                        batch_totals,
+                                        key=lambda batch: (
+                                            batch_totals[batch]
+                                            + batch_assignments[batch],
+                                            list(batch_totals).index(batch),
+                                        ),
+                                    )
+                                    batch_assignments[target_batch] += 1
+
+                                distribution.append(
+                                    {
+                                        "server": server,
+                                        "count": assigned_count,
+                                        "batches": [
+                                            {
+                                                "batch": batch,
+                                                "count": count,
+                                            }
+                                            for batch, count in batch_assignments.items()
+                                            if count > 0
+                                        ],
+                                    }
+                                )
+
+                            st.session_state[dist_key] = distribution
+                            st.success(
+                                "Autoequal distribution applied using current server batch counts."
+                            )
+                            st.rerun()
+                        except Exception as exc:
+                            st.error(
+                                f"Unable to calculate autoequal distribution: {exc}"
+                            )
+                        finally:
+                            try:
+                                cursor.close()
+                            except Exception:
+                                pass
+                            conn.close()
             else:  # Manual
                 st.write(
                     "Assign servers sequentially. First assignment gets the top rows, etc."
