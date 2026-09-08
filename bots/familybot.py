@@ -4999,7 +4999,10 @@ def change_account_country(driver, new_profile_data):
                 time.sleep(0.5)
                 country_input_element.send_keys(Keys.BACK_SPACE * 50)
                 time.sleep(0.5)
-                country_input_element.send_keys(CHANGE_COUNTRY)
+                for letter in CHANGE_COUNTRY:
+                    country_input_element.send_keys(letter)
+                    time.sleep(1)
+                # country_input_element.send_keys(CHANGE_COUNTRY)
                 time.sleep(2.5)
                 country_input_element.send_keys(Keys.ENTER)
                 time.sleep(1)
