@@ -4878,6 +4878,21 @@ def login_on_country_page(driver, new_profile_data):
         return False
 
 
+def send_code_to_the_recovery_country(driver):
+    try:
+        BUTTON_ELEMENT = (
+            By.CSS_SELECTOR,
+            'div[aria-label*="Send a code to"]  span[role="button"]',
+        )
+        send_code_button = WebDriverWait(driver, 3).until(
+            EC.element_to_be_clickable(BUTTON_ELEMENT)
+        )
+        send_code_button.click()
+        return True
+    except:
+        return False
+
+
 def change_account_country(driver, new_profile_data):
     try:
         driver__retries = 0
@@ -4949,6 +4964,34 @@ def change_account_country(driver, new_profile_data):
                 country_input_element = WebDriverWait(driver, wait_time).until(
                     EC.visibility_of_element_located(COUNTRY_INPUT_ELEMENT)
                 )
+                if send_code_to_the_recovery_country(driver):
+                    re_login_existing_acc(driver, new_profile_data)
+                    COUNTRY_EDIT_BUTTON_ELEMENT = (
+                        By.CSS_SELECTOR,
+                        'div[id="profile.profile-info.country-or-region.listItem"]',
+                    )
+
+                    country_edit_button = WebDriverWait(driver, wait_time).until(
+                        EC.element_to_be_clickable(COUNTRY_EDIT_BUTTON_ELEMENT)
+                    )
+
+                    # scroll to view first
+                    driver.execute_script(
+                        "arguments[0].scrollIntoView({ behavior: 'smooth', block: 'center' });",
+                        country_edit_button,
+                    )
+                    time.sleep(1)
+                    country_edit_button.click()
+                    time.sleep(1)
+
+                    COUNTRY_INPUT_ELEMENT = (
+                        By.CSS_SELECTOR,
+                        'input[id*="profile.edit-profile-info.region"]',
+                    )
+
+                    country_input_element = WebDriverWait(driver, wait_time).until(
+                        EC.visibility_of_element_located(COUNTRY_INPUT_ELEMENT)
+                    )
 
                 # data[0]
                 country_input_element.click()
@@ -6191,6 +6234,7 @@ def affirm_congrats_card_added_italy(driver):
         time_in_sec = 200
         while time_in_sec > 0:
             try:
+                _check_shutdown_requested()
                 AFFIRM_CONGRATS_ELEMENT = (
                     By.CSS_SELECTOR,
                     'h2[role="presentation"]',
@@ -6242,6 +6286,7 @@ def affirm_congrats_card_added_italy(driver):
                     return True
 
             except:
+                _check_shutdown_requested()
                 try:
                     AFFIRM_CONGRATS_ELEMENT = (
                         By.CSS_SELECTOR,
