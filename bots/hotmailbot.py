@@ -166,6 +166,7 @@ VPN_CONNECTION_STATUS = "none"
 VPN_CONNECTION_WATCHDOG = None
 VPN_CONNECTION_WATCHDOG_STOP = threading.Event()
 SHUTDOWN_REQUESTED = False
+PAUSE_REQUESTED = False
 SHUTDOWN_WATCHER_STARTED = False
 
 
@@ -179,18 +180,17 @@ def _check_shutdown_requested():
 
 def _check_pause_requested():
     global SHUTDOWN_REQUESTED
-    if get_signal_from_db()[1] != "pause":
+    if not PAUSE_REQUESTED:
         return
 
     print("pause initiated!")
     while True:
         time.sleep(random.uniform(20, 30))
         keep_alive(current_action="paused")
-        action = get_signal_from_db()[1]
-        if action == "resume":
+        if not PAUSE_REQUESTED:
             print("resume initiated!")
             return
-        if action in {"shutdown", "shutdown_all"}:
+        if SHUTDOWN_REQUESTED:
             SHUTDOWN_REQUESTED = True
             print("shutdown initiated!")
             raise InterruptedError("shutdown initiated")
@@ -205,13 +205,22 @@ def _shutdown_signal_active():
 
 
 def _shutdown_watcher():
-    global SHUTDOWN_REQUESTED
+    global SHUTDOWN_REQUESTED, PAUSE_REQUESTED
     while not SHUTDOWN_REQUESTED:
         time.sleep(random.uniform(20, 35))
-        if _shutdown_signal_active():
-            SHUTDOWN_REQUESTED = True
-            print("shutdown initiated!")
-            return
+        try:
+            status, action, _ = get_signal_from_db()
+            action = str(action or "").strip().lower()
+            if status and action == "pause":
+                PAUSE_REQUESTED = True
+            elif status and action == "resume":
+                PAUSE_REQUESTED = False
+            if status and action in {"shutdown", "shutdown_all"}:
+                SHUTDOWN_REQUESTED = True
+                print("shutdown initiated!")
+                return
+        except Exception:
+            pass
 
 
 def _start_shutdown_watcher():
@@ -408,7 +417,7 @@ def wait_for_code(email_token, timeout=120, poll_interval=3):
                         msg.get("content", ""),
                     ]
                 )
-                if "microsoft account team" in combined.lower():
+                if "microsoft" in combined.lower():
                     plain = re.sub(r"<[^>]+>", " ", combined)  # strip HTML
                     match = re.search(r"Security code:\s*(\d{6})", plain)
                     if match:
@@ -4683,6 +4692,7 @@ def initialize_new_profile(new_profile_data):
 
                 _check_shutdown_requested()
                 status, code = wait_for_code(email_token)
+                _check_shutdown_requested()
                 time.sleep(3)
                 if not status:
                     print(f"{email_address}: Error getting code from tempmail")
@@ -4727,13 +4737,6 @@ def initialize_new_profile(new_profile_data):
                     print(f"{email_address}: OTP verified successfully")
         else:
             pass
-            # print(f"{email_address}: Protect your account page NOT displayed")
-            # new_profile_logger(
-            #     email_address,
-            #     "FAIL",
-            #     "Recovery not added. Protect your account page NOT displayed",
-            # )
-            # return False, "Recovery not added. Protect your account page NOT displayed"
 
         print(f"{email_address}:Finalizing signin")
         _check_shutdown_requested()
@@ -4742,7 +4745,7 @@ def initialize_new_profile(new_profile_data):
         click_looks_good_button(driver)
         click_next_if_a_quick_note_page(driver)
         click_stay_signed_in_button(driver)
-
+        _check_shutdown_requested()
         try:
             if enter_password(driver=driver, password=password):
                 print(f"{email_address}: Reloging in with password")
@@ -4771,6 +4774,7 @@ def initialize_new_profile(new_profile_data):
                 "https://account.live.com/password/Change?mkt=en-US&refd=account.microsoft.com&refp=profile"
             )
             time.sleep(3)
+            _check_shutdown_requested()
             if is_protect_your_account_page(driver):
                 recovery_email_page_popped_up = "YES"
 
@@ -4835,8 +4839,9 @@ def initialize_new_profile(new_profile_data):
                             "Error entering recovery email",
                         )
                         return False, "Error entering recovery email"
-
+                    _check_shutdown_requested()
                     status, code = wait_for_code(email_token)
+                    _check_shutdown_requested()
                     time.sleep(3)
                     if not status:
                         print(f"{email_address}: Error getting code from tempmail")
@@ -4882,7 +4887,7 @@ def initialize_new_profile(new_profile_data):
                         print(f"{email_address}: OTP verified successfully")
             else:
                 pass
-
+        _check_shutdown_requested()
         if recovery_email_page_popped_up == "YES":
             update_accounts_data(
                 email=email_address,
@@ -4899,6 +4904,7 @@ def initialize_new_profile(new_profile_data):
             return False, "Recovery not added. Protect your account page NOT displayed"
         _check_shutdown_requested()
         status, error = change_acc_pass(driver, new_profile_data)
+        _check_shutdown_requested()
         if status:
             update_accounts_data(email=email_address, password=error)
 
@@ -5029,10 +5035,11 @@ def run_hotmailbot(country=None):
     """
     Creates threads and signs in simultaneously
     """
-    global PREFERRED_SMS_COUNTRY, SHUTDOWN_REQUESTED
+    global PREFERRED_SMS_COUNTRY, SHUTDOWN_REQUESTED, PAUSE_REQUESTED
     if country:
         PREFERRED_SMS_COUNTRY = str(country).lower()
     SHUTDOWN_REQUESTED = False
+    PAUSE_REQUESTED = False
     _start_shutdown_watcher()
 
     print(
