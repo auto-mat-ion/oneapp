@@ -721,6 +721,35 @@ def load_cache():
     _run_with_retry("load cache from database", _load_once, default=None)
 
 
+def load_cache_fottest(cache_path: Optional[str] = None) -> bool:
+    """Load an MSAL token cache from a local file into the shared cache."""
+    global _shared_cache
+    _shared_cache = msal.SerializableTokenCache()
+    configured_path = cache_path
+    path = Path(configured_path)
+    if not path.is_absolute():
+        path = Path(__file__).resolve().parent / path
+
+    try:
+        with path.open("rb") as handle:
+            serialized_cache = handle.read()
+
+        if not serialized_cache:
+            raise ValueError("cache file is empty")
+
+        if isinstance(serialized_cache, bytes):
+            serialized_cache = serialized_cache.decode("utf-8")
+
+        with _cache_lock:
+            _shared_cache.deserialize(serialized_cache)
+
+        log(f"Cache loaded from file: {path}")
+        return True
+    except Exception as exc:
+        log(f"Failed to load cache from file {path}: {exc}")
+        return False
+
+
 def _load_db_config() -> dict:
     settings_path = Path(__file__).resolve().parent / "settings.json"
     config = {}
@@ -851,6 +880,36 @@ def get_token(email: str) -> Optional[str]:
         return None
     except Exception:
         return None
+
+
+def get_access_token(email: str) -> Optional[str]:
+    """Return the access token stored in the loaded cache without refreshing it."""
+    try:
+        normalized_email = email.strip().lower()
+        cache_data = json.loads(_shared_cache.serialize())
+        account_ids = {
+            account.get("home_account_id")
+            for account in cache_data.get("Account", {}).values()
+            if isinstance(account, dict)
+            and account.get("username", "").strip().lower() == normalized_email
+        }
+
+        if not account_ids:
+            return None
+
+        for record in cache_data.get("AccessToken", {}).values():
+            if not isinstance(record, dict):
+                continue
+            if (
+                record.get("home_account_id") in account_ids
+                and record.get("client_id") == _get_client_id()
+                and "https://graph.microsoft.com/.default" in record.get("target", "")
+            ):
+                return record.get("secret")
+    except Exception:
+        pass
+
+    return None
 
 
 def refresh_token(email: str) -> Optional[str]:
@@ -2354,6 +2413,3 @@ def run_smtp_bot(app_choice: int = 1):
         )
         log("SMTP batch finished. Returning to signal wait loop.")
         time.sleep(5)
-
-
-# get_due_smtp_schedule()

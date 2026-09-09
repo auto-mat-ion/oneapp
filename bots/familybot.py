@@ -973,12 +973,12 @@ def is_captcha_page(driver):
         return False
 
 
-def enter_email(driver, email_address):
+def enter_email(driver, email_address, timeout=10):
     try:
         """
         Enters the email address in the email input box
         """
-        wait_time = 15
+        wait_time = timeout
         EMAIL_INPUT_ELEMENT = (By.CSS_SELECTOR, 'input[type="email"]')
 
         email_input_element = WebDriverWait(driver, wait_time).until(
@@ -1773,30 +1773,31 @@ def is_protect_your_account_page(driver):
     """
     Checks if the page is protect your account
     """
-    try:
-        TITLE_ELEMENT = (By.CSS_SELECTOR, 'div[id="iPageTitle"]')
+    title_selectors = (
+        (By.CSS_SELECTOR, 'div[id="iPageTitle"]'),
+        (By.CSS_SELECTOR, 'h1[data-testid="title"]'),
+    )
 
-        title_element = WebDriverWait(driver, wait_time).until(
-            EC.visibility_of_element_located(TITLE_ELEMENT)
-        )
-        if "protect your account" in title_element.text.lower():
-            return True
-        else:
-            return False
-    except:
-        try:
-            TITLE_ELEMENT = (By.CSS_SELECTOR, 'h1[data-testid="title"]')
+    for _ in range(5):
+        for title_selector in title_selectors:
+            try:
+                title_element = WebDriverWait(driver, 1).until(
+                    EC.visibility_of_element_located(title_selector)
+                )
+            except:
+                continue
 
-            title_element = WebDriverWait(driver, wait_time).until(
-                EC.visibility_of_element_located(TITLE_ELEMENT)
-            )
-            if "help protect your account" in title_element.text.lower():
+            title_text = title_element.text.lower()
+            if "help protect your account" in title_text:
                 click_password_next_button(driver)
                 return True
-            else:
-                return False
-        except:
+            if "protect your account" in title_text:
+                return True
             return False
+
+        time.sleep(2)
+
+    return False
 
 
 def lets_protect_your_account_banner_page(driver):
@@ -1833,7 +1834,7 @@ def invalid_code(driver):
     try:
         ERROR_ELEMENT = (By.CSS_SELECTOR, 'div[class="alert alert-error ErrMsg"]')
 
-        error_element = WebDriverWait(driver, wait_time).until(
+        error_element = WebDriverWait(driver, wait_time / 2).until(
             EC.visibility_of_element_located(ERROR_ELEMENT)
         )
         if "code didn't work" in error_element.text.lower():
@@ -1848,33 +1849,28 @@ def select_alternate_email_option(driver):
     """
     Selects 'An alternate email address' option
     """
-    try:
-        PROTECTION_OPTIONS_ELEMENT = (By.CSS_SELECTOR, 'select[id="iProofOptions"]')
+    selectors = (
+        (By.CSS_SELECTOR, 'select[id="iProofOptions"]'),
+        (By.CSS_SELECTOR, 'input[type="email"]'),
+        (By.CSS_SELECTOR, 'input[type="text"]'),
+    )
 
-        options_element = WebDriverWait(driver, wait_time).until(
-            EC.visibility_of_element_located(PROTECTION_OPTIONS_ELEMENT)
-        )
-
-        Select(options_element).select_by_value("Email")
-        return True
-    except:
-        try:
-            PROTECTION_OPTIONS_ELEMENT = (By.CSS_SELECTOR, 'input[type="email"]')
-
-            options_element = WebDriverWait(driver, wait_time / 2).until(
-                EC.visibility_of_element_located(PROTECTION_OPTIONS_ELEMENT)
-            )
-            return True
-        except:
+    for _ in range(5):
+        for index, selector in enumerate(selectors):
             try:
-                PROTECTION_OPTIONS_ELEMENT = (By.CSS_SELECTOR, 'input[type="text"]')
-
-                options_element = WebDriverWait(driver, wait_time / 2).until(
-                    EC.visibility_of_element_located(PROTECTION_OPTIONS_ELEMENT)
+                options_element = WebDriverWait(driver, 1).until(
+                    EC.visibility_of_element_located(selector)
                 )
-                return True
             except:
-                return False
+                continue
+
+            if index == 0:
+                Select(options_element).select_by_value("Email")
+            return True
+
+        time.sleep(2)
+
+    return False
 
 
 def accept_tempmail_consent(driver):
@@ -2009,7 +2005,7 @@ def enter_code(driver, code):
         """
         Enters the email address in the email input box
         """
-        wait_time = 30
+        wait_time = 10
         INPUT_ELEMENT = (By.CSS_SELECTOR, 'input[placeholder="Code"]')
 
         input_element = WebDriverWait(driver, wait_time).until(
@@ -2138,10 +2134,10 @@ def click_next_if_a_quick_note_page(driver):
     try:
         HEADER_ELEMENT = (By.CSS_SELECTOR, 'span[role="heading"]')
 
-        header_element = WebDriverWait(driver, wait_time).until(
+        header_element = WebDriverWait(driver, wait_time / 2).until(
             EC.visibility_of_element_located(HEADER_ELEMENT)
         )
-        time.sleep(3)
+        time.sleep(2)
         header_element = WebDriverWait(driver, wait_time).until(
             EC.visibility_of_element_located(HEADER_ELEMENT)
         )
@@ -3642,7 +3638,7 @@ def bring_to_front(driver):
             driver.minimize_window()
             driver.set_window_position(position["x"], position["y"])
             driver.maximize_window()
-            time.sleep(1)
+            # time.sleep(1)
     except:
         pass
 
@@ -4515,37 +4511,16 @@ def logout_then_re_login_existing_acc(driver, new_profile_data):
 
         driver.get("https://login.live.com/logout.srf")
         bring_to_front(driver)
-        time.sleep(10)
+        time.sleep(1)
 
         driver.get(MICROSOFT_LOGIN_URL)
 
         enter_email(driver, email)
         click_next_button(driver)
-        # if click_send_code_to_recovery_email_button(driver):
-        #     enter_recovery_email_2(driver, recovery)
-        #     click_password_next_button(driver)
-        #     status, code = wait_for_code_by_recovery_mail(recovery)
-        #     if not status:
-        #         print(f"{email} : Code not sent to recovery email!")
-        #         return False
-        #     enter_code_and_click_next_after_pass_change(driver, code)
-        #     click_stay_signed_in_button(driver)
-        #     driver.get("https://account.microsoft.com/profile")
-        #     login_on_country_page(driver, new_profile_data)
-        #     print(f"{email} : Re-logged in successfully")
-        #     return True
-        # else:
-        #     enter_password(driver=driver, password=password)
-        #     click_password_next_button(driver=driver)
-        #     click_stay_signed_in_button(driver)
-        #     driver.get("https://account.microsoft.com/profile")
-        #     login_on_country_page(driver, new_profile_data)
-        #     print(f"{email} : Re-logged in successfully")
-        #     return True
 
         click_send_code_to_recovery_email_button(driver)
         enter_recovery_email_2(driver, recovery)
-        # click_next_button(driver)
+
         click_password_next_button(driver)
         status, code = wait_for_code_by_recovery_mail(recovery)
         if not status:
@@ -4613,7 +4588,7 @@ def country_is_the_desired(driver):
             'div[id="profile.profile-info.country-or-region.listItem"]',
         )
 
-        country_edit_button = WebDriverWait(driver, wait_time / 3).until(
+        country_edit_button = WebDriverWait(driver, 3).until(
             EC.element_to_be_clickable(COUNTRY_EDIT_BUTTON_ELEMENT)
         )
 
@@ -4894,23 +4869,15 @@ def login_on_country_page(driver, new_profile_data):
             'button[data-bi-id="signedout.hero.signIn"]',
         )
 
-        sign_in_btn = WebDriverWait(driver, wait_time / 2).until(
+        sign_in_btn = WebDriverWait(driver, 3).until(
             EC.element_to_be_clickable(SIGN_IN_BTN)
         )
         sign_in_btn.click()
-        time.sleep(2)
+        time.sleep(1)
 
         # new_pass = password + ".!Ze8"
         print(f"{email} : Sign in button found on profile page.")
-        # status, error = change_acc_pass(
-        #     driver, new_profile_data=new_profile_data
-        # )
         print(f"{email} : Reloging in with NEW password")
-        # click_existing_account_smtp(driver)
-        # click_use_your_password_button(driver)
-        # time.sleep(2)
-        # if enter_password(driver=driver, password=password):
-        #     click_password_next_button(driver=driver)
         if re_login_existing_acc(driver, new_profile_data):
             driver.get("https://account.microsoft.com/profile")
             return True
@@ -4952,8 +4919,8 @@ def change_account_country(driver, new_profile_data):
                     time.sleep(0.5)
                     driver.maximize_window()
                     time.sleep(0.5)
-                    driver.get(MICROSOFT_LOGIN_URL)
-                    time.sleep(1)
+                    driver.get("https://account.microsoft.com/profile")
+                    # time.sleep(1)
                     driver_success = True
             except:
                 driver.quit()
@@ -4970,7 +4937,7 @@ def change_account_country(driver, new_profile_data):
                 recovery = new_profile_data.get("recovery_email")
                 bring_to_front(driver)
 
-                driver.get("https://account.microsoft.com/profile")
+                # driver.get("https://account.microsoft.com/profile")
 
                 login_on_country_page(driver, new_profile_data)
                 _check_shutdown_requested()
@@ -5004,36 +4971,36 @@ def change_account_country(driver, new_profile_data):
                 country_input_element = WebDriverWait(driver, wait_time).until(
                     EC.visibility_of_element_located(COUNTRY_INPUT_ELEMENT)
                 )
-                if send_code_to_the_recovery_country(driver):
-                    re_login_existing_acc(driver, new_profile_data)
-                    COUNTRY_EDIT_BUTTON_ELEMENT = (
-                        By.CSS_SELECTOR,
-                        'div[id="profile.profile-info.country-or-region.listItem"]',
-                    )
+                # if send_code_to_the_recovery_country(driver):
+                #     re_login_existing_acc(driver, new_profile_data)
+                #     COUNTRY_EDIT_BUTTON_ELEMENT = (
+                #         By.CSS_SELECTOR,
+                #         'div[id="profile.profile-info.country-or-region.listItem"]',
+                #     )
 
-                    country_edit_button = WebDriverWait(driver, wait_time).until(
-                        EC.element_to_be_clickable(COUNTRY_EDIT_BUTTON_ELEMENT)
-                    )
+                #     country_edit_button = WebDriverWait(driver, wait_time).until(
+                #         EC.element_to_be_clickable(COUNTRY_EDIT_BUTTON_ELEMENT)
+                #     )
 
-                    # scroll to view first
-                    driver.execute_script(
-                        "arguments[0].scrollIntoView({ behavior: 'smooth', block: 'center' });",
-                        country_edit_button,
-                    )
-                    time.sleep(1)
-                    country_edit_button.click()
-                    time.sleep(1)
+                #     # scroll to view first
+                #     driver.execute_script(
+                #         "arguments[0].scrollIntoView({ behavior: 'smooth', block: 'center' });",
+                #         country_edit_button,
+                #     )
+                #     time.sleep(1)
+                #     country_edit_button.click()
+                #     time.sleep(1)
 
-                    COUNTRY_INPUT_ELEMENT = (
-                        By.CSS_SELECTOR,
-                        'input[id*="profile.edit-profile-info.region"]',
-                    )
+                #     COUNTRY_INPUT_ELEMENT = (
+                #         By.CSS_SELECTOR,
+                #         'input[id*="profile.edit-profile-info.region"]',
+                #     )
 
-                    country_input_element = WebDriverWait(driver, wait_time).until(
-                        EC.visibility_of_element_located(COUNTRY_INPUT_ELEMENT)
-                    )
+                #     country_input_element = WebDriverWait(driver, wait_time).until(
+                #         EC.visibility_of_element_located(COUNTRY_INPUT_ELEMENT)
+                #     )
 
-                # data[0]
+                # # data[0]
                 country_input_element.click()
                 # re_login_existing_acc(driver, new_profile_data=new_profile_data)
                 time.sleep(0.5)
@@ -5041,21 +5008,21 @@ def change_account_country(driver, new_profile_data):
                 time.sleep(0.5)
                 for letter in CHANGE_COUNTRY:
                     country_input_element.send_keys(letter)
-                    time.sleep(1)
+                    time.sleep(0.4)
                 # country_input_element.send_keys(CHANGE_COUNTRY)
-                time.sleep(2.5)
+                time.sleep(1)
                 country_input_element.send_keys(Keys.ENTER)
                 time.sleep(1)
 
                 try:
                     SAVE_BUTTON_ELEMENT = (By.CSS_SELECTOR, 'button[aria-label="Save"]')
 
-                    save_button_element = WebDriverWait(driver, wait_time).until(
+                    save_button_element = WebDriverWait(driver, 3).until(
                         EC.element_to_be_clickable(SAVE_BUTTON_ELEMENT)
                     )
 
                     save_button_element.click()
-                    time.sleep(2)
+                    # time.sleep(2)
                 except:
                     logout_then_re_login_existing_acc(driver, new_profile_data)
                     _check_shutdown_requested()
@@ -5087,7 +5054,7 @@ def change_account_country(driver, new_profile_data):
                             time.sleep(0.5)
                             driver.maximize_window()
                             time.sleep(0.5)
-                            driver.get(MICROSOFT_LOGIN_URL)
+                            driver.get("https://account.microsoft.com/profile")
                             time.sleep(1)
                             driver_success = True
                     except:
@@ -6140,7 +6107,7 @@ def credit_card_is_declined(driver):
             'span[data-automation-id="error-message"]',
         )
 
-        error_element = WebDriverWait(driver, wait_time * 2).until(
+        error_element = WebDriverWait(driver, wait_time).until(
             EC.visibility_of_all_elements_located(SIGNIN_ELEMENT)
         )
 
@@ -7809,7 +7776,7 @@ def relogin_and_signin_premium(driver, new_profile_data):
                     time.sleep(0.5)
                     driver.maximize_window()
                     time.sleep(0.5)
-                    driver.get(MICROSOFT_LOGIN_URL)
+                    driver.get("https://account.microsoft.com/profile")
                     time.sleep(1)
                     driver_success = True
             except:
@@ -7825,7 +7792,7 @@ def relogin_and_signin_premium(driver, new_profile_data):
             recovery = new_profile_data.get("recovery_email")
             bring_to_front(driver)
 
-            driver.get("https://account.microsoft.com/profile")
+            # driver.get("https://account.microsoft.com/profile")
 
             login_on_country_page(driver, new_profile_data)
 
@@ -7965,12 +7932,12 @@ def get__premium_italy(driver, new_profile_data):
             try:
                 if PREFERRED_SMS_COUNTRY.lower() == "italy":
                     driver.get("https://www.microsoft.com/it-it/microsoft-365/try")
-                    time.sleep(3)
+                    # time.sleep(1)
                     # driver.refresh()
                 elif PREFERRED_SMS_COUNTRY.lower() in ["poland2", "poland"]:
                     driver.get("https://www.microsoft.com/pl-pl/microsoft-365/try")
 
-                time.sleep(3)
+                time.sleep(1)
 
                 current_status = "clicking premium element"
                 PREMIUM_ELEMENT = (
@@ -7978,20 +7945,19 @@ def get__premium_italy(driver, new_profile_data):
                     'a[aria-label*="Microsoft 365 Family."]',
                 )
 
-                premium_element = WebDriverWait(driver, wait_time).until(
+                premium_element = WebDriverWait(driver, wait_time / 2).until(
                     EC.visibility_of_element_located(PREMIUM_ELEMENT)
                 )
                 premium_element.click()
 
-                time.sleep(1)
-
+                time.sleep(0.5)
                 break
             except:
                 if element_retries <= 2:
                     driver = relogin_and_signin_premium(driver, new_profile_data)
                 else:
                     driver.get("https://account.microsoft.com/profile")
-                time.sleep(10)
+                time.sleep(6)
                 element_retries -= 1
 
         _check_shutdown_requested()
@@ -8052,7 +8018,7 @@ def get__premium_italy(driver, new_profile_data):
             EC.element_to_be_clickable(NEXT_BTN_ELEMENT)
         )
         next_btn_element.click()
-        time.sleep(1)
+        time.sleep(0.5)
 
         # click card btn
         current_status = "clicking card button"
@@ -8067,7 +8033,7 @@ def get__premium_italy(driver, new_profile_data):
                 'button[aria-label="Credit card or debit card"]',
             )
         try:
-            card_btn_element = WebDriverWait(driver, wait_time).until(
+            card_btn_element = WebDriverWait(driver, wait_time / 2).until(
                 EC.element_to_be_clickable(CARD_BTN_ELEMENT)
             )
         except:
@@ -8076,7 +8042,7 @@ def get__premium_italy(driver, new_profile_data):
                     By.CSS_SELECTOR,
                     'button[aria-label="Credit card or debit card"]',
                 )
-                card_btn_element = WebDriverWait(driver, wait_time).until(
+                card_btn_element = WebDriverWait(driver, wait_time / 2).until(
                     EC.element_to_be_clickable(CARD_BTN_ELEMENT)
                 )
             except:
@@ -8331,31 +8297,33 @@ def get__premium_italy(driver, new_profile_data):
 
         current_status = "checking if card is declined"
         _check_shutdown_requested()
-        if credit_card_is_declined(driver):
-            print(f"{email_address} : Card was declined")
-            # log_card_usage(card_details_dict)
-            mark_card_failed(card_details_dict)
-
-            return False, "Card was declined"
-        else:
-            print(f"{email_address} : Card not declined.")
 
         current_status = "checking if card is added to payments"
         if affirm_card_is_added(driver, card_details_dict.get("name_on_card")):
-            print(f"{email_address} : Affirm Card added to payments successfully.")
+            print(
+                f"{email_address} : Affirmed Card was added to payments successfully."
+            )
         else:
+            if credit_card_is_declined(driver):
+                print(f"{email_address} : Card was declined")
+                # log_card_usage(card_details_dict)
+                mark_card_failed(card_details_dict)
+
+                return False, "Card was declined"
+            else:
+                print(f"{email_address} : Card not declined.")
+
             print(f"{email_address} : Card not added to payments.")
             return False, "Card not added to payments"
 
         current_status = "Add billing address if prompted"
-        _check_shutdown_requested()
-        add_billing(driver, new_profile_data, card_details_dict)
+        # add_billing(driver, new_profile_data, card_details_dict)
 
-        time.sleep(2)
+        # time.sleep(1)
         _check_shutdown_requested()
         try:
             current_status = "clicking scroll down button"
-            scroll_button_element = WebDriverWait(driver, wait_time).until(
+            scroll_button_element = WebDriverWait(driver, wait_time / 4).until(
                 EC.element_to_be_clickable(SCROLL_DOWN_BUTTON_ELEMENT)
             )
 
@@ -8438,11 +8406,11 @@ def get__premium_italy(driver, new_profile_data):
         else:
             print(f"{email_address} : Card authorized successfully.")
 
-        time.sleep(2)
+        # time.sleep(2)
         driver.get("https://account.microsoft.com/services/microsoft365/details")
 
         # _check_shutdown_requested()
-        time.sleep(2)
+        time.sleep(0.5)
         try:
             current_status = "clicking share button"
             SHARE_ELEMENT = (
@@ -8472,7 +8440,7 @@ def get__premium_italy(driver, new_profile_data):
             share_btn_element.click()
             print(f"{email_address} : Clicked share button")
 
-            time.sleep(2)
+            # time.sleep(2)
             current_status = "clicking copy link button"
             copy_btn_element = WebDriverWait(driver, wait_time).until(
                 EC.visibility_of_element_located(COPY_BUTTON_ELEMENT)
@@ -9631,7 +9599,7 @@ def initialize(new_profile_data):
         time.sleep(1)
 
         _check_shutdown_requested()
-        click_next_if_is_updating_terms_page(driver)
+        # click_next_if_is_updating_terms_page(driver)
 
         recovery_email_page_popped_up = "NO"
         temp_email = ""
@@ -9672,7 +9640,7 @@ def initialize(new_profile_data):
 
             else:
                 print(f"{email_address}: got email from temp-mail. Verifying..")
-                if enter_email(driver=driver, email_address=temp_email):
+                if enter_email(driver=driver, email_address=temp_email, timeout=3):
                     time.sleep(0.5)
                     bring_to_front(driver)
                     time.sleep(1)
@@ -9755,18 +9723,18 @@ def initialize(new_profile_data):
         # click_next_if_is_updating_terms_page(driver)
         time.sleep(1)
         click_looks_good_button(driver)
-        cancel_setup_passkey(driver)
-
+        # cancel_setup_passkey(driver)
         click_next_if_a_quick_note_page(driver)
         click_stay_signed_in_button(driver)
         _check_shutdown_requested()
-        try:
-            if enter_password(driver=driver, password=password):
-                print(f"{email_address}: Reloging in with password")
-                click_password_next_button(driver=driver)
-                click_stay_signed_in_button(driver)
-        except:
-            pass
+
+        # try:
+        #     if enter_password(driver=driver, password=password):
+        #         print(f"{email_address}: Reloging in with password")
+        #         click_password_next_button(driver=driver)
+        #         click_stay_signed_in_button(driver)
+        # except:
+        #     pass
 
         joined_microsoft_premium = "NO"
         print(f"{email_address}: SUCCESSFULL LOGIN!")
@@ -9965,8 +9933,8 @@ def initialize(new_profile_data):
                 )
 
         # return driver
-        print(f"{email_address}: Waiting at initialize barrier for other threads...")
-        initialize_barrier.wait(timeout=15 * 60)
+        # print(f"{email_address}: Waiting at initialize barrier for other threads...")
+        # initialize_barrier.wait(timeout=15 * 60)
 
         _check_shutdown_requested()
         if PREFERRED_SMS_COUNTRY in [
@@ -10018,6 +9986,7 @@ def run_familybot(country=None, concurrent=1):
     global \
         PREFERRED_SMS_COUNTRY, \
         SHUTDOWN_REQUESTED, \
+        PAUSE_REQUESTED, \
         CHANGE_COUNTRY, \
         CONCURRENT_WINDOWS, \
         initialize_barrier, \
@@ -10034,6 +10003,7 @@ def run_familybot(country=None, concurrent=1):
     # Optional barrier if threads should synchronize at start of get__premium
     get_premium_start_barrier = threading.Barrier(CONCURRENT_WINDOWS)
     SHUTDOWN_REQUESTED = False
+    PAUSE_REQUESTED = False
     _start_shutdown_watcher()
 
     print(

@@ -1,4 +1,5 @@
 import time
+import platform
 from datetime import timedelta, datetime, timezone
 import os
 import sys
@@ -17,7 +18,7 @@ from seleniumbase import Driver
 import pandas as pd
 import requests
 import threading
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 import re
 import json
 import subprocess
@@ -27,8 +28,18 @@ import random
 import msal
 
 import pyautogui
+from bots.family_and_hotmail_manager import get_signal_from_db
+
 
 lock = threading.Lock()
+# Number of parallel threads participating in barriers (must match ThreadPoolExecutor max_workers)
+CONCURRENT_WINDOWS = 1
+# Barrier for waiting after initialize across the parallel threads
+initialize_barrier = threading.Barrier(CONCURRENT_WINDOWS)
+# Barrier used inside get__premium at the 'clicking save button' point
+save_click_barrier = threading.Barrier(CONCURRENT_WINDOWS)
+# Optional barrier if threads should synchronize at start of get__premium
+get_premium_start_barrier = threading.Barrier(CONCURRENT_WINDOWS)
 
 THE_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -246,6 +257,7 @@ try:
 except:
     MAX_SIGNIN_THREADS = 5
 
+# Supported countries: netherlands, poland, poland2, sweden, united states, italy, and others from microsoft_country_codes.csv
 try:
     PREFERRED_SMS_COUNTRY = str(
         get_setting("PREFERRED_SMS_COUNTRY", "netherlands")
@@ -292,10 +304,14 @@ except:
 
 BOT_TYPE = "familybot"
 VPN_CONNECTION_STATUS = "none"
+# CONCURRENT_WINDOWS = 2
 VPN_CONNECTION_WATCHDOG = None
 VPN_CONNECTION_WATCHDOG_STOP = threading.Event()
 SHUTDOWN_REQUESTED = False
+PAUSE_REQUESTED = False
 SHUTDOWN_WATCHER_STARTED = False
+SHUTDOWN_WATCHER_STOP = threading.Event()
+SHUTDOWN_WATCHER_THREAD = None
 
 
 def _check_shutdown_requested():
@@ -303,59 +319,71 @@ def _check_shutdown_requested():
     if SHUTDOWN_REQUESTED:
         print("shutdown initiated!")
         raise InterruptedError("shutdown initiated")
+    _check_pause_requested()
+
+
+def _check_pause_requested():
+    global SHUTDOWN_REQUESTED
+    if not PAUSE_REQUESTED:
+        return
+
+    print("pause initiated!")
+    while PAUSE_REQUESTED and not SHUTDOWN_REQUESTED:
+        SHUTDOWN_WATCHER_STOP.wait(random.uniform(20, 30))
+        keep_alive(current_action="paused")
+    if SHUTDOWN_REQUESTED:
+        print("shutdown initiated!")
+        raise InterruptedError("shutdown initiated")
+    print("resume initiated!")
 
 
 def _shutdown_signal_active():
     try:
-        conn = get_db_connection()
-        if conn is None:
-            return False
-
-        try:
-            cursor = conn.cursor()
-            cursor.execute(
-                "SELECT action, date_time FROM familybot_actions_tracker ORDER BY action_id DESC LIMIT 1"
-            )
-            row = cursor.fetchone()
-            if not row:
-                return False
-
-            action = str(row[0] or "").strip().lower()
-            if action not in ["shutdown", "shutdown:all", f"shutdown:{SERVER_IP}"]:
-                return False
-
-            date_time = row[1]
-            if not isinstance(date_time, datetime):
-                return False
-
-            if date_time.tzinfo is None:
-                date_time = date_time.replace(tzinfo=timezone.utc)
-            else:
-                date_time = date_time.astimezone(timezone.utc)
-
-            now_utc = datetime.now(timezone.utc)
-            return abs((now_utc - date_time).total_seconds()) <= 180
-        finally:
-            conn.close()
+        status, action, _ = get_signal_from_db()
+        return status and str(action or "").strip().lower() in {
+            "shutdown",
+            "shutdown_all",
+        }
     except Exception:
         return False
 
 
 def _shutdown_watcher():
-    global SHUTDOWN_REQUESTED
+    global SHUTDOWN_REQUESTED, PAUSE_REQUESTED
     while not SHUTDOWN_REQUESTED:
-        time.sleep(random.uniform(20, 35))
-        if _shutdown_signal_active():
+        if SHUTDOWN_WATCHER_STOP.wait(random.uniform(20, 30)):
+            return
+        try:
+            status, action, _ = get_signal_from_db()
+            action = str(action or "").strip().lower()
+            if status and action == "pause":
+                PAUSE_REQUESTED = True
+            elif status and action == "resume":
+                PAUSE_REQUESTED = False
+            if status and action in {"shutdown", "shutdown_all"}:
+                SHUTDOWN_REQUESTED = True
+                print("shutdown initiated!")
+                return
+        except Exception as exc:
+            print(f"Signal watcher poll failed: {exc}")
+
+        if SHUTDOWN_REQUESTED:
             SHUTDOWN_REQUESTED = True
             print("shutdown initiated!")
             return
 
 
 def _start_shutdown_watcher():
-    global SHUTDOWN_WATCHER_STARTED
-    if not SHUTDOWN_WATCHER_STARTED:
+    global SHUTDOWN_WATCHER_STARTED, SHUTDOWN_WATCHER_THREAD
+    if SHUTDOWN_WATCHER_THREAD is None or not SHUTDOWN_WATCHER_THREAD.is_alive():
+        SHUTDOWN_WATCHER_STOP.clear()
         SHUTDOWN_WATCHER_STARTED = True
-        threading.Thread(target=_shutdown_watcher, daemon=True).start()
+        SHUTDOWN_WATCHER_THREAD = threading.Thread(
+            target=_shutdown_watcher,
+            name="familybot-signal-watcher",
+            daemon=True,
+        )
+        SHUTDOWN_WATCHER_THREAD.start()
 
 
 def _load_telegram_chat_ids():
@@ -438,7 +466,7 @@ def _watch_vpn_connection_status():
     """Monitor VPN connection status for up to 2 minutes."""
     global VPN_CONNECTION_STATUS, VPN_CONNECTION_WATCHDOG
 
-    deadline = time.time() + 120
+    deadline = time.time() + (10 * 60)
     while time.time() < deadline:
         if VPN_CONNECTION_WATCHDOG_STOP.is_set():
             VPN_CONNECTION_WATCHDOG = None
@@ -550,17 +578,19 @@ def wait_for_code_by_recovery_mail(recovery_email, timeout=120, poll_interval=1)
                 last_message.get("receivedAt"), "%Y-%m-%d %H:%M:%S"
             ).replace(tzinfo=timezone(timedelta(hours=-7)))
 
-            if (
-                (
-                    last_message["from"].lower()
-                    in ["microsoft account team", "microsoft 帐户团队"]
-                )
-                and (
-                    last_message["subject"].lower()
-                    in ["your single-use code", "你的一次性代码"]
-                )
-                and (((current_time - message_send_time).total_seconds()) < 15)
-            ):
+            # if (
+            #     (
+            #         last_message["from"].lower()
+            #         in ["microsoft account team", "microsoft 帐户团队"]
+            #     )
+            #     and (
+            #         last_message["subject"].lower()
+            #         in ["your single-use code", "你的一次性代码"]
+            #     )
+            #     and (((current_time - message_send_time).total_seconds()) < 15)
+            # )
+
+            if (current_time - message_send_time).total_seconds() < 15:
                 plain = re.sub(
                     r"<[^>]+>", " ", last_message.get("content")
                 )  # strip HTML
@@ -577,7 +607,7 @@ THE_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 utils_dir = os.path.normpath(os.path.join(THE_BASE_DIR, "../utils"))
 
 
-def keep_alive(retries=5, delay=3):
+def keep_alive(retries=5, delay=3, current_action=None):
     """Update the family/hotmail server heartbeat row in the database."""
     attempt = 1
     while attempt <= retries:
@@ -605,7 +635,8 @@ def keep_alive(retries=5, delay=3):
                         "UPDATE server_status_family_and_hotmail SET last_uptime = %s, current_action = %s WHERE server_ip = %s",
                         (
                             now_utc,
-                            f"running familybot: {PREFERRED_SMS_COUNTRY}",
+                            current_action
+                            or f"running familybot: {PREFERRED_SMS_COUNTRY}",
                             server_ip,
                         ),
                     )
@@ -615,11 +646,15 @@ def keep_alive(retries=5, delay=3):
                         (
                             server_ip,
                             now_utc,
-                            f"running familybot: {PREFERRED_SMS_COUNTRY}",
+                            current_action
+                            or f"running familybot: {PREFERRED_SMS_COUNTRY}",
                         ),
                     )
 
                 conn.commit()
+                print(
+                    f"keep_alive updated for server_status_family_and_hotmail at {now_utc}"
+                )
                 return True
             finally:
                 conn.close()
@@ -743,7 +778,7 @@ def connect_new_random():
                 print("Connecting to Random server")
 
         connect(random_location)
-        time.sleep(2)
+        time.sleep(5)
         keep_alive()
         VPN_CONNECTION_STATUS = "connected"
         VPN_CONNECTION_WATCHDOG_STOP.set()
@@ -903,7 +938,7 @@ def initialize_new_profile_driver():
                     # browser="firefox",
                     # proxy=proxy,
                     binary_location=chrome_location,
-                    extension_dir=extension_dir,
+                    # extension_dir=extension_dir,
                     locale_code="en",
                 )
             else:
@@ -913,8 +948,7 @@ def initialize_new_profile_driver():
                     # browser="firefox",
                     # proxy=proxy,
                     binary_location=chrome_location,
-                    # user_data_dir=user_data_dir,
-                    extension_dir=extension_dir,
+                    # extension_dir=extension_dir,
                     locale_code="en",
                 )
 
@@ -924,10 +958,6 @@ def initialize_new_profile_driver():
                 None,
             )
     except Exception as E:
-        try:
-            rollback_proxy(proxy)
-        except:
-            pass
         return False, f"Driver_init_error: {E}", None
 
 
@@ -948,7 +978,7 @@ def enter_email(driver, email_address):
         """
         Enters the email address in the email input box
         """
-        wait_time = 60
+        wait_time = 10
         EMAIL_INPUT_ELEMENT = (By.CSS_SELECTOR, 'input[type="email"]')
 
         email_input_element = WebDriverWait(driver, wait_time).until(
@@ -971,6 +1001,23 @@ def click_next_button(driver):
         NEXT_BUTTON_ELEMENT = (By.CSS_SELECTOR, 'input[type="submit"]')
 
         next_button = WebDriverWait(driver, wait_time).until(
+            EC.visibility_of_element_located(NEXT_BUTTON_ELEMENT)
+        )
+
+        next_button.click()
+        return True
+    except:
+        return False
+
+
+def click_looks_good_button(driver):
+    """
+    Clicks the next button
+    """
+    try:
+        NEXT_BUTTON_ELEMENT = (By.CSS_SELECTOR, 'input[id="iLooksGood"]')
+
+        next_button = WebDriverWait(driver, wait_time / 2).until(
             EC.visibility_of_element_located(NEXT_BUTTON_ELEMENT)
         )
 
@@ -1027,9 +1074,42 @@ def click_next_button_rec_email(driver):
         except Exception as E:
             return False, E
 
+        def sync_pc_time() -> bool:
+            """Sync local PC time with the system time service."""
+            try:
+                system = platform.system().lower()
+                if system == "windows":
+                    subprocess.run(
+                        ["w32tm", "/resync"],
+                        check=True,
+                        capture_output=True,
+                        text=True,
+                    )
+                    return True
+
+                if system in {"linux", "darwin"}:
+                    subprocess.run(
+                        ["timedatectl", "set-ntp", "true"],
+                        check=True,
+                        capture_output=True,
+                        text=True,
+                    )
+                    subprocess.run(
+                        ["timedatectl", "timesync-status"],
+                        check=True,
+                        capture_output=True,
+                        text=True,
+                    )
+                    return True
+
+                return False
+            except (subprocess.CalledProcessError, OSError):
+                return False
+
 
 def click_password_next_button(driver):
     """
+            sync_pc_time()
     Clicks the next button on gmail login
     """
     try:
@@ -1704,7 +1784,19 @@ def is_protect_your_account_page(driver):
         else:
             return False
     except:
-        return False
+        try:
+            TITLE_ELEMENT = (By.CSS_SELECTOR, 'h1[data-testid="title"]')
+
+            title_element = WebDriverWait(driver, wait_time).until(
+                EC.visibility_of_element_located(TITLE_ELEMENT)
+            )
+            if "help protect your account" in title_element.text.lower():
+                click_password_next_button(driver)
+                return True
+            else:
+                return False
+        except:
+            return False
 
 
 def lets_protect_your_account_banner_page(driver):
@@ -1769,12 +1861,20 @@ def select_alternate_email_option(driver):
         try:
             PROTECTION_OPTIONS_ELEMENT = (By.CSS_SELECTOR, 'input[type="email"]')
 
-            options_element = WebDriverWait(driver, wait_time).until(
+            options_element = WebDriverWait(driver, wait_time / 2).until(
                 EC.visibility_of_element_located(PROTECTION_OPTIONS_ELEMENT)
             )
             return True
         except:
-            return False
+            try:
+                PROTECTION_OPTIONS_ELEMENT = (By.CSS_SELECTOR, 'input[type="text"]')
+
+                options_element = WebDriverWait(driver, wait_time / 2).until(
+                    EC.visibility_of_element_located(PROTECTION_OPTIONS_ELEMENT)
+                )
+                return True
+            except:
+                return False
 
 
 def accept_tempmail_consent(driver):
@@ -4148,7 +4248,7 @@ def click_use_your_password_button(driver):
 
 def click_send_code_to_recovery_email_button(driver):
     """
-    Clicks the use your password button
+    Clicks the send a code to recovery email button
     """
     try:
         BUTTON_ELEMENT = (By.CSS_SELECTOR, 'span[role="button"]')
@@ -4169,6 +4269,33 @@ def click_send_code_to_recovery_email_button(driver):
         return False
 
 
+def click_personal_account_button(driver):
+    """
+    Clicks the personal account button
+    """
+    try:
+        BUTTON_ELEMENT = (By.CSS_SELECTOR, 'div[id="msaTileTitle"]')
+
+        button_elements = WebDriverWait(driver, wait_time / 2).until(
+            EC.visibility_of_element_located(BUTTON_ELEMENT)
+        )
+
+        # button_element = button_elements[
+        #     [
+        #         i.text.lower().startswith("send a code to") for i in button_elements
+        #     ].index(True)
+        # ]
+        time.sleep(2)
+        button_elements = WebDriverWait(driver, wait_time / 2).until(
+            EC.visibility_of_element_located(BUTTON_ELEMENT)
+        )
+
+        button_elements.click()
+        return True
+    except:
+        return False
+
+
 def change_acc_pass(driver, new_profile_data):
     try:
         password = new_profile_data.get("pass")
@@ -4183,10 +4310,12 @@ def change_acc_pass(driver, new_profile_data):
         driver.get(pass_change_url)
 
         time.sleep(2)
+        click_next_if_a_quick_note_page(driver)
 
         new_pass = password + ".!Ze8"
 
         retries = 0
+        _check_shutdown_requested()
         while retries < 3:
             try:
                 PASSWORD_ELEMENT = (By.CSS_SELECTOR, 'input[type="password"]')
@@ -4220,14 +4349,18 @@ def change_acc_pass(driver, new_profile_data):
         time.sleep(1)
 
         # RELOG IN
+        _check_shutdown_requested()
         try:
             print(f"{email}: Reloging in with NEW password")
             click_existing_account_smtp(driver)
 
             click_send_code_to_recovery_email_button(driver)
+            _check_shutdown_requested()
             enter_recovery_email_2(driver, recovery)
+            # _check_shutdown_requested()
             click_password_next_button(driver)
             status, code = wait_for_code_by_recovery_mail(recovery)
+            _check_shutdown_requested()
             if not status:
                 print(f"{email} : Code not sent to recovery email!")
                 return False, new_pass
@@ -4235,31 +4368,49 @@ def change_acc_pass(driver, new_profile_data):
             print(f"{email} : Password changed successfully")
             return True, new_pass
 
-            # if click_send_code_to_recovery_email_button(driver):
-            #     enter_recovery_email_2(driver, recovery)
-            #     click_password_next_button(driver)
-            #     status, code = wait_for_code_by_recovery_mail(recovery)
-            #     if not status:
-            #         print(f"{email} : Code not sent to recovery email!")
-            #         return False, new_pass
-            #     enter_code_and_click_next_after_pass_change(driver, code)
-            #     print(f"{email} : Password changed successfully")
-            #     return True, new_pass
-            # else:
-
-            #     enter_password(driver=driver, password=new_pass)
-            #     click_password_next_button(driver=driver)
-            #     print(f"{email} : Password changed successfully")
-            #     return True, new_pass
-
         except:
+            _check_shutdown_requested()
             pass
 
         return False, "Error clicking reloging in after password change"
 
     except Exception as e:
+        _check_shutdown_requested()
         print(f"{email} : Exception error while changing password: {str(e)}")
         return False, f"Exception during changing password: {str(e)}"
+
+
+def email_login_limit_reached(driver):
+    try:
+        LIMIT_ELEMENT = (By.CSS_SELECTOR, 'h1[data-testid="title"]')
+
+        password_input_elements = WebDriverWait(driver, 15).until(
+            EC.visibility_of_element_located(LIMIT_ELEMENT)
+        )
+
+        time.sleep(5)
+        password_input_elements = WebDriverWait(driver, 5).until(
+            EC.visibility_of_element_located(LIMIT_ELEMENT)
+        )
+
+        if password_input_elements.text.lower().startswith(
+            "you've reached your limit with this sign-in method"
+        ):
+            return True
+        else:
+            return False
+
+    except:
+        try:
+            INPUT_ELEMENT = (By.CSS_SELECTOR, 'input[id="codeEntry-0"]')
+
+            input_element = WebDriverWait(driver, wait_time).until(
+                EC.visibility_of_element_located(INPUT_ELEMENT)
+            )
+
+            return False
+        except:
+            return True
 
 
 def re_login_existing_acc(driver, new_profile_data):
@@ -4271,14 +4422,41 @@ def re_login_existing_acc(driver, new_profile_data):
         if click_existing_account_smtp(
             driver, wait_time=2
         ) or enter_email_and_click_next(driver, email):
+            click_personal_account_button(driver)
             click_send_code_to_recovery_email_button(driver)
             enter_recovery_email_2(driver, recovery)
             click_password_next_button(driver)
-            status, code = wait_for_code_by_recovery_mail(recovery)
-            if not status:
-                print("Code not sent to recovery email!")
-                return False
-            enter_code_and_click_next_after_pass_change(driver, code)
+            if email_login_limit_reached(driver):
+                print(f"{email} : Login limit reached. Using password.")
+                time.sleep(3)
+                click_use_your_password_button(driver)
+                enter_password(driver=driver, password=password)
+                click_password_next_button(driver=driver)
+            else:
+                status, code = wait_for_code_by_recovery_mail(recovery)
+                if not status:
+                    print("Code not sent to recovery email!")
+                    return False
+                enter_code_and_click_next_after_pass_change(driver, code)
+
+            click_next_if_a_quick_note_page(driver)
+            click_stay_signed_in_button(driver)
+        return True
+    except:
+        return False
+
+
+def re_login_existing_acc_use_password(driver, new_profile_data):
+    try:
+        email = new_profile_data.get("email")
+        password = new_profile_data.get("pass")
+        recovery = new_profile_data.get("recovery_email")
+
+        if click_existing_account_smtp(
+            driver, wait_time=2
+        ) or enter_email_and_click_next(driver, email):
+            enter_password(driver=driver, password=password)
+            click_password_next_button(driver=driver)
             click_stay_signed_in_button(driver)
         return False
     except:
@@ -4328,6 +4506,7 @@ def re_login_existing_acc_mod(driver, new_profile_data):
 
 def logout_then_re_login_existing_acc(driver, new_profile_data):
     try:
+        _check_shutdown_requested()
         email = new_profile_data.get("email")
         password = new_profile_data.get("pass")
         recovery = new_profile_data.get("recovery_email")
@@ -4739,13 +4918,32 @@ def login_on_country_page(driver, new_profile_data):
         return False
 
 
+def send_code_to_the_recovery_country(driver):
+    try:
+        BUTTON_ELEMENT = (
+            By.CSS_SELECTOR,
+            'div[aria-label*="Send a code to"]  span[role="button"]',
+        )
+        send_code_button = WebDriverWait(driver, 3).until(
+            EC.element_to_be_clickable(BUTTON_ELEMENT)
+        )
+        send_code_button.click()
+        return True
+    except:
+        return False
+
+
 def change_account_country(driver, new_profile_data):
     try:
+        driver__retries = 0
         retries = 0
         num_of_retries = 7
-        driver.quit()
+        try:
+            driver.quit()
+        except:
+            pass
         driver_success = False
-        while (retries < 3) and (not driver_success):
+        while (driver__retries < 3) and (not driver_success):
             try:
                 status, driverdata, error = initialize_new_profile_driver()
                 if status:
@@ -4759,9 +4957,14 @@ def change_account_country(driver, new_profile_data):
                     driver_success = True
             except:
                 driver.quit()
-                retries += 1
+                driver__retries += 1
+        driver__retries = 0
+
+        _check_shutdown_requested()
+
         while retries < num_of_retries:
             try:
+                _check_shutdown_requested()
                 email = new_profile_data.get("email")
                 password = new_profile_data.get("pass")
                 recovery = new_profile_data.get("recovery_email")
@@ -4770,6 +4973,7 @@ def change_account_country(driver, new_profile_data):
                 driver.get("https://account.microsoft.com/profile")
 
                 login_on_country_page(driver, new_profile_data)
+                _check_shutdown_requested()
 
                 if country_is_the_desired(driver):
                     return True, driver
@@ -4794,12 +4998,40 @@ def change_account_country(driver, new_profile_data):
 
                 COUNTRY_INPUT_ELEMENT = (
                     By.CSS_SELECTOR,
-                    'input[id="profile.edit-profile-info.region-input"]',
+                    'input[id*="profile.edit-profile-info.region"]',
                 )
 
                 country_input_element = WebDriverWait(driver, wait_time).until(
                     EC.visibility_of_element_located(COUNTRY_INPUT_ELEMENT)
                 )
+                if send_code_to_the_recovery_country(driver):
+                    re_login_existing_acc(driver, new_profile_data)
+                    COUNTRY_EDIT_BUTTON_ELEMENT = (
+                        By.CSS_SELECTOR,
+                        'div[id="profile.profile-info.country-or-region.listItem"]',
+                    )
+
+                    country_edit_button = WebDriverWait(driver, wait_time).until(
+                        EC.element_to_be_clickable(COUNTRY_EDIT_BUTTON_ELEMENT)
+                    )
+
+                    # scroll to view first
+                    driver.execute_script(
+                        "arguments[0].scrollIntoView({ behavior: 'smooth', block: 'center' });",
+                        country_edit_button,
+                    )
+                    time.sleep(1)
+                    country_edit_button.click()
+                    time.sleep(1)
+
+                    COUNTRY_INPUT_ELEMENT = (
+                        By.CSS_SELECTOR,
+                        'input[id*="profile.edit-profile-info.region"]',
+                    )
+
+                    country_input_element = WebDriverWait(driver, wait_time).until(
+                        EC.visibility_of_element_located(COUNTRY_INPUT_ELEMENT)
+                    )
 
                 # data[0]
                 country_input_element.click()
@@ -4807,7 +5039,10 @@ def change_account_country(driver, new_profile_data):
                 time.sleep(0.5)
                 country_input_element.send_keys(Keys.BACK_SPACE * 50)
                 time.sleep(0.5)
-                country_input_element.send_keys(CHANGE_COUNTRY)
+                for letter in CHANGE_COUNTRY:
+                    country_input_element.send_keys(letter)
+                    time.sleep(1)
+                # country_input_element.send_keys(CHANGE_COUNTRY)
                 time.sleep(2.5)
                 country_input_element.send_keys(Keys.ENTER)
                 time.sleep(1)
@@ -4823,6 +5058,7 @@ def change_account_country(driver, new_profile_data):
                     time.sleep(2)
                 except:
                     logout_then_re_login_existing_acc(driver, new_profile_data)
+                    _check_shutdown_requested()
 
                 if country_is_the_desired(driver):
                     return True, driver
@@ -4830,13 +5066,19 @@ def change_account_country(driver, new_profile_data):
                     print(
                         f"{email} : Country not changed. Retrying... ({retries}/{num_of_retries})"
                     )
+                    # _check_shutdown_requested()
                     retries += 1
 
             except Exception as E:
+                _check_shutdown_requested()
                 retries += 1
-                driver.quit()
+                try:
+                    driver.quit()
+                except:
+                    pass
                 driver_success = False
-                while (retries < 3) and (not driver_success):
+                driver__retries = 0
+                while (driver__retries < 3) and (not driver_success):
                     try:
                         status, driverdata, error = initialize_new_profile_driver()
                         if status:
@@ -4850,7 +5092,9 @@ def change_account_country(driver, new_profile_data):
                             driver_success = True
                     except:
                         driver.quit()
-                        retries += 1
+                        driver__retries += 1
+                driver__retries = 0
+
                 print(
                     f"{email} : Attempting retry {retries}/{num_of_retries} for changing country"
                 )
@@ -4858,6 +5102,145 @@ def change_account_country(driver, new_profile_data):
         return False, driver
     except:
         return False, driver
+
+
+def change_account_language_chinese(driver, new_profile_data):
+    try:
+        retries = 0
+        num_of_retries = 5
+        while retries < num_of_retries:
+            try:
+                email = new_profile_data.get("email")
+                password = new_profile_data.get("pass")
+                recovery = new_profile_data.get("recovery_email")
+                bring_to_front(driver)
+
+                driver.get("https://account.microsoft.com/profile")
+
+                login_on_country_page(driver, new_profile_data)
+
+                if language_lingo_is_the_desired(driver):
+                    return True
+
+                COUNTRY_EDIT_BUTTON_ELEMENT = (
+                    By.CSS_SELECTOR,
+                    'div[id="profile.langsettings.language-info.edit-msa-language"]',
+                )
+
+                country_edit_button = WebDriverWait(driver, wait_time).until(
+                    EC.element_to_be_clickable(COUNTRY_EDIT_BUTTON_ELEMENT)
+                )
+
+                # scroll to view first
+                driver.execute_script(
+                    "arguments[0].scrollIntoView({ behavior: 'smooth', block: 'center' });",
+                    country_edit_button,
+                )
+                time.sleep(1)
+                country_edit_button.click()
+                time.sleep(1)
+
+                ###
+
+                COUNTRY_INPUT_ELEMENT = (
+                    By.CSS_SELECTOR,
+                    'div[id="profile.landing-page.display-language.edit-msa-display-language"]',
+                )
+
+                country_input_element = WebDriverWait(driver, wait_time).until(
+                    EC.visibility_of_element_located(COUNTRY_INPUT_ELEMENT)
+                )
+
+                # data[0]
+                country_input_element.click()
+                time.sleep(1.5)
+
+                COUNTRY_INPUT_ELEMENT = (
+                    By.CSS_SELECTOR,
+                    'input[type="search"]',
+                )
+
+                country_input_element = WebDriverWait(driver, wait_time).until(
+                    EC.visibility_of_element_located(COUNTRY_INPUT_ELEMENT)
+                )
+
+                # data[0]
+                country_input_element.click()
+
+                # re_login_existing_acc(driver, new_profile_data)
+                # time.sleep(0.5)
+                country_input_element.send_keys(Keys.BACK_SPACE * 50)
+                time.sleep(0.5)
+                country_input_element.send_keys("ENGLISH (UNITED STATES)")
+                time.sleep(2.5)
+                country_input_element.send_keys(Keys.ENTER)
+                time.sleep(1)
+
+                COUNTRY_INPUT_ELEMENT = (
+                    By.CSS_SELECTOR,
+                    'div[lang="en-US"]',
+                )
+
+                country_input_element = WebDriverWait(driver, wait_time).until(
+                    EC.visibility_of_element_located(COUNTRY_INPUT_ELEMENT)
+                )
+
+                # data[0]
+                country_input_element.click()
+
+                try:
+                    SAVE_BUTTON_ELEMENT = (
+                        By.CSS_SELECTOR,
+                        'button[data-bi-id*="change-display-language"]',
+                    )
+
+                    save_button_element = WebDriverWait(driver, wait_time / 2).until(
+                        EC.element_to_be_clickable(SAVE_BUTTON_ELEMENT)
+                    )
+
+                    save_button_element.click()
+                    time.sleep(2)
+                    SAVE_BUTTON_ELEMENT = (
+                        By.CSS_SELECTOR,
+                        'button[data-bi-id*="confirm-dialog.ok"]',
+                    )
+
+                    save_button_element = WebDriverWait(driver, wait_time / 2).until(
+                        EC.element_to_be_clickable(SAVE_BUTTON_ELEMENT)
+                    )
+
+                    save_button_element.click()
+                    time.sleep(2)
+                    SAVE_BUTTON_ELEMENT = (
+                        By.CSS_SELECTOR,
+                        'button[data-bi-id*="language-changed.ok"]',
+                    )
+
+                    save_button_element = WebDriverWait(driver, wait_time / 2).until(
+                        EC.element_to_be_clickable(SAVE_BUTTON_ELEMENT)
+                    )
+
+                    save_button_element.click()
+                except:
+                    logout_then_re_login_existing_acc(driver, new_profile_data)
+
+                if country_is_the_desired(driver):
+                    return True
+                else:
+                    print(
+                        f"{email} : Country not changed. Retrying... ({retries}/{num_of_retries})"
+                    )
+                    retries += 1
+
+            except Exception as E:
+                retries += 1
+                print(
+                    f"{email} : Exception error changing country. Retrying... ({retries}/{num_of_retries})"
+                )
+
+        return False
+    except:
+        return False
 
 
 def change_account_language_lingo(driver, new_profile_data):
@@ -4952,6 +5335,7 @@ def change_account_language(driver, new_profile_data):
         retries = 0
         num_of_retries = 5
         while retries < num_of_retries:
+            _check_shutdown_requested()
             try:
                 email = new_profile_data.get("email")
                 password = new_profile_data.get("pass")
@@ -4981,6 +5365,7 @@ def change_account_language(driver, new_profile_data):
 
             except Exception as E:
                 retries += 1
+                _check_shutdown_requested()
                 print(
                     f"{email} : Exception error changing language: {E}. Retrying... ({retries}/{num_of_retries})"
                 )
@@ -5887,6 +6272,93 @@ def affirm_congrats_card_added(driver):
         return False
 
 
+def affirm_congrats_card_added_italy(driver):
+    try:
+        time_in_sec = 200
+        while time_in_sec > 0:
+            try:
+                _check_shutdown_requested()
+                AFFIRM_CONGRATS_ELEMENT = (
+                    By.CSS_SELECTOR,
+                    'h2[role="presentation"]',
+                )
+
+                START_BTN_ELEMENT = (
+                    By.CSS_SELECTOR,
+                    'button[id*="primaryButton"]',
+                )
+
+                CONTINUE_BTN_ELEMENT = (
+                    By.CSS_SELECTOR,
+                    'div[data-testid="ModalContent"] >div button',
+                )
+
+                affirm_congrats_element = WebDriverWait(driver, 1).until(
+                    EC.visibility_of_element_located(AFFIRM_CONGRATS_ELEMENT)
+                )
+
+                if (
+                    (
+                        "grazie per esserti abbonato a microsoft 365"
+                        in affirm_congrats_element.text.lower()
+                    )
+                    or (
+                        "thank you for subscribing to microsoft 365"
+                        in affirm_congrats_element.text.lower()
+                    )
+                    or ("microsoft 365" in affirm_congrats_element.text.lower())
+                ):
+                    time.sleep(2)
+                    try:
+                        start_btn_element = WebDriverWait(driver, 1).until(
+                            EC.visibility_of_element_located(START_BTN_ELEMENT)
+                        )
+
+                        start_btn_element.click()
+                    except:
+                        pass
+                    try:
+                        continue_btn_element = WebDriverWait(driver, 1).until(
+                            EC.visibility_of_element_located(CONTINUE_BTN_ELEMENT)
+                        )
+
+                        continue_btn_element.click()
+                    except:
+                        pass
+
+                    return True
+
+            except:
+                _check_shutdown_requested()
+                try:
+                    AFFIRM_CONGRATS_ELEMENT = (
+                        By.CSS_SELECTOR,
+                        'span[class*="errorText"]',
+                    )
+
+                    affirm_congrats_element = WebDriverWait(driver, 1).until(
+                        EC.visibility_of_element_located(AFFIRM_CONGRATS_ELEMENT)
+                    )
+
+                    if (
+                        "there is an issue with your payment method"
+                        in affirm_congrats_element.text.lower()
+                    ):
+                        time.sleep(2)
+                        return False
+
+                except:
+                    pass
+
+            time.sleep(1)
+            time_in_sec -= 1
+
+        return False
+
+    except:
+        return False
+
+
 def store_extracted_link(new_profile_data, link, card_details_dict):
     try:
         email = new_profile_data.get("email")
@@ -6111,7 +6583,7 @@ def add_billing(driver, new_profile_data, card_details_dict):
         print(f"{email_address} : Entered city: {card_details_dict.get('city')}")
         time.sleep(0.5)
 
-        if PREFERRED_SMS_COUNTRY.lower() == "united states":
+        if PREFERRED_SMS_COUNTRY.lower() in ["united states", "italy"]:
             current_status = "entering state"
 
             state_element = WebDriverWait(driver, wait_time).until(
@@ -6158,6 +6630,7 @@ def add_billing(driver, new_profile_data, card_details_dict):
         save_button_element = WebDriverWait(driver, wait_time).until(
             EC.element_to_be_clickable(SAVE_BUTTON_ELEMENT)
         )
+
         save_button_element.click()
         print(f"{email_address} : Clicked save button")
         return True
@@ -6165,7 +6638,7 @@ def add_billing(driver, new_profile_data, card_details_dict):
         return True
 
 
-def get_microsoft_premium(driver, new_profile_data):
+def get__premium(driver, new_profile_data):
     try:
         email_address = new_profile_data.get("email")
         # password = new_profile_data.get("pass")
@@ -6183,6 +6656,8 @@ def get_microsoft_premium(driver, new_profile_data):
         except Exception as E:
             print(f"{email_address} : Error getting next card: {E}")
             return False, current_status
+
+        print(f"{email_address} : Using card: {card_details_dict.get('card_number')}")
 
         if PREFERRED_SMS_COUNTRY.lower() == "poland2":
             country_ = "poland"
@@ -6215,6 +6690,7 @@ def get_microsoft_premium(driver, new_profile_data):
         click_signin_on_adding_card(driver)
 
         # click checkbox
+        _check_shutdown_requested()
         if PREFERRED_SMS_COUNTRY.lower() != "united states":
             try:
                 current_status = "clicking checkbox"
@@ -6235,21 +6711,24 @@ def get_microsoft_premium(driver, new_profile_data):
                 checkbox_element.click()
 
             except:
-                current_status = "clicking checkbox"
-                time.sleep(1)
-                CHECKBOX_ELEMENT = (
-                    By.CSS_SELECTOR,
-                    'i[data-icon-name="CheckMark"]',
-                )
-                checkbox_element = WebDriverWait(driver, wait_time).until(
-                    EC.presence_of_element_located(CHECKBOX_ELEMENT)
-                )
-                driver.execute_script(
-                    "arguments[0].scrollIntoView({ behavior: 'smooth', block: 'center' });",
-                    checkbox_element,
-                )
-                time.sleep(1)
-                checkbox_element.click()
+                try:
+                    current_status = "clicking checkbox"
+                    time.sleep(1)
+                    CHECKBOX_ELEMENT = (
+                        By.CSS_SELECTOR,
+                        'i[data-icon-name="CheckMark"]',
+                    )
+                    checkbox_element = WebDriverWait(driver, wait_time).until(
+                        EC.presence_of_element_located(CHECKBOX_ELEMENT)
+                    )
+                    driver.execute_script(
+                        "arguments[0].scrollIntoView({ behavior: 'smooth', block: 'center' });",
+                        checkbox_element,
+                    )
+                    time.sleep(1)
+                    checkbox_element.click()
+                except:
+                    pass
 
         time.sleep(1)
         # click next btn
@@ -6479,8 +6958,8 @@ def get_microsoft_premium(driver, new_profile_data):
         city_element.send_keys(card_details_dict.get("city"))
         print(f"{email_address} : Entered city: {card_details_dict.get('city')}")
         time.sleep(0.5)
-
-        if PREFERRED_SMS_COUNTRY.lower() == "united states":
+        _check_shutdown_requested()
+        if PREFERRED_SMS_COUNTRY.lower() in ["united states", "italy"]:
             current_status = "entering state"
 
             state_element = WebDriverWait(driver, wait_time).until(
@@ -6523,14 +7002,21 @@ def get_microsoft_premium(driver, new_profile_data):
             f"{email_address} : Entered postal code: {card_details_dict.get('postal_code')}"
         )
         time.sleep(0.5)
+
         current_status = "clicking save button"
         save_button_element = WebDriverWait(driver, wait_time).until(
             EC.element_to_be_clickable(SAVE_BUTTON_ELEMENT)
         )
+        # wait for other threads to reach this save point and click together
+
+        print(f"{email_address} : Waiting at save barrier before clicking Save...")
+        save_click_barrier.wait(timeout=10 * 60)
+
         save_button_element.click()
         print(f"{email_address} : Clicked save button")
 
         current_status = "checking if card is declined"
+        _check_shutdown_requested()
         if credit_card_is_declined(driver):
             print(f"{email_address} : Card was declined")
             # log_card_usage(card_details_dict)
@@ -6548,6 +7034,7 @@ def get_microsoft_premium(driver, new_profile_data):
             return False, "Card not added to payments"
 
         current_status = "Add billing address if prompted"
+        _check_shutdown_requested()
         add_billing(driver, new_profile_data, card_details_dict)
 
         time.sleep(2)
@@ -6586,6 +7073,7 @@ def get_microsoft_premium(driver, new_profile_data):
                 pass
 
         current_status = "clicking start trial button"
+        _check_shutdown_requested()
         try:
             time.sleep(4)
             print(f"{email_address} : Clicking start trial button")
@@ -6617,6 +7105,7 @@ def get_microsoft_premium(driver, new_profile_data):
                 pass
 
         current_status = "checking if card is authorized"
+        _check_shutdown_requested()
         print(f"{email_address} : Waiting 5 minutes for card authorization...")
         if not affirm_congrats_card_added(driver):
             print(
@@ -6724,11 +7213,1313 @@ def get_microsoft_premium(driver, new_profile_data):
             print(f"Error returning card to familybot_card_details: {E}")
 
 
-def get_microsoft_premium_old_(driver, new_profile_data):
+def get__premium_italy_1(driver, new_profile_data):
     try:
         email_address = new_profile_data.get("email")
         # password = new_profile_data.get("pass")
         # recovery_email = new_profile_data.get("recovery_email")
+
+        current_status = "getting card details"
+        try:
+            card_details_dict = get_processing_card()
+            # get_next_card()
+            if not card_details_dict:
+                print(
+                    f"{email_address} : No available cards to use. Check logs/card_usage.log and output_data/fully_used_cards.txt for more info."
+                )
+                return False, "No available cards to use"
+        except Exception as E:
+            print(f"{email_address} : Error getting next card: {E}")
+            return False, current_status
+
+        print(f"{email_address} : Using card: {card_details_dict.get('card_number')}")
+
+        if PREFERRED_SMS_COUNTRY.lower() == "poland2":
+            country_ = "poland"
+
+        driver.get("https://www.microsoft.com/it-it/microsoft-365/try")
+        time.sleep(3)
+        driver.refresh()
+        time.sleep(3)
+
+        current_status = "clicking premium element"
+        PREMIUM_ELEMENT = (
+            By.CSS_SELECTOR,
+            'a[aria-label*="Microsoft 365 Family."]',
+        )
+
+        premium_element = WebDriverWait(driver, wait_time).until(
+            EC.visibility_of_element_located(PREMIUM_ELEMENT)
+        )
+        premium_element.click()
+
+        time.sleep(1)
+        # current_status = "selecting premium subscription"
+        # PREMIUM_SUBSCRIPTIONS_TYPES_ELEMENTS = (
+        #     By.CSS_SELECTOR,
+        #     'div[class^="buttonsWrapper"] > button',
+        # )
+        # premium_subscriptions_element = WebDriverWait(driver, wait_time).until(
+        #     EC.visibility_of_all_elements_located(PREMIUM_SUBSCRIPTIONS_TYPES_ELEMENTS)
+        # )[1]
+        # premium_subscriptions_element.click()
+        # current_status = "clicking signin on adding card"
+        # click_signin_on_adding_card(driver)
+
+        # click checkbox
+        _check_shutdown_requested()
+        if PREFERRED_SMS_COUNTRY.lower() != "united states":
+            try:
+                current_status = "clicking checkbox"
+                time.sleep(1)
+                CHECKBOX_ELEMENT = (
+                    By.CSS_SELECTOR,
+                    'i[data-icon-name="CheckMark"]',
+                )
+                checkbox_element = WebDriverWait(driver, wait_time).until(
+                    EC.presence_of_element_located(CHECKBOX_ELEMENT)
+                )
+                # scroll_into_view(driver, checkbox_element)
+                driver.execute_script(
+                    "arguments[0].scrollIntoView({ behavior: 'smooth', block: 'center' });",
+                    checkbox_element,
+                )
+                time.sleep(1)
+                checkbox_element.click()
+
+            except:
+                try:
+                    current_status = "clicking checkbox"
+                    time.sleep(1)
+                    CHECKBOX_ELEMENT = (
+                        By.CSS_SELECTOR,
+                        'i[data-icon-name="CheckMark"]',
+                    )
+                    checkbox_element = WebDriverWait(driver, wait_time).until(
+                        EC.presence_of_element_located(CHECKBOX_ELEMENT)
+                    )
+                    driver.execute_script(
+                        "arguments[0].scrollIntoView({ behavior: 'smooth', block: 'center' });",
+                        checkbox_element,
+                    )
+                    time.sleep(1)
+                    checkbox_element.click()
+                except:
+                    pass
+
+        time.sleep(1)
+        # click next btn
+        current_status = "clicking next button after checkbox"
+        NEXT_BTN_ELEMENT = (
+            By.CSS_SELECTOR,
+            'button[aria-label="Avanti"]',
+        )
+        next_btn_element = WebDriverWait(driver, wait_time).until(
+            EC.element_to_be_clickable(NEXT_BTN_ELEMENT)
+        )
+        next_btn_element.click()
+        time.sleep(1)
+
+        # click card btn
+        current_status = "clicking card button"
+
+        CARD_BTN_ELEMENT = (
+            By.CSS_SELECTOR,
+            'button[aria-label="Carta di credito o di debito"]',
+        )
+        try:
+            card_btn_element = WebDriverWait(driver, wait_time).until(
+                EC.element_to_be_clickable(CARD_BTN_ELEMENT)
+            )
+        except:
+            try:
+                CARD_BTN_ELEMENT = (
+                    By.CSS_SELECTOR,
+                    'button[aria-label="Credit card or debit card"]',
+                )
+                card_btn_element = WebDriverWait(driver, wait_time).until(
+                    EC.element_to_be_clickable(CARD_BTN_ELEMENT)
+                )
+            except:
+                pass
+
+        card_btn_element.click()
+        time.sleep(1)
+
+        # INPUT ELEMENTS FOR CARD DETAILS
+        current_status = "entering card details"
+        CREDIT_CARD_NUMBER_ELEMENT = (
+            By.CSS_SELECTOR,
+            'input[id="accountToken"]',
+        )
+        NAME_ON_CARD_ELEMENT = (
+            By.CSS_SELECTOR,
+            'input[id="accountHolderName"]',
+        )
+
+        EXPIRY_MONTH_ELEMENT = (
+            By.CSS_SELECTOR,
+            'span[id="input_expiryMonth-option"]',
+        )
+
+        EXPIRY_YEAR_ELEMENT = (
+            By.CSS_SELECTOR,
+            'span[id="input_expiryYear-option"]',
+        )
+        CVV_ELEMENT = (
+            By.CSS_SELECTOR,
+            'input[id="cvvToken"]',
+        )
+
+        ADDRESS_LINE1_ELEMENT = (
+            By.CSS_SELECTOR,
+            'input[id="address_line1"]',
+        )
+        CITY_ELEMENT = (
+            By.CSS_SELECTOR,
+            'input[id="city"]',
+        )
+        STATE_CLICK_ELEMENT = (
+            By.CSS_SELECTOR,
+            'div[id="input_region"]',
+        )
+
+        STATE_OPTIONS_ELEMENT = (
+            By.CSS_SELECTOR,
+            'button[id*="input_region-list"]',
+        )
+
+        POSTAL_CODE_ELEMENT = (
+            By.CSS_SELECTOR,
+            'input[id="postal_code"]',
+        )
+
+        SAVE_BUTTON_ELEMENT = (
+            By.CSS_SELECTOR,
+            'button[aria-label="Salva"]',
+        )
+
+        SCROLL_DOWN_BUTTON_ELEMENT = (
+            By.CSS_SELECTOR,
+            'button[aria-label="Scroll Down"]',
+        )
+
+        START_TRIAL_BUTTON_ELEMENT = (
+            By.CSS_SELECTOR,
+            'button[aria-label*="Avvia la versione di prova, paga in seguito"]',
+        )
+
+        START_TRIAL2_BUTTON_ELEMENT = (
+            By.CSS_SELECTOR,
+            'button[aria-label="Subscribe"]',
+        )
+
+        print(
+            f"{email_address} : Waiting each other to enter card details at the same time..."
+        )
+        save_click_barrier.wait(timeout=10 * 60)
+        # ENTERING CARD DETAILS
+        current_status = "entering card number"
+        card_number_element = WebDriverWait(driver, wait_time).until(
+            EC.visibility_of_element_located(CREDIT_CARD_NUMBER_ELEMENT)
+        )
+        card_number_element.clear()
+        time.sleep(0.5)
+        card_number_element.send_keys(
+            card_details_dict.get("card_number").replace(" ", "")
+        )
+        print(
+            f"{email_address} : Entered card number: {card_details_dict.get('card_number')}"
+        )
+
+        time.sleep(0.5)
+        current_status = "entering name on card"
+        name_on_card_element = WebDriverWait(driver, wait_time).until(
+            EC.visibility_of_element_located(NAME_ON_CARD_ELEMENT)
+        )
+        name_on_card_element.clear()
+        time.sleep(1)
+        name_on_card_element.send_keys(card_details_dict.get("name_on_card"))
+        print(
+            f"{email_address} : Entered name on card: {card_details_dict.get('name_on_card')}"
+        )
+
+        time.sleep(1)
+
+        # use keyboard to press tab and enter
+
+        print(
+            f"{email_address} : Selecting expiry month: {card_details_dict.get('expiry_month')}"
+        )
+
+        # expiry_month_element = WebDriverWait(driver, wait_time).until(
+        #     EC.visibility_of_element_located(EXPIRY_MONTH_ELEMENT)
+        # )
+        # # scroll into view
+        # driver.execute_script(
+        #     "arguments[0].scrollIntoView({ behavior: 'smooth', block: 'center' });",
+        #     expiry_month_element,
+        # )
+        # time.sleep(0.5)
+        # expiry_month_element.click()
+        action = ActionChains(driver)
+        action.send_keys(Keys.TAB).perform()
+        action.send_keys(Keys.ENTER).perform()
+        time.sleep(1.3)
+
+        # button[data-index=f"{int(card_details_dict.get('expiry_month'))-1}"] element
+        current_status = "selecting expiry month"
+        print(f"{email_address} : Selecting expiry month option")
+        expiry_month_option_element = WebDriverWait(driver, wait_time).until(
+            EC.element_to_be_clickable(
+                (
+                    By.CSS_SELECTOR,
+                    f"""button[data-index="{int(card_details_dict.get("expiry_month")) - 1}"]""",
+                )
+            )
+        )
+        expiry_month_option_element.click()
+        print(
+            f"{email_address} : Selected expiry month: {card_details_dict.get('expiry_month')}"
+        )
+
+        time.sleep(1)
+        current_status = "selecting expiry year"
+        # expiry_year_element = WebDriverWait(driver, wait_time).until(
+        #     EC.visibility_of_element_located(EXPIRY_YEAR_ELEMENT)
+        # )
+        # # scroll into view
+        # driver.execute_script(
+        #     "arguments[0].scrollIntoView({ behavior: 'smooth', block: 'center' });",
+        #     expiry_year_element,
+        # )
+        # time.sleep(0.5)
+        # expiry_year_element.click()
+        action = ActionChains(driver)
+        action.send_keys(Keys.TAB).perform()
+        action.send_keys(Keys.ENTER).perform()
+        time.sleep(1)
+        expiry_year_option_element = WebDriverWait(driver, wait_time).until(
+            EC.element_to_be_clickable(
+                (
+                    By.CSS_SELECTOR,
+                    f"""button[data-index="{int(card_details_dict.get("expiry_year")) - 2026}"]""",
+                )
+            )
+        )
+        expiry_year_option_element.click()
+        print(
+            f"{email_address} : Selected expiry year: {card_details_dict.get('expiry_year')}"
+        )
+        time.sleep(0.5)
+        current_status = "entering cvv"
+        cvv_element = WebDriverWait(driver, wait_time).until(
+            EC.visibility_of_element_located(CVV_ELEMENT)
+        )
+        cvv_element.clear()
+        time.sleep(0.5)
+        cvv_element.send_keys(card_details_dict.get("cvv"))
+        print(f"{email_address} : Entered CVV: {card_details_dict.get('cvv')}")
+        time.sleep(1)
+
+        current_status = "entering address line 1"
+        address_line1_element = WebDriverWait(driver, wait_time).until(
+            EC.visibility_of_element_located(ADDRESS_LINE1_ELEMENT)
+        )
+        address_line1_element.clear()
+        time.sleep(0.5)
+        address_line1_element.send_keys(card_details_dict.get("address_line1"))
+        print(
+            f"{email_address} : Entered address line 1: {card_details_dict.get('address_line1')}"
+        )
+        time.sleep(0.5)
+        current_status = "entering city"
+
+        city_element = WebDriverWait(driver, wait_time).until(
+            EC.visibility_of_element_located(CITY_ELEMENT)
+        )
+        city_element.clear()
+        time.sleep(0.5)
+        city_element.send_keys(card_details_dict.get("city"))
+        print(f"{email_address} : Entered city: {card_details_dict.get('city')}")
+        time.sleep(0.5)
+        _check_shutdown_requested()
+        if PREFERRED_SMS_COUNTRY.lower() in ["united states", "italy"]:
+            current_status = "entering state"
+
+            state_element = WebDriverWait(driver, wait_time).until(
+                EC.visibility_of_element_located(STATE_CLICK_ELEMENT)
+            )
+
+            time.sleep(3)
+            state_element.click()
+            time.sleep(0.5)
+
+            state_options_element = WebDriverWait(driver, wait_time).until(
+                EC.visibility_of_all_elements_located(STATE_OPTIONS_ELEMENT)
+            )
+
+            city_element = [
+                i
+                for i in state_options_element
+                if i.text.lower() == card_details_dict.get("state", "").lower()
+            ][0]
+
+            # scroll into view
+            driver.execute_script(
+                "arguments[0].scrollIntoView({ behavior: 'smooth', block: 'center' });",
+                city_element,
+            )
+            time.sleep(1)
+            city_element.click()
+
+            print(f"{email_address} : Entered state: {card_details_dict.get('state')}")
+            time.sleep(0.5)
+
+        current_status = "entering postal code"
+        postal_code_element = WebDriverWait(driver, wait_time).until(
+            EC.visibility_of_element_located(POSTAL_CODE_ELEMENT)
+        )
+        postal_code_element.clear()
+        time.sleep(0.5)
+        postal_code_element.send_keys(card_details_dict.get("postal_code"))
+        print(
+            f"{email_address} : Entered postal code: {card_details_dict.get('postal_code')}"
+        )
+        time.sleep(0.5)
+
+        current_status = "clicking save button"
+        save_button_element = WebDriverWait(driver, wait_time).until(
+            EC.element_to_be_clickable(SAVE_BUTTON_ELEMENT)
+        )
+        # wait for other threads to reach this save point and click together
+
+        print(f"{email_address} : Waiting at save barrier before clicking Save...")
+        save_click_barrier.wait(timeout=10 * 60)
+
+        save_button_element.click()
+        print(f"{email_address} : Clicked save button")
+
+        current_status = "checking if card is declined"
+        _check_shutdown_requested()
+        if credit_card_is_declined(driver):
+            print(f"{email_address} : Card was declined")
+            # log_card_usage(card_details_dict)
+            mark_card_failed(card_details_dict)
+
+            return False, "Card was declined"
+        else:
+            print(f"{email_address} : Card not declined.")
+
+        current_status = "checking if card is added to payments"
+        if affirm_card_is_added(driver, card_details_dict.get("name_on_card")):
+            print(f"{email_address} : Affirm Card added to payments successfully.")
+        else:
+            print(f"{email_address} : Card not added to payments.")
+            return False, "Card not added to payments"
+
+        current_status = "Add billing address if prompted"
+        _check_shutdown_requested()
+        add_billing(driver, new_profile_data, card_details_dict)
+
+        time.sleep(2)
+        try:
+            current_status = "clicking scroll down button"
+            scroll_button_element = WebDriverWait(driver, wait_time).until(
+                EC.element_to_be_clickable(SCROLL_DOWN_BUTTON_ELEMENT)
+            )
+
+            scroll_button_element.click()
+            print(f"{email_address} : Clicked scroll down button")
+        except:
+            pass
+
+        # click checkbox
+        if PREFERRED_SMS_COUNTRY.lower() == "united states":
+            try:
+                current_status = "clicking checkbox"
+                time.sleep(1)
+                CHECKBOX_ELEMENT = (
+                    By.CSS_SELECTOR,
+                    'i[data-icon-name="CheckMark"]',
+                )
+                checkbox_element = WebDriverWait(driver, wait_time).until(
+                    EC.presence_of_element_located(CHECKBOX_ELEMENT)
+                )
+                # scroll_into_view(driver, checkbox_element)
+                driver.execute_script(
+                    "arguments[0].scrollIntoView({ behavior: 'smooth', block: 'center' });",
+                    checkbox_element,
+                )
+                time.sleep(1)
+                checkbox_element.click()
+
+            except:
+                pass
+
+        current_status = "clicking start trial button"
+        _check_shutdown_requested()
+        try:
+            time.sleep(4)
+            print(f"{email_address} : Clicking start trial button")
+
+            start_trial_button_element = WebDriverWait(driver, wait_time).until(
+                EC.element_to_be_clickable(START_TRIAL_BUTTON_ELEMENT)
+            )
+            time.sleep(0.5)
+            start_trial_button_element = WebDriverWait(driver, wait_time).until(
+                EC.element_to_be_clickable(START_TRIAL_BUTTON_ELEMENT)
+            )
+            start_trial_button_element.click()
+            print(f"{email_address} : Clicked start trial button")
+        except:
+            try:
+                time.sleep(4)
+                print(f"{email_address} : Clicking start trial button")
+
+                start_trial_button_element = WebDriverWait(driver, wait_time).until(
+                    EC.element_to_be_clickable(START_TRIAL2_BUTTON_ELEMENT)
+                )
+                time.sleep(0.5)
+                start_trial_button_element = WebDriverWait(driver, wait_time).until(
+                    EC.element_to_be_clickable(START_TRIAL2_BUTTON_ELEMENT)
+                )
+                start_trial_button_element.click()
+                print(f"{email_address} : Clicked start trial button")
+            except:
+                pass
+
+        current_status = "checking if card is authorized"
+        _check_shutdown_requested()
+        print(f"{email_address} : Waiting 5 minutes for card authorization...")
+        if not affirm_congrats_card_added_italy(driver):
+            print(
+                f"{email_address} : Card not authorized or payment method issue error"
+            )
+            return False, "card not authorized"
+        else:
+            log_card_usage(card_details_dict)
+
+        time.sleep(2)
+        driver.get("https://account.microsoft.com/services/microsoft365/details")
+
+        # try:
+        #     current_status = "clicking start sharing button"
+        #     START_SHARING_ELEMENT = (
+        #         By.CSS_SELECTOR,
+        #         'button[type="button"]',
+        #     )
+        #     name_on_card_elements = WebDriverWait(driver, wait_time).until(
+        #         EC.presence_of_all_elements_located(START_SHARING_ELEMENT)
+        #     )
+
+        #     [i for i in name_on_card_elements if i.text.lower() == "start sharing"][
+        #         0
+        #     ].click()
+        #     print(f"{email_address} : Clicked start sharing button")
+        # except:
+        #     pass
+        #     print(f"{email_address} : Start sharing button not found")
+        # return False, "error clicking start sharing button"?
+
+        time.sleep(2)
+        try:
+            current_status = "clicking share button"
+            SHARE_ELEMENT = (
+                By.CSS_SELECTOR,
+                'button[aria-label="Share subscription"]',
+            )
+
+            COPY_BUTTON_ELEMENT = (
+                By.CSS_SELECTOR,
+                'button[aria-label="Copy link"]',
+            )
+
+            LINK_INPUT_ELEMENT = (
+                By.CSS_SELECTOR,
+                'input[aria-label="Sharing link"]',
+            )
+
+            share_btn_element = WebDriverWait(driver, wait_time).until(
+                EC.visibility_of_element_located(SHARE_ELEMENT)
+            )
+            # scroll into center view
+            driver.execute_script(
+                "arguments[0].scrollIntoView({block: 'center'});", share_btn_element
+            )
+            time.sleep(1)
+
+            share_btn_element.click()
+            print(f"{email_address} : Clicked share button")
+
+            time.sleep(2)
+            current_status = "clicking copy link button"
+            copy_btn_element = WebDriverWait(driver, wait_time).until(
+                EC.visibility_of_element_located(COPY_BUTTON_ELEMENT)
+            )
+            copy_btn_element.click()
+            print(f"{email_address} : Clicked copy link button")
+
+            time.sleep(5)
+            current_status = "retrieving sharing link"
+            link_input_element = WebDriverWait(driver, wait_time + 40).until(
+                EC.visibility_of_element_located(LINK_INPUT_ELEMENT)
+            )
+            link = link_input_element.get_attribute("value")
+            print(f"{email_address} : Retrieved sharing link: {link}")
+            store_extracted_link(new_profile_data, link, card_details_dict)
+            time.sleep(4)
+
+            print(f"{email_address} : Stored extracted link successfully")
+            return True, "Success"
+        except Exception as E:
+            print(f"{email_address} : Error copying sharing link: {E}")
+            return False, "Error copying sharing link"
+
+    except Exception as E:
+        print(
+            f"{email_address} : Exception error occurred at step: {current_status}:\nError: {E} "
+        )
+        # create screenshot directory if not exists
+        try:
+            os.makedirs("../utils/screenshots", exist_ok=True)
+            driver.save_screenshot(
+                f"../utils/screenshots/{email_address.split('@')[0]}_{current_status}_error.png".replace(
+                    " ", "_"
+                )
+                .replace(":", "")
+                .replace("@", "")
+            )
+        except:
+            pass
+        return False, f"Error occurred: {E} at step: {current_status}"
+
+
+def relogin_and_signin_premium(driver, new_profile_data):
+    try:
+        driver.quit()
+        driver_success = False
+        retries = 0
+        while (retries < 3) and (not driver_success):
+            try:
+                status, driverdata, error = initialize_new_profile_driver()
+                if status:
+                    driver, user_path, proxy = driverdata.values()
+
+                    time.sleep(0.5)
+                    driver.maximize_window()
+                    time.sleep(0.5)
+                    driver.get(MICROSOFT_LOGIN_URL)
+                    time.sleep(1)
+                    driver_success = True
+            except:
+                driver.quit()
+                retries += 1
+
+        _check_shutdown_requested()
+
+        try:
+            _check_shutdown_requested()
+            email = new_profile_data.get("email")
+            password = new_profile_data.get("pass")
+            recovery = new_profile_data.get("recovery_email")
+            bring_to_front(driver)
+
+            driver.get("https://account.microsoft.com/profile")
+
+            login_on_country_page(driver, new_profile_data)
+
+            return driver
+        except:
+            return driver
+    except:
+        return driver
+
+
+def regroup_for_reauthentication(driver, new_profile_data):
+    try:
+        element_retries = 5
+        while element_retries > 0:
+            try:
+                if PREFERRED_SMS_COUNTRY.lower() == "italy":
+                    driver.get("https://www.microsoft.com/it-it/microsoft-365/try")
+                    time.sleep(3)
+                    # driver.refresh()
+                elif PREFERRED_SMS_COUNTRY.lower() in ["poland2", "poland"]:
+                    driver.get("https://www.microsoft.com/pl-pl/microsoft-365/try")
+
+                time.sleep(3)
+
+                current_status = "clicking premium element"
+                PREMIUM_ELEMENT = (
+                    By.CSS_SELECTOR,
+                    'a[aria-label*="Microsoft 365 Family."]',
+                )
+
+                premium_element = WebDriverWait(driver, wait_time).until(
+                    EC.visibility_of_element_located(PREMIUM_ELEMENT)
+                )
+                premium_element.click()
+
+                time.sleep(1)
+
+                break
+            except:
+                if element_retries <= 2:
+                    try:
+                        driver.quit()
+                    except:
+                        pass
+                    driver = relogin_and_signin_premium(driver, new_profile_data)
+                else:
+                    driver.get("https://account.microsoft.com/profile")
+                time.sleep(10)
+                element_retries -= 1
+
+        _check_shutdown_requested()
+        if PREFERRED_SMS_COUNTRY.lower() != "united states":
+            try:
+                current_status = "clicking checkbox"
+                time.sleep(1)
+                CHECKBOX_ELEMENT = (
+                    By.CSS_SELECTOR,
+                    'i[data-icon-name="CheckMark"]',
+                )
+                checkbox_element = WebDriverWait(driver, wait_time).until(
+                    EC.presence_of_element_located(CHECKBOX_ELEMENT)
+                )
+                # scroll_into_view(driver, checkbox_element)
+                driver.execute_script(
+                    "arguments[0].scrollIntoView({ behavior: 'smooth', block: 'center' });",
+                    checkbox_element,
+                )
+                time.sleep(1)
+                checkbox_element.click()
+
+            except:
+                try:
+                    current_status = "clicking checkbox"
+                    time.sleep(1)
+                    CHECKBOX_ELEMENT = (
+                        By.CSS_SELECTOR,
+                        'i[data-icon-name="CheckMark"]',
+                    )
+                    checkbox_element = WebDriverWait(driver, wait_time).until(
+                        EC.presence_of_element_located(CHECKBOX_ELEMENT)
+                    )
+                    driver.execute_script(
+                        "arguments[0].scrollIntoView({ behavior: 'smooth', block: 'center' });",
+                        checkbox_element,
+                    )
+                    time.sleep(1)
+                    checkbox_element.click()
+                except:
+                    pass
+
+        time.sleep(1)
+        # click next btn
+        current_status = "clicking next button after checkbox"
+        if PREFERRED_SMS_COUNTRY.lower() == "italy":
+            NEXT_BTN_ELEMENT = (
+                By.CSS_SELECTOR,
+                'button[aria-label="Avanti"]',
+            )
+        elif PREFERRED_SMS_COUNTRY.lower() in ["poland2", "poland"]:
+            NEXT_BTN_ELEMENT = (
+                By.CSS_SELECTOR,
+                'button[aria-label="Next"]',
+            )
+
+        next_btn_element = WebDriverWait(driver, wait_time).until(
+            EC.element_to_be_clickable(NEXT_BTN_ELEMENT)
+        )
+        next_btn_element.click()
+        time.sleep(1)
+    except:
+        pass
+
+
+def get__premium_italy(driver, new_profile_data):
+    try:
+        email_address = new_profile_data.get("email")
+        current_status = "getting card details"
+        try:
+            card_details_dict = get_processing_card()
+            # get_next_card()
+            if not card_details_dict:
+                print(
+                    f"{email_address} : No available cards to use. Check logs/card_usage.log and output_data/fully_used_cards.txt for more info."
+                )
+                return False, "No available cards to use"
+        except Exception as E:
+            print(f"{email_address} : Error getting next card: {E}")
+            return False, current_status
+
+        print(f"{email_address} : Using card: {card_details_dict.get('card_number')}")
+
+        if PREFERRED_SMS_COUNTRY.lower() == "poland2":
+            country_ = "poland"
+        _check_shutdown_requested()
+        element_retries = 5
+        while element_retries > 0:
+            try:
+                if PREFERRED_SMS_COUNTRY.lower() == "italy":
+                    driver.get("https://www.microsoft.com/it-it/microsoft-365/try")
+                    time.sleep(3)
+                    # driver.refresh()
+                elif PREFERRED_SMS_COUNTRY.lower() in ["poland2", "poland"]:
+                    driver.get("https://www.microsoft.com/pl-pl/microsoft-365/try")
+
+                time.sleep(3)
+
+                current_status = "clicking premium element"
+                PREMIUM_ELEMENT = (
+                    By.CSS_SELECTOR,
+                    'a[aria-label*="Microsoft 365 Family."]',
+                )
+
+                premium_element = WebDriverWait(driver, wait_time).until(
+                    EC.visibility_of_element_located(PREMIUM_ELEMENT)
+                )
+                premium_element.click()
+
+                time.sleep(1)
+
+                break
+            except:
+                if element_retries <= 2:
+                    driver = relogin_and_signin_premium(driver, new_profile_data)
+                else:
+                    driver.get("https://account.microsoft.com/profile")
+                time.sleep(10)
+                element_retries -= 1
+
+        _check_shutdown_requested()
+        if PREFERRED_SMS_COUNTRY.lower() != "united states":
+            try:
+                current_status = "clicking checkbox"
+                time.sleep(1)
+                CHECKBOX_ELEMENT = (
+                    By.CSS_SELECTOR,
+                    'i[data-icon-name="CheckMark"]',
+                )
+                checkbox_element = WebDriverWait(driver, wait_time).until(
+                    EC.presence_of_element_located(CHECKBOX_ELEMENT)
+                )
+                # scroll_into_view(driver, checkbox_element)
+                driver.execute_script(
+                    "arguments[0].scrollIntoView({ behavior: 'smooth', block: 'center' });",
+                    checkbox_element,
+                )
+                time.sleep(1)
+                checkbox_element.click()
+
+            except:
+                try:
+                    current_status = "clicking checkbox"
+                    time.sleep(1)
+                    CHECKBOX_ELEMENT = (
+                        By.CSS_SELECTOR,
+                        'i[data-icon-name="CheckMark"]',
+                    )
+                    checkbox_element = WebDriverWait(driver, wait_time).until(
+                        EC.presence_of_element_located(CHECKBOX_ELEMENT)
+                    )
+                    driver.execute_script(
+                        "arguments[0].scrollIntoView({ behavior: 'smooth', block: 'center' });",
+                        checkbox_element,
+                    )
+                    time.sleep(1)
+                    checkbox_element.click()
+                except:
+                    pass
+
+        time.sleep(1)
+        # click next btn
+        current_status = "clicking next button after checkbox"
+        if PREFERRED_SMS_COUNTRY.lower() == "italy":
+            NEXT_BTN_ELEMENT = (
+                By.CSS_SELECTOR,
+                'button[aria-label="Avanti"]',
+            )
+        elif PREFERRED_SMS_COUNTRY.lower() in ["poland2", "poland"]:
+            NEXT_BTN_ELEMENT = (
+                By.CSS_SELECTOR,
+                'button[aria-label="Next"]',
+            )
+
+        next_btn_element = WebDriverWait(driver, wait_time).until(
+            EC.element_to_be_clickable(NEXT_BTN_ELEMENT)
+        )
+        next_btn_element.click()
+        time.sleep(1)
+
+        # click card btn
+        current_status = "clicking card button"
+        if PREFERRED_SMS_COUNTRY.lower() == "italy":
+            CARD_BTN_ELEMENT = (
+                By.CSS_SELECTOR,
+                'button[aria-label="Carta di credito o di debito"]',
+            )
+        elif PREFERRED_SMS_COUNTRY.lower() in ["poland2", "poland"]:
+            CARD_BTN_ELEMENT = (
+                By.CSS_SELECTOR,
+                'button[aria-label="Credit card or debit card"]',
+            )
+        try:
+            card_btn_element = WebDriverWait(driver, wait_time).until(
+                EC.element_to_be_clickable(CARD_BTN_ELEMENT)
+            )
+        except:
+            try:
+                CARD_BTN_ELEMENT = (
+                    By.CSS_SELECTOR,
+                    'button[aria-label="Credit card or debit card"]',
+                )
+                card_btn_element = WebDriverWait(driver, wait_time).until(
+                    EC.element_to_be_clickable(CARD_BTN_ELEMENT)
+                )
+            except:
+                pass
+
+        card_btn_element.click()
+        time.sleep(1)
+        _check_shutdown_requested()
+
+        # INPUT ELEMENTS FOR CARD DETAILS
+        current_status = "entering card details"
+        CREDIT_CARD_NUMBER_ELEMENT = (
+            By.CSS_SELECTOR,
+            'input[id="accountToken"]',
+        )
+        NAME_ON_CARD_ELEMENT = (
+            By.CSS_SELECTOR,
+            'input[id="accountHolderName"]',
+        )
+
+        EXPIRY_MONTH_ELEMENT = (
+            By.CSS_SELECTOR,
+            'span[id="input_expiryMonth-option"]',
+        )
+
+        EXPIRY_YEAR_ELEMENT = (
+            By.CSS_SELECTOR,
+            'span[id="input_expiryYear-option"]',
+        )
+        CVV_ELEMENT = (
+            By.CSS_SELECTOR,
+            'input[id="cvvToken"]',
+        )
+
+        ADDRESS_LINE1_ELEMENT = (
+            By.CSS_SELECTOR,
+            'input[id="address_line1"]',
+        )
+        CITY_ELEMENT = (
+            By.CSS_SELECTOR,
+            'input[id="city"]',
+        )
+        STATE_CLICK_ELEMENT = (
+            By.CSS_SELECTOR,
+            'div[id="input_region"]',
+        )
+
+        STATE_OPTIONS_ELEMENT = (
+            By.CSS_SELECTOR,
+            'button[id*="input_region-list"]',
+        )
+
+        POSTAL_CODE_ELEMENT = (
+            By.CSS_SELECTOR,
+            'input[id="postal_code"]',
+        )
+
+        if PREFERRED_SMS_COUNTRY.lower() == "italy":
+            SAVE_BUTTON_ELEMENT = (
+                By.CSS_SELECTOR,
+                'button[aria-label="Salva"]',
+            )
+        elif PREFERRED_SMS_COUNTRY.lower() in ["poland2", "poland"]:
+            SAVE_BUTTON_ELEMENT = (
+                By.CSS_SELECTOR,
+                'button[aria-label="Save"]',
+            )
+
+        SCROLL_DOWN_BUTTON_ELEMENT = (
+            By.CSS_SELECTOR,
+            'button[aria-label="Scroll Down"]',
+        )
+
+        if PREFERRED_SMS_COUNTRY.lower() == "italy":
+            START_TRIAL_BUTTON_ELEMENT = (
+                By.CSS_SELECTOR,
+                'button[aria-label*="Avvia la versione di prova, paga in seguito"]',
+            )
+        elif PREFERRED_SMS_COUNTRY.lower() in ["poland2", "poland"]:
+            START_TRIAL_BUTTON_ELEMENT = (
+                By.CSS_SELECTOR,
+                'button[aria-label*="Start trial, pay later"]',
+            )
+
+        START_TRIAL2_BUTTON_ELEMENT = (
+            By.CSS_SELECTOR,
+            'button[aria-label="Subscribe"]',
+        )
+
+        # print(
+        #     f"{email_address} : Waiting each other to enter card details at the same time..."
+        # )
+        # save_click_barrier.wait(timeout=10 * 60)
+        # ENTERING CARD DETAILS
+        current_status = "entering card number"
+        card_number_element = WebDriverWait(driver, wait_time).until(
+            EC.visibility_of_element_located(CREDIT_CARD_NUMBER_ELEMENT)
+        )
+        card_number_element.clear()
+        time.sleep(0.5)
+        card_number_element.send_keys(
+            card_details_dict.get("card_number").replace(" ", "")
+        )
+        print(
+            f"{email_address} : Entered card number: {card_details_dict.get('card_number')}"
+        )
+
+        time.sleep(0.5)
+        current_status = "entering name on card"
+        name_on_card_element = WebDriverWait(driver, wait_time).until(
+            EC.visibility_of_element_located(NAME_ON_CARD_ELEMENT)
+        )
+        name_on_card_element.clear()
+        time.sleep(1)
+        name_on_card_element.send_keys(card_details_dict.get("name_on_card"))
+        print(
+            f"{email_address} : Entered name on card: {card_details_dict.get('name_on_card')}"
+        )
+
+        time.sleep(1)
+
+        print(
+            f"{email_address} : Selecting expiry month: {card_details_dict.get('expiry_month')}"
+        )
+
+        action = ActionChains(driver)
+        action.send_keys(Keys.TAB).perform()
+        action.send_keys(Keys.ENTER).perform()
+        time.sleep(1.3)
+        current_status = "selecting expiry month"
+        print(f"{email_address} : Selecting expiry month option")
+        expiry_month_option_element = WebDriverWait(driver, wait_time).until(
+            EC.element_to_be_clickable(
+                (
+                    By.CSS_SELECTOR,
+                    f"""button[data-index="{int(card_details_dict.get("expiry_month")) - 1}"]""",
+                )
+            )
+        )
+        expiry_month_option_element.click()
+        print(
+            f"{email_address} : Selected expiry month: {card_details_dict.get('expiry_month')}"
+        )
+
+        time.sleep(1)
+        current_status = "selecting expiry year"
+
+        action = ActionChains(driver)
+        action.send_keys(Keys.TAB).perform()
+        action.send_keys(Keys.ENTER).perform()
+        time.sleep(1)
+        expiry_year_option_element = WebDriverWait(driver, wait_time).until(
+            EC.element_to_be_clickable(
+                (
+                    By.CSS_SELECTOR,
+                    f"""button[data-index="{int(card_details_dict.get("expiry_year")) - 2026}"]""",
+                )
+            )
+        )
+        expiry_year_option_element.click()
+        print(
+            f"{email_address} : Selected expiry year: {card_details_dict.get('expiry_year')}"
+        )
+        time.sleep(0.5)
+        current_status = "entering cvv"
+        cvv_element = WebDriverWait(driver, wait_time).until(
+            EC.visibility_of_element_located(CVV_ELEMENT)
+        )
+        cvv_element.clear()
+        time.sleep(0.5)
+        cvv_element.send_keys(card_details_dict.get("cvv"))
+        print(f"{email_address} : Entered CVV: {card_details_dict.get('cvv')}")
+        time.sleep(1)
+
+        current_status = "entering address line 1"
+        address_line1_element = WebDriverWait(driver, wait_time).until(
+            EC.visibility_of_element_located(ADDRESS_LINE1_ELEMENT)
+        )
+        address_line1_element.clear()
+        time.sleep(0.5)
+        address_line1_element.send_keys(card_details_dict.get("address_line1"))
+        print(
+            f"{email_address} : Entered address line 1: {card_details_dict.get('address_line1')}"
+        )
+        time.sleep(0.5)
+        current_status = "entering city"
+
+        city_element = WebDriverWait(driver, wait_time).until(
+            EC.visibility_of_element_located(CITY_ELEMENT)
+        )
+        city_element.clear()
+        time.sleep(0.5)
+        city_element.send_keys(card_details_dict.get("city"))
+        print(f"{email_address} : Entered city: {card_details_dict.get('city')}")
+        time.sleep(0.5)
+        _check_shutdown_requested()
+        if PREFERRED_SMS_COUNTRY.lower() in ["united states", "italy"]:
+            current_status = "entering state"
+
+            state_element = WebDriverWait(driver, wait_time).until(
+                EC.visibility_of_element_located(STATE_CLICK_ELEMENT)
+            )
+
+            time.sleep(3)
+            state_element.click()
+            time.sleep(0.5)
+
+            state_options_element = WebDriverWait(driver, wait_time).until(
+                EC.visibility_of_all_elements_located(STATE_OPTIONS_ELEMENT)
+            )
+
+            city_element = [
+                i
+                for i in state_options_element
+                if i.text.lower() == card_details_dict.get("state", "").lower()
+            ][0]
+
+            # scroll into view
+            driver.execute_script(
+                "arguments[0].scrollIntoView({ behavior: 'smooth', block: 'center' });",
+                city_element,
+            )
+            time.sleep(1)
+            city_element.click()
+
+            print(f"{email_address} : Entered state: {card_details_dict.get('state')}")
+            time.sleep(0.5)
+
+        current_status = "entering postal code"
+        postal_code_element = WebDriverWait(driver, wait_time).until(
+            EC.visibility_of_element_located(POSTAL_CODE_ELEMENT)
+        )
+        postal_code_element.clear()
+        time.sleep(0.5)
+        postal_code_element.send_keys(card_details_dict.get("postal_code"))
+        print(
+            f"{email_address} : Entered postal code: {card_details_dict.get('postal_code')}"
+        )
+        time.sleep(0.5)
+
+        current_status = "clicking save button"
+        save_button_element = WebDriverWait(driver, wait_time).until(
+            EC.element_to_be_clickable(SAVE_BUTTON_ELEMENT)
+        )
+        # wait for other threads to reach this save point and click together
+
+        # print(f"{email_address} : Waiting at save barrier before clicking Save...")
+        # save_click_barrier.wait(timeout=10 * 60)
+
+        save_button_element.click()
+        print(f"{email_address} : Clicked save button")
+
+        current_status = "checking if card is declined"
+        _check_shutdown_requested()
+        if credit_card_is_declined(driver):
+            print(f"{email_address} : Card was declined")
+            # log_card_usage(card_details_dict)
+            mark_card_failed(card_details_dict)
+
+            return False, "Card was declined"
+        else:
+            print(f"{email_address} : Card not declined.")
+
+        current_status = "checking if card is added to payments"
+        if affirm_card_is_added(driver, card_details_dict.get("name_on_card")):
+            print(f"{email_address} : Affirm Card added to payments successfully.")
+        else:
+            print(f"{email_address} : Card not added to payments.")
+            return False, "Card not added to payments"
+
+        current_status = "Add billing address if prompted"
+        _check_shutdown_requested()
+        add_billing(driver, new_profile_data, card_details_dict)
+
+        time.sleep(2)
+        _check_shutdown_requested()
+        try:
+            current_status = "clicking scroll down button"
+            scroll_button_element = WebDriverWait(driver, wait_time).until(
+                EC.element_to_be_clickable(SCROLL_DOWN_BUTTON_ELEMENT)
+            )
+
+            scroll_button_element.click()
+            print(f"{email_address} : Clicked scroll down button")
+        except:
+            pass
+
+        # click checkbox
+
+        if PREFERRED_SMS_COUNTRY.lower() == "united states":
+            try:
+                current_status = "clicking checkbox"
+                time.sleep(1)
+                CHECKBOX_ELEMENT = (
+                    By.CSS_SELECTOR,
+                    'i[data-icon-name="CheckMark"]',
+                )
+                checkbox_element = WebDriverWait(driver, wait_time).until(
+                    EC.presence_of_element_located(CHECKBOX_ELEMENT)
+                )
+                # scroll_into_view(driver, checkbox_element)
+                driver.execute_script(
+                    "arguments[0].scrollIntoView({ behavior: 'smooth', block: 'center' });",
+                    checkbox_element,
+                )
+                time.sleep(1)
+                checkbox_element.click()
+
+            except:
+                pass
+
+        ##################
+        _check_shutdown_requested()
+        retries = 5
+        card_success = False
+
+        while retries > 0:
+            try:
+                current_status = "clicking start trial button"
+                _check_shutdown_requested()
+                time.sleep(4)
+                print(f"{email_address} : Clicking start trial button")
+
+                start_trial_button_element = WebDriverWait(driver, wait_time).until(
+                    EC.element_to_be_clickable(START_TRIAL_BUTTON_ELEMENT)
+                )
+                time.sleep(0.5)
+                start_trial_button_element = WebDriverWait(driver, wait_time).until(
+                    EC.element_to_be_clickable(START_TRIAL_BUTTON_ELEMENT)
+                )
+                start_trial_button_element.click()
+                print(f"{email_address} : Clicked start trial button")
+                current_status = "checking if card is authorized"
+
+                print(f"{email_address} : Waiting 5 minutes for card authorization...")
+                if not affirm_congrats_card_added_italy(driver):
+                    print(
+                        f"{email_address} : Card not authorised. Retrying card auth. retries left: {retries}"
+                    )
+                    retries -= 1
+                    regroup_for_reauthentication(driver, new_profile_data)
+
+                else:
+                    card_success = True
+                    log_card_usage(card_details_dict)
+                    retries = 0
+                    break
+
+            except:
+                _check_shutdown_requested()
+                print(
+                    f"{email_address} : Card not authorised.Retrying card auth. retries left: {retries}"
+                )
+                regroup_for_reauthentication(driver, new_profile_data)
+                retries -= 1
+
+        if not card_success:
+            return False, "card not authorized"
+        else:
+            print(f"{email_address} : Card authorized successfully.")
+
+        time.sleep(2)
+        driver.get("https://account.microsoft.com/services/microsoft365/details")
+
+        # _check_shutdown_requested()
+        time.sleep(2)
+        try:
+            current_status = "clicking share button"
+            SHARE_ELEMENT = (
+                By.CSS_SELECTOR,
+                'button[aria-label="Share subscription"]',
+            )
+
+            COPY_BUTTON_ELEMENT = (
+                By.CSS_SELECTOR,
+                'button[aria-label="Copy link"]',
+            )
+
+            LINK_INPUT_ELEMENT = (
+                By.CSS_SELECTOR,
+                'input[aria-label="Sharing link"]',
+            )
+
+            share_btn_element = WebDriverWait(driver, wait_time).until(
+                EC.visibility_of_element_located(SHARE_ELEMENT)
+            )
+            # scroll into center view
+            driver.execute_script(
+                "arguments[0].scrollIntoView({block: 'center'});", share_btn_element
+            )
+            time.sleep(1)
+
+            share_btn_element.click()
+            print(f"{email_address} : Clicked share button")
+
+            time.sleep(2)
+            current_status = "clicking copy link button"
+            copy_btn_element = WebDriverWait(driver, wait_time).until(
+                EC.visibility_of_element_located(COPY_BUTTON_ELEMENT)
+            )
+            copy_btn_element.click()
+            print(f"{email_address} : Clicked copy link button")
+
+            time.sleep(5)
+            current_status = "retrieving sharing link"
+            link_input_element = WebDriverWait(driver, wait_time + 40).until(
+                EC.visibility_of_element_located(LINK_INPUT_ELEMENT)
+            )
+            link = link_input_element.get_attribute("value")
+            print(f"{email_address} : Retrieved sharing link: {link}")
+            store_extracted_link(new_profile_data, link, card_details_dict)
+            time.sleep(4)
+
+            print(f"{email_address} : Stored extracted link successfully")
+            return True, "Success"
+        except Exception as E:
+            print(
+                f"{email_address} : Error copying sharing link or card not authorised: {E}"
+            )
+            return False, "Error copying sharing link"
+
+    except Exception as E:
+        print(
+            f"{email_address} : Exception error occurred at step: {current_status}:\nError: {E} "
+        )
+        # create screenshot directory if not exists
+        try:
+            os.makedirs("../utils/screenshots", exist_ok=True)
+            driver.save_screenshot(
+                f"../utils/screenshots/{email_address.split('@')[0]}_{current_status}_error.png".replace(
+                    " ", "_"
+                )
+                .replace(":", "")
+                .replace("@", "")
+            )
+        except:
+            pass
+        return False, f"Error occurred: {E} at step: {current_status}"
+
+
+def get_microsoft_premium_old_(driver, new_profile_data):
+    try:
+        email_address = new_profile_data.get("email")
 
         current_status = "getting card details"
         try:
@@ -7011,6 +8802,7 @@ def get_microsoft_premium_old_(driver, new_profile_data):
         save_button_element = WebDriverWait(driver, wait_time).until(
             EC.element_to_be_clickable(SAVE_BUTTON_ELEMENT)
         )
+        # wait for other threads to reach this save point and click together
         save_button_element.click()
         print(f"{email_address} : Clicked save button")
 
@@ -7162,45 +8954,66 @@ def get_microsoft_premium_old_(driver, new_profile_data):
 
 
 ########### ENTURUUUUUURU ############
-def get_new_profile_data():
+def get_rec_from_db(number_records=3):
     retries = 0
     while retries < 3:
+        conn = None
         try:
             conn = mysql.connector.connect(
                 host=DB_HOST, user=DB_USER, password=DB_PASSWORD, database=DB_NAME
             )
             cursor = conn.cursor()
 
-            # First, check if there's an existing record in processing_emails for this server and bot type
-            cursor.execute(
-                "SELECT email, pass FROM processing_emails WHERE server_ip = %s AND bot_type = %s LIMIT 1",
-                (SERVER_IP, BOT_TYPE),
-            )
-            row = cursor.fetchone()
-            if row:
-                conn.close()
-                email, password = row
-                print(f"Found existing processing email: {email}")
-                return True, {"email": email, "pass": password}
+            # Resume all records already claimed by this server before claiming new work
+            # Only resume existing processing_emails when number_records >= 3
+            rows = []
+            records = []
+            if number_records >= 3:
+                cursor.execute(
+                    "SELECT email, pass FROM processing_emails "
+                    "WHERE server_ip = %s AND bot_type = %s LIMIT %s",
+                    (SERVER_IP, BOT_TYPE, number_records),
+                )
+                rows = cursor.fetchall()
+                if rows:
+                    records = [
+                        {"email": email, "pass": password} for email, password in rows
+                    ]
+                    print(f"Found {len(records)} existing processing email(s)")
+            else:
+                # Skipping resuming processing_emails when requesting fewer than 3 records
+                print(
+                    f"Skipping resuming processing_emails because number_records={number_records} < 3"
+                )
 
-            # If no existing record, get a new one from input_emails
-            cursor.execute("SELECT email, pass FROM input_emails LIMIT 1")
-            row = cursor.fetchone()
-            if not row:
+            # If no existing records (or skipped), claim the requested number of new records.
+            remaining_records = number_records - len(records)
+            if remaining_records <= 0 and records:
                 conn.close()
-                return False, {}
-            email, password = row
+                return True, records
+
             cursor.execute(
-                "INSERT INTO processing_emails (email, pass, server_ip, bot_type, date_time) VALUES (%s, %s,%s, %s, %s)",
-                (email, password, SERVER_IP, BOT_TYPE, datetime.now()),
+                "SELECT email, pass FROM input_emails LIMIT %s", (remaining_records,)
             )
-            cursor.execute(
-                "DELETE FROM input_emails WHERE email = %s AND pass = %s",
-                (email, password),
-            )
+            rows = cursor.fetchall()
+            if not rows:
+                conn.close()
+                return (True, records) if records else (False, [])
+
+            for email, password in rows:
+                cursor.execute(
+                    "INSERT INTO processing_emails (email, pass, server_ip, bot_type, date_time) VALUES (%s, %s,%s, %s, %s)",
+                    (email, password, SERVER_IP, BOT_TYPE, datetime.now()),
+                )
+                cursor.execute(
+                    "DELETE FROM input_emails WHERE email = %s AND pass = %s",
+                    (email, password),
+                )
+                records.append({"email": email, "pass": password})
+
             conn.commit()
             conn.close()
-            return True, {"email": email, "pass": password}
+            return True, records
         except Exception as e:
             if conn is not None:
                 conn.close()
@@ -7209,7 +9022,7 @@ def get_new_profile_data():
             time.sleep(5)
 
     print("Unable to get input email after 3 retries. Most likely no emails")
-    return False, {"email": "", "pass": ""}
+    return False, []
 
 
 def get_processing_card():
@@ -7720,34 +9533,35 @@ def get_new_family_extractor_data():
     )
 
 
-def initialize_new_profile(new_profile_data):
+def card_management():
+    try:
+        while True:
+            card_details_dict = get_processing_card()
+            if card_details_dict:
+                return_card_to_familybot_card_details(card_details_dict)
+            else:
+                break
+        if not get_next_card():
+            print(
+                "No available cards to use for Microsoft Premium. Check logs/card_usage.log and output_data/fully_used_cards.txt for more info."
+            )
+            return False
+        else:
+            print("Card found for Microsoft Premium.")
+            return True
+
+    except Exception as E:
+        print(f"Error checking available cards: {E}")
+        return False
+
+
+def initialize(new_profile_data):
     """
     Creating a new chrome profile.
 
     A dictionary with email_address, and password
     """
     try:
-        _check_shutdown_requested()
-        print("\n--------------------------------------\n")
-        try:
-            while True:
-                card_details_dict = get_processing_card()
-                if card_details_dict:
-                    return_card_to_familybot_card_details(card_details_dict)
-                else:
-                    break
-            if not get_next_card():
-                print(
-                    "No available cards to use for Microsoft Premium. Check logs/card_usage.log and output_data/fully_used_cards.txt for more info."
-                )
-                os._exit(1)
-                return False, "No available cards to use for Microsoft Premium"
-        except Exception as E:
-            print(f"Error checking available cards: {E}")
-            os._exit(1)
-            return False, "Error checking available cards for Microsoft Premium"
-
-        connect_new_random()
         _check_shutdown_requested()
 
         email_address = new_profile_data.get("email").strip()
@@ -7773,6 +9587,7 @@ def initialize_new_profile(new_profile_data):
                 driver.quit()
                 retries += 1
 
+        _check_shutdown_requested()
         if not driver_success:
             print(f"{email_address}: Error initializing new browser driver")
             new_profile_logger(
@@ -7781,6 +9596,8 @@ def initialize_new_profile(new_profile_data):
                 "Error initializing new browser driver. Network or proxy error",
             )
             return False, "Error initializing new browser driver instance"
+
+        _check_shutdown_requested()
         if not enter_email(driver=driver, email_address=email_address):
             print(f"{email_address}: Error entering email")
             new_profile_logger(email_address, "FAIL", "Error loading login page")
@@ -7813,6 +9630,7 @@ def initialize_new_profile(new_profile_data):
             return False, "Error clicking next button after entering password"
         time.sleep(1)
 
+        _check_shutdown_requested()
         click_next_if_is_updating_terms_page(driver)
 
         recovery_email_page_popped_up = "NO"
@@ -7820,109 +9638,12 @@ def initialize_new_profile(new_profile_data):
 
         has_recovery_phone = "NO"
         recovery_phone_number = ""
-        if is_your_account_has_been_locked_page(driver):
-            print(
-                f"{email_address}: Your account has been locked page displayed. Using phone number from hero-sms-api"
-            )
-            time.sleep(1)
-
-            click_next_button_locked_page(driver)
-            time.sleep(1)
-
-            phone_retries = 0
-            phone_status = False
-            while phone_retries < 5 and not phone_status:
-                phone_status, activation_id, recovery_phone_number = (
-                    get_number_for_verification()
-                )
-                phone_retries += 1
-
-            if not phone_status:
-                print(f"{email_address}: Unable to get phone number from hero-api")
-                new_profile_logger(
-                    email_address,
-                    "FAIL",
-                    "Unable to get phone number from hero-api",
-                )
-                return False, "Unable to get phone number from hero-api"
-
-            else:
-                print(
-                    f"{email_address}: Using phone number from hero-api to unlock: {recovery_phone_number}"
-                )
-
-                has_recovery_phone = "YES"
-                phone_number = recovery_phone_number
-                bring_to_front(driver)
-                enter_phone_number_and_click_next_microsoft(driver, phone_number)
-                bring_to_front(driver)
-                if funcaptcha_present(driver):
-                    print(
-                        f"{email_address}: Captcha detected. {CATCHA_WAIT_TIME} seconds to bypass"
-                    )
-                    wait_funcaptcha_bypass(driver)
-                    time.sleep(1)
-                    if bypassed_funcaptcha_to_code_page(driver):
-                        print(
-                            f"{email_address}: Bypassed captcha successfully! Waiting for OTP"
-                        )
-                    else:
-                        print(f"{email_address}: Unable to bypass captcha")
-                        new_profile_logger(
-                            email_address,
-                            "FAIL",
-                            "Unable to bypass captcha or phone verification unavailable",
-                        )
-                        return False, "Unable to bypass captcha"
-                else:
-                    print(f"{email_address}: Captcha not present")
-                    if is_try_another_verification_method(driver):
-                        print(f"{email_address}: Unable to verify phone number.")
-                        return (
-                            False,
-                            "Unable to verify phone number. Try another method",
-                        )
-
-                print(f"{email_address}: Waiting for sms verification code")
-
-                code_status, code = get_code(activation_id=activation_id)
-                if code_status:
-                    print(f"{email_address}: Code received: {code}. Verifying...")
-                    enter_sent_code(driver, code)
-                    click_next_if_acc_unblocked(driver)
-                    click_next_if_is_updating_terms_page(driver)
-                    update_accounts_data(
-                        date_time=datetime.now(tz=timezone.utc),
-                        email=email_address,
-                        profile_dir=user_path,
-                        proxy_used=proxy,
-                        password=password,
-                        has_recovery_email=recovery_email_page_popped_up,
-                        recovery_email=temp_email,
-                        has_recovery_phone=has_recovery_phone,
-                        recovery_phone_number=recovery_phone_number,
-                        joined_microsoft_premium="NO",
-                    )
-                    print(f"{email_address}: Successfully verified mobile number")
-                else:
-                    cancel_number(activation_id=activation_id)
-                    print(
-                        f"{email_address}: Verification code not sent to number. Waiting timed out"
-                    )
-                    new_profile_logger(
-                        email_address,
-                        "FAIL",
-                        "Verification code not sent to number. Waiting timed out",
-                    )
-                    return (
-                        False,
-                        "Verification code not sent to number. Waiting timed out",
-                    )
+        _check_shutdown_requested()
 
         if is_protect_your_account_page(driver):
             recovery_email_page_popped_up = "YES"
 
-            lets_protect_your_account_banner_page(driver)
+            # lets_protect_your_account_banner_page(driver)
             print(f"{email_address}: Protect your account page")
             if not select_alternate_email_option(driver=driver):
                 print(f"{email_address}: Error selecting an alternate email option")
@@ -7951,147 +9672,7 @@ def initialize_new_profile(new_profile_data):
 
             else:
                 print(f"{email_address}: got email from temp-mail. Verifying..")
-                if not enter_email(driver=driver, email_address=temp_email):
-                    print(f"{email_address}: Error entering recovery email")
-                    new_profile_logger(
-                        email_address,
-                        "FAIL",
-                        "Error entering recovery email",
-                    )
-                    return False, "Error entering recovery email"
-                time.sleep(0.5)
-                bring_to_front(driver)
-                time.sleep(1)
-                sss, er = click_next_button_rec_email(driver)
-                if not sss:
-                    os.makedirs("screenshots", exist_ok=True)
-                    driver.save_screenshot(f"screenshots/{email_address}_error.png")
-                    print(
-                        f"{email_address}: Error clicking next after entering recovery email: {er}"
-                    )
-                    new_profile_logger(
-                        email_address,
-                        "FAIL",
-                        "Error clicking next after entering recovery email",
-                    )
-                    return False, "Error clicking next after entering recovery email"
-
-                status, code = wait_for_code(email_token)
-                time.sleep(3)
-                if not status:
-                    print(f"{email_address}: Error getting code from tempmail")
-                    new_profile_logger(
-                        email_address,
-                        "FAIL",
-                        "Error getting code from tempmail. Timed out without receiving code",
-                    )
-                    return False, "Error getting code from tempmail. Timeout"
-                else:
-                    print(f"{email_address}: Code received from tempmail: {code}")
-                if not enter_code(driver, code):
-                    print(f"{email_address}: Error entering email verification code")
-                    new_profile_logger(
-                        email_address,
-                        "FAIL",
-                        "Error entering email verification code",
-                    )
-                    return False, "Error entering email verification code"
-
-                if not click_next_button(driver):
-                    print(f"{email_address}: Error clicking next after entering otp")
-                    new_profile_logger(
-                        email_address,
-                        "FAIL",
-                        "Error clicking next after entering otp",
-                    )
-                    return False, "Error clicking next after entering otp"
-
-                if invalid_code(driver):
-                    print(f"{email_address}: OTP ENTERED IS INCORRECT")
-                    new_profile_logger(
-                        email_address,
-                        "FAIL",
-                        "Otp sent is incorrect",
-                    )
-                    return False, "OTP ENTERED IS INCORRECT"
-                else:
-                    print(f"{email_address}: OTP verified successfully")
-
-        print(f"{email_address}:Finalizing signin")
-        close_other_tabs(driver)
-        # click_next_if_is_updating_terms_page(driver)
-        click_next_if_a_quick_note_page(driver)
-        cancel_setup_passkey(driver)
-        click_stay_signed_in_button(driver)
-
-        try:
-            if enter_password(driver=driver, password=password):
-                print(f"{email_address}: Reloging in with password")
-                click_password_next_button(driver=driver)
-                click_stay_signed_in_button(driver)
-        except:
-            pass
-
-        joined_microsoft_premium = "NO"
-        print(f"{email_address}: SUCCESSFULL LOGIN!")
-
-        update_accounts_data(
-            email=email_address,
-            profile_dir=user_path,
-            proxy_used=proxy,
-            password=password,
-            has_recovery_email=recovery_email_page_popped_up,
-            recovery_email=temp_email,
-            has_recovery_phone=has_recovery_phone,
-            recovery_phone_number=recovery_phone_number,
-            joined_microsoft_premium=joined_microsoft_premium,
-        )
-
-        if recovery_email_page_popped_up == "NO":
-            driver.get(
-                "https://account.live.com/password/Change?mkt=en-US&refd=account.microsoft.com&refp=profile"
-            )
-            time.sleep(3)
-            if is_protect_your_account_page(driver):
-                recovery_email_page_popped_up = "YES"
-
-                lets_protect_your_account_banner_page(driver)
-                print(f"{email_address}: Protect your account page")
-                if not select_alternate_email_option(driver=driver):
-                    print(f"{email_address}: Error selecting an alternate email option")
-                    # return driver
-                    # new_profile_logger(
-                    #     email_address,
-                    #     "FAIL",
-                    #     "Error selecting an alternate email option",
-                    # )
-                    # return False, "Error selecting an alternate email option"
-
-                status, temp_email, email_token = create_email()
-                if not status:
-                    print(
-                        f"{email_address}: Error getting a temp mail from temp-mail. Tempmail unresponsive"
-                    )
-                    new_profile_logger(
-                        email_address,
-                        "FAIL",
-                        "Error getting email from tempmail",
-                    )
-                    return (
-                        False,
-                        "Error getting a temp mail from temp-mail. Tempmail unresponsive",
-                    )
-
-                else:
-                    print(f"{email_address}: got email from temp-mail. Verifying..")
-                    if not enter_email(driver=driver, email_address=temp_email):
-                        print(f"{email_address}: Error entering recovery email")
-                        new_profile_logger(
-                            email_address,
-                            "FAIL",
-                            "Error entering recovery email",
-                        )
-                        return False, "Error entering recovery email"
+                if enter_email(driver=driver, email_address=temp_email):
                     time.sleep(0.5)
                     bring_to_front(driver)
                     time.sleep(1)
@@ -8112,7 +9693,173 @@ def initialize_new_profile(new_profile_data):
                             "Error clicking next after entering recovery email",
                         )
 
+                elif enter_recovery_email_2(driver, temp_email):
+                    click_password_next_button(driver)
+                else:
+                    print(f"{email_address}: Error entering recovery email")
+                    new_profile_logger(
+                        email_address,
+                        "FAIL",
+                        "Error entering recovery email",
+                    )
+                    return False, "Error entering recovery email"
+
+                _check_shutdown_requested()
+                status, code = wait_for_code(email_token)
+                _check_shutdown_requested()
+                time.sleep(3)
+                if not status:
+                    print(f"{email_address}: Error getting code from tempmail")
+                    new_profile_logger(
+                        email_address,
+                        "FAIL",
+                        "Error getting code from tempmail. Timed out without receiving code",
+                    )
+                    return False, "Error getting code from tempmail. Timeout"
+                else:
+                    print(f"{email_address}: Code received from tempmail: {code}")
+                if enter_code(driver, code):
+                    if not click_next_button(driver):
+                        print(
+                            f"{email_address}: Error clicking next after entering otp"
+                        )
+                        new_profile_logger(
+                            email_address,
+                            "FAIL",
+                            "Error clicking next after entering otp",
+                        )
+                        return False, "Error clicking next after entering otp"
+
+                elif not enter_code_and_click_next_after_pass_change(driver, code):
+                    print(f"{email_address}: Error entering email verification code")
+                    new_profile_logger(
+                        email_address,
+                        "FAIL",
+                        "Error entering email verification code",
+                    )
+                    return False, "Error entering email verification code"
+
+                if invalid_code(driver):
+                    print(f"{email_address}: OTP ENTERED IS INCORRECT")
+                    new_profile_logger(
+                        email_address,
+                        "FAIL",
+                        "Otp sent is incorrect",
+                    )
+                    return False, "OTP ENTERED IS INCORRECT"
+                else:
+                    print(f"{email_address}: OTP verified successfully")
+        _check_shutdown_requested()
+        print(f"{email_address}:Finalizing signin")
+        close_other_tabs(driver)
+        # click_next_if_is_updating_terms_page(driver)
+        time.sleep(1)
+        click_looks_good_button(driver)
+        cancel_setup_passkey(driver)
+
+        click_next_if_a_quick_note_page(driver)
+        click_stay_signed_in_button(driver)
+        _check_shutdown_requested()
+        try:
+            if enter_password(driver=driver, password=password):
+                print(f"{email_address}: Reloging in with password")
+                click_password_next_button(driver=driver)
+                click_stay_signed_in_button(driver)
+        except:
+            pass
+
+        joined_microsoft_premium = "NO"
+        print(f"{email_address}: SUCCESSFULL LOGIN!")
+
+        # return driver
+
+        update_accounts_data(
+            email=email_address,
+            profile_dir=user_path,
+            proxy_used=proxy,
+            password=password,
+            has_recovery_email=recovery_email_page_popped_up,
+            recovery_email=temp_email,
+            has_recovery_phone=has_recovery_phone,
+            recovery_phone_number=recovery_phone_number,
+            joined_microsoft_premium=joined_microsoft_premium,
+        )
+
+        _check_shutdown_requested()
+        if recovery_email_page_popped_up == "NO":
+            driver.get(
+                "https://account.live.com/password/Change?mkt=en-US&refd=account.microsoft.com&refp=profile"
+            )
+            time.sleep(3)
+            if is_protect_your_account_page(driver):
+                recovery_email_page_popped_up = "YES"
+
+                # lets_protect_your_account_banner_page(driver)
+                print(f"{email_address}: Protect your account page")
+                if not select_alternate_email_option(driver=driver):
+                    print(f"{email_address}: Error selecting an alternate email option")
+                    new_profile_logger(
+                        email_address,
+                        "FAIL",
+                        "Error selecting an alternate email option",
+                    )
+                    return False, "Error selecting an alternate email option"
+
+                status, temp_email, email_token = create_email()
+                new_profile_data["recovery_email"] = temp_email
+                if not status:
+                    print(
+                        f"{email_address}: Error getting a temp mail from temp-mail. Tempmail unresponsive"
+                    )
+                    new_profile_logger(
+                        email_address,
+                        "FAIL",
+                        "Error getting email from tempmail",
+                    )
+                    return (
+                        False,
+                        "Error getting a temp mail from temp-mail. Tempmail unresponsive",
+                    )
+
+                else:
+                    print(f"{email_address}: got email from temp-mail. Verifying..")
+                    if enter_email(driver=driver, email_address=temp_email):
+                        time.sleep(0.5)
+                        bring_to_front(driver)
+                        time.sleep(1)
+                        sss, er = click_next_button_rec_email(driver)
+                        if not sss:
+                            os.makedirs("screenshots", exist_ok=True)
+                            driver.save_screenshot(
+                                f"screenshots/{email_address}_error.png"
+                            )
+                            print(
+                                f"{email_address}: Error clicking next after entering recovery email: {er}"
+                            )
+                            new_profile_logger(
+                                email_address,
+                                "FAIL",
+                                "Error clicking next after entering recovery email",
+                            )
+                            return (
+                                False,
+                                "Error clicking next after entering recovery email",
+                            )
+
+                    elif enter_recovery_email_2(driver, temp_email):
+                        click_password_next_button(driver)
+                    else:
+                        print(f"{email_address}: Error entering recovery email")
+                        new_profile_logger(
+                            email_address,
+                            "FAIL",
+                            "Error entering recovery email",
+                        )
+                        return False, "Error entering recovery email"
+
+                    _check_shutdown_requested()
                     status, code = wait_for_code(email_token)
+                    _check_shutdown_requested()
                     time.sleep(3)
                     if not status:
                         print(f"{email_address}: Error getting code from tempmail")
@@ -8124,7 +9871,19 @@ def initialize_new_profile(new_profile_data):
                         return False, "Error getting code from tempmail. Timeout"
                     else:
                         print(f"{email_address}: Code received from tempmail: {code}")
-                    if not enter_code(driver, code):
+                    if enter_code(driver, code):
+                        if not click_next_button(driver):
+                            print(
+                                f"{email_address}: Error clicking next after entering otp"
+                            )
+                            new_profile_logger(
+                                email_address,
+                                "FAIL",
+                                "Error clicking next after entering otp",
+                            )
+                            return False, "Error clicking next after entering otp"
+
+                    elif not enter_code_and_click_next_after_pass_change(driver, code):
                         print(
                             f"{email_address}: Error entering email verification code"
                         )
@@ -8134,17 +9893,6 @@ def initialize_new_profile(new_profile_data):
                             "Error entering email verification code",
                         )
                         return False, "Error entering email verification code"
-
-                    if not click_next_button(driver):
-                        print(
-                            f"{email_address}: Error clicking next after entering otp"
-                        )
-                        new_profile_logger(
-                            email_address,
-                            "FAIL",
-                            "Error clicking next after entering otp",
-                        )
-                        return False, "Error clicking next after entering otp"
 
                     if invalid_code(driver):
                         print(f"{email_address}: OTP ENTERED IS INCORRECT")
@@ -8176,7 +9924,9 @@ def initialize_new_profile(new_profile_data):
             )
             return False, "Recovery not added. Protect your account page NOT displayed"
 
+        _check_shutdown_requested()
         status, error = change_acc_pass(driver, new_profile_data)
+        _check_shutdown_requested()
         if status:
             password = error
             update_accounts_data(email=email_address, password=error)
@@ -8184,8 +9934,14 @@ def initialize_new_profile(new_profile_data):
 
         # return driver
 
-        status, driver = change_account_country(driver, new_profile_data)
+        _check_shutdown_requested()
+        change_account_language_chinese(driver, new_profile_data)
+        _check_shutdown_requested()
 
+        status, driver = change_account_country(driver, new_profile_data)
+        _check_shutdown_requested()
+
+        # return driver
         if not status:
             new_profile_logger(
                 email_address,
@@ -8199,6 +9955,7 @@ def initialize_new_profile(new_profile_data):
 
         if PREFERRED_SMS_COUNTRY in ["United States", "united states"]:
             print(f"{email_address}: Changing account language to english")
+            _check_shutdown_requested()
             status = change_account_language(driver, new_profile_data)
             if not status:
                 print(f"{email_address}: Error changing account language to english")
@@ -8208,44 +9965,37 @@ def initialize_new_profile(new_profile_data):
                 )
 
         # return driver
+        print(f"{email_address}: Waiting at initialize barrier for other threads...")
+        initialize_barrier.wait(timeout=15 * 60)
 
-        status, error = get_microsoft_premium(driver, new_profile_data)
+        _check_shutdown_requested()
+        if PREFERRED_SMS_COUNTRY in [
+            "italy",
+            "Italy",
+            "poland",
+            "Poland",
+            "poland2",
+            "Poland2",
+        ]:
+            status, error = get__premium_italy(driver, new_profile_data)
+        else:
+            status, error = get__premium(driver, new_profile_data)
+        _check_shutdown_requested()
+
         if not status:
-            print(
-                f"{email_address}: Error getting microsoft premium: {error}. Retrying ..."
+            new_profile_logger(
+                email_address,
+                "FAIL",
+                f"Error getting microsoft premium: {error}",
             )
-            try:
-                if not get_next_card():
-                    print(
-                        "No available cards to use for Microsoft Premium. Check logs/card_usage.log and output_data/fully_used_cards.txt for more info."
-                    )
-                    os._exit(1)
-                    return False, "No available cards to use for Microsoft Premium"
-            except Exception as E:
-                print(f"Error checking available cards: {E}")
-                os._exit(1)
-                return False, "Error checking available cards for Microsoft Premium"
-
-            status, error = get_microsoft_premium(driver, new_profile_data)
-            if not status:
-                new_profile_logger(
-                    email_address,
-                    "FAIL",
-                    f"Error getting microsoft premium: {error}",
-                )
-                return False, f"Error getting microsoft premium: {error}"
-            else:
-                new_profile_logger(
-                    email_address, "SUCCESS", f"SUCESSFULLY GOT MICROSOFT PREMIUM"
-                )
+            return True, f"Error getting microsoft premium: {error}"
 
         else:
             new_profile_logger(
                 email_address, "SUCCESS", f"SUCESSFULLY GOT MICROSOFT PREMIUM"
             )
 
-        # return True, "Success"
-        return driver
+        return True, "Success"
 
     except Exception as E:
         try:
@@ -8259,36 +10009,89 @@ def initialize_new_profile(new_profile_data):
             processed_email(new_profile_data_original)
         except:
             pass
-        try:
-            card_details_dict = get_processing_card()
-            if card_details_dict:
-                return_card_to_familybot_card_details(card_details_dict)
-        except Exception as E:
-            # print(f"Error returning card to familybot_card_details: {E}")
-            pass
 
 
-def run_familybot():
+def run_familybot(country=None, concurrent=1):
     """
     Creates threads and signs in simultaneously
     """
-    global SHUTDOWN_REQUESTED
+    global \
+        PREFERRED_SMS_COUNTRY, \
+        SHUTDOWN_REQUESTED, \
+        PAUSE_REQUESTED, \
+        CHANGE_COUNTRY, \
+        CONCURRENT_WINDOWS, \
+        initialize_barrier, \
+        save_click_barrier, \
+        get_premium_start_barrier
+    if country:
+        PREFERRED_SMS_COUNTRY = str(country).lower()
+        CHANGE_COUNTRY = str(country).lower()
+
+    CONCURRENT_WINDOWS = concurrent
+    initialize_barrier = threading.Barrier(CONCURRENT_WINDOWS)
+    # Barrier used inside get__premium at the 'clicking save button' point
+    save_click_barrier = threading.Barrier(CONCURRENT_WINDOWS)
+    # Optional barrier if threads should synchronize at start of get__premium
+    get_premium_start_barrier = threading.Barrier(CONCURRENT_WINDOWS)
     SHUTDOWN_REQUESTED = False
+    PAUSE_REQUESTED = False
     _start_shutdown_watcher()
 
     print(
         f"Starting Familybot for country: {PREFERRED_SMS_COUNTRY} and IP: {SERVER_IP}"
     )
     while True:
+        print(
+            "\n=============================================================================\n"
+        )
         if SHUTDOWN_REQUESTED:
             return True
 
-        status, new_profile_data = get_new_profile_data()
+        status, profiles = get_rec_from_db(CONCURRENT_WINDOWS)
         if status:
             if SHUTDOWN_REQUESTED:
                 return True
+            if not card_management():
+                current_action = "No available cards: waiting for signal"
+                print(current_action)
+                keep_alive(current_action=current_action)
+                return "NO_CARDS"
+
+            time.sleep(3)
+
+            connect_new_random()
+            time.sleep(3)
             try:
-                initialize_new_profile(new_profile_data)
+                with ThreadPoolExecutor(max_workers=CONCURRENT_WINDOWS) as executor:
+                    pending = {
+                        executor.submit(initialize, profile) for profile in profiles
+                    }
+
+                    while pending:
+                        completed, pending = wait(pending, return_when=FIRST_COMPLETED)
+                        for future in completed:
+                            try:
+                                result = future.result()
+                                initialize_succeeded = (
+                                    isinstance(result, tuple)
+                                    and bool(result)
+                                    and result[0] is True
+                                )
+                            except Exception as error:
+                                print(f"Initialize thread failed: {error}")
+                                initialize_succeeded = False
+
+                            if initialize_succeeded or SHUTDOWN_REQUESTED:
+                                continue
+
+                            replacement_status, replacement_profiles = get_rec_from_db(
+                                1
+                            )
+                            if replacement_status and replacement_profiles:
+                                pending.add(
+                                    executor.submit(initialize, replacement_profiles[0])
+                                )
             except InterruptedError:
                 return True
             if SHUTDOWN_REQUESTED:
@@ -8296,6 +10099,13 @@ def run_familybot():
         else:
             print("No input emails in database...")
             return True
+
+        try:
+            card_details_dict = get_processing_card()
+            if card_details_dict:
+                return_card_to_familybot_card_details(card_details_dict)
+        except Exception as E:
+            pass
 
 
 def run_familybot_share():
