@@ -1,11 +1,11 @@
 from bots.smtp import run_smtp_bot
 from bots.familybot import run_family_link_extractor, run_familybot, run_familybot_share
 from bots.hotmailbot import run_hotmailbot
-from bots.password_changer import run_password_changerbot
+# from ali.ex_botx.password_changer import run_password_changerbot
 
 
 # from bots.email_sender_test import main_sec
-from bots.new_app_hotmail import run_second_app_hotmails
+# from ali.ex_botx.new_app_hotmail import run_second_app_hotmails
 
 # from bots.manual_sender import save_cookies, runner
 import json
@@ -38,8 +38,8 @@ elif bot == 4:
     run_smtp_bot()
 elif bot == 5:
     run_familybot_share()
-elif bot == 6:
-    run_second_app_hotmails()
+# elif bot == 6:
+#     run_second_app_hotmails()
 # elif bot == 7:
 #     save_cookies()
 elif bot == 8:

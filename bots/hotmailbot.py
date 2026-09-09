@@ -356,8 +356,10 @@ def execute_db_action(action, retries=7, delay=10):
     attempt = 1
     while attempt <= retries:
         try:
+            _check_shutdown_requested()
             return action()
         except Exception as exc:
+            _check_shutdown_requested()
             if attempt == retries:
                 raise
             print(
@@ -4171,6 +4173,7 @@ def save_cache(cache):
         serialized_cache = cache.serialize()
 
         def save_action():
+            _check_shutdown_requested()
             conn = get_db_connection()
             if conn is None:
                 raise RuntimeError("Unable to connect to database")
@@ -4207,6 +4210,7 @@ def save_cache(cache):
         try:
             execute_db_action(save_action, retries=10, delay=10)
         except Exception as e:
+            _check_shutdown_requested()
             print(f"Error saving cache after retries: {e}")
 
         file_retries = 3
@@ -4319,6 +4323,7 @@ def entire_smtp_process(driver, new_profile_data):
             return False, "Error setting up driver"
 
         print(f"{email_address} : Successfully set up driver")
+        _check_shutdown_requested()
         click_existing_account_smtp(driver)
         if click_continue_if_you_see_this_code_button_smtp(driver):
             print(f"{email_address} : Clicked continue if you see this code button")
@@ -4331,6 +4336,7 @@ def entire_smtp_process(driver, new_profile_data):
                 "Error clicking Continue if you see this code button not found",
             )
 
+        _check_shutdown_requested()
         if not enter_password(driver=driver, password=password):
             print(f"{email_address}: Error entering password")
             return False, "Error Entering password"
@@ -4342,7 +4348,7 @@ def entire_smtp_process(driver, new_profile_data):
             )
             return False, "Error clicking next button after entering password"
         time.sleep(1)
-
+        _check_shutdown_requested()
         time.sleep(1)
         if is_let_this_app_access_your_info_page(driver):
             print(f"{email_address} : Accept access page displayed")
@@ -4356,6 +4362,7 @@ def entire_smtp_process(driver, new_profile_data):
                 f"{email_address} : Manual signing completed successfully. Saving tokens"
             )
             result = app.acquire_token_by_device_flow(flow)
+            _check_shutdown_requested()
             save_cache(cache)
             print(f"{email_address} : Successfully saved tokens")
 
@@ -4389,6 +4396,7 @@ def smtp_process(driver, new_profile_data):
     retries = 0
     message = "Fail"
     while retries < 3:
+        _check_shutdown_requested()
         try:
             status, message = entire_smtp_process(driver, new_profile_data)
             if status:
@@ -4399,6 +4407,7 @@ def smtp_process(driver, new_profile_data):
                 )
 
         except Exception as e:
+            _check_shutdown_requested()
             print(
                 f"{new_profile_data.get('email')} : Exception during SMTP process: {str(e)}"
             )
@@ -4988,6 +4997,7 @@ def initialize_new_profile(new_profile_data):
         )
 
         print(f"{email_address}: Setting up SMTP")
+        _check_shutdown_requested()
         status, error = smtp_process(driver, new_profile_data)
         if status:
             print(f"{email_address}: Finalising")
@@ -5095,6 +5105,7 @@ def run_hotmailbot(country=None):
             if SHUTDOWN_REQUESTED:
                 return True
             try:
+                _check_shutdown_requested()
                 _, initialize_result = initialize_new_profile(new_profile_data)
                 if initialize_result == "NO_LINK":
                     current_action = "No more links, waiting for signal"
