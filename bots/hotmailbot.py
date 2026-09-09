@@ -22,6 +22,8 @@ import re
 import json
 import subprocess
 import mysql.connector
+import weakref
+from functools import wraps
 
 import random
 import msal
@@ -171,6 +173,56 @@ PAUSE_REQUESTED = False
 SHUTDOWN_WATCHER_STARTED = False
 SHUTDOWN_WATCHER_STOP = threading.Event()
 SHUTDOWN_WATCHER_THREAD = None
+ACTIVE_DRIVERS = weakref.WeakSet()
+
+
+def _track_driver(driver):
+    with lock:
+        ACTIVE_DRIVERS.add(driver)
+    return driver
+
+
+def _reset_runtime_state():
+    global SHUTDOWN_REQUESTED, PAUSE_REQUESTED
+    global VPN_CONNECTION_STATUS, VPN_CONNECTION_WATCHDOG
+    global SHUTDOWN_WATCHER_STARTED, SHUTDOWN_WATCHER_THREAD
+
+    SHUTDOWN_REQUESTED = False
+    PAUSE_REQUESTED = False
+    VPN_CONNECTION_STATUS = "none"
+    VPN_CONNECTION_WATCHDOG_STOP.set()
+    SHUTDOWN_WATCHER_STOP.set()
+
+    old_watcher = SHUTDOWN_WATCHER_THREAD
+    if old_watcher is not None and old_watcher.is_alive():
+        old_watcher.join(timeout=2)
+    old_watchdog = VPN_CONNECTION_WATCHDOG
+    if old_watchdog is not None and old_watchdog.is_alive():
+        old_watchdog.join(timeout=2)
+
+    for driver in list(ACTIVE_DRIVERS):
+        try:
+            driver.quit()
+        except Exception:
+            pass
+    ACTIVE_DRIVERS.clear()
+    VPN_CONNECTION_WATCHDOG = None
+    SHUTDOWN_WATCHER_THREAD = None
+    SHUTDOWN_WATCHER_STARTED = False
+    VPN_CONNECTION_WATCHDOG_STOP.clear()
+    SHUTDOWN_WATCHER_STOP.clear()
+
+
+def _run_lifecycle(run):
+    @wraps(run)
+    def wrapped(*args, **kwargs):
+        _reset_runtime_state()
+        try:
+            return run(*args, **kwargs)
+        finally:
+            _reset_runtime_state()
+
+    return wrapped
 
 
 def _check_shutdown_requested():
@@ -964,7 +1016,11 @@ def initialize_new_profile_driver():
 
             return (
                 True,
-                {"driver": driver, "user_path": user_data_dir, "proxy": proxy},
+                {
+                    "driver": _track_driver(driver),
+                    "user_path": user_data_dir,
+                    "proxy": proxy,
+                },
                 None,
             )
     except Exception as E:
@@ -5082,6 +5138,7 @@ def get_new_profile_data():
         return False, {"email": "", "pass": ""}
 
 
+@_run_lifecycle
 def run_hotmailbot(country=None):
     """
     Creates threads and signs in simultaneously
