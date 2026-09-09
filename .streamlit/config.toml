@@ -1,1 +1,2 @@
-server.maxMessageSize = 900
+[server]
+maxMessageSize = 500
