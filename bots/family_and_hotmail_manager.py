@@ -83,7 +83,10 @@ def _get_card_control_signal(cutoff_utc, now_utc):
     connection = None
     cursor = None
     try:
-        connection = mysql.connector.connect(**CARD_CONTROL_DB_CONFIG)
+        connection = mysql.connector.connect(
+            **CARD_CONTROL_DB_CONFIG,
+            connection_timeout=15,
+        )
         cursor = connection.cursor()
         cursor.execute(
             """
@@ -132,6 +135,7 @@ def get_signal_from_db():
                 user=DB_USER,
                 password=DB_PASSWORD,
                 database=DB_NAME,
+                connection_timeout=15,
             )
             cursor = connection.cursor()
             cursor.execute(

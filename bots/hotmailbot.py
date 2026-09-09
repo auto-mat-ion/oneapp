@@ -1,4 +1,5 @@
 import time
+import platform
 from datetime import timedelta, datetime, timezone
 import os
 import sys
@@ -168,6 +169,8 @@ VPN_CONNECTION_WATCHDOG_STOP = threading.Event()
 SHUTDOWN_REQUESTED = False
 PAUSE_REQUESTED = False
 SHUTDOWN_WATCHER_STARTED = False
+SHUTDOWN_WATCHER_STOP = threading.Event()
+SHUTDOWN_WATCHER_THREAD = None
 
 
 def _check_shutdown_requested():
@@ -184,16 +187,13 @@ def _check_pause_requested():
         return
 
     print("pause initiated!")
-    while True:
-        time.sleep(random.uniform(20, 30))
+    while PAUSE_REQUESTED and not SHUTDOWN_REQUESTED:
+        SHUTDOWN_WATCHER_STOP.wait(random.uniform(20, 30))
         keep_alive(current_action="paused")
-        if not PAUSE_REQUESTED:
-            print("resume initiated!")
-            return
-        if SHUTDOWN_REQUESTED:
-            SHUTDOWN_REQUESTED = True
-            print("shutdown initiated!")
-            raise InterruptedError("shutdown initiated")
+    if SHUTDOWN_REQUESTED:
+        print("shutdown initiated!")
+        raise InterruptedError("shutdown initiated")
+    print("resume initiated!")
 
 
 def _shutdown_signal_active():
@@ -207,7 +207,8 @@ def _shutdown_signal_active():
 def _shutdown_watcher():
     global SHUTDOWN_REQUESTED, PAUSE_REQUESTED
     while not SHUTDOWN_REQUESTED:
-        time.sleep(random.uniform(20, 35))
+        if SHUTDOWN_WATCHER_STOP.wait(random.uniform(20, 30)):
+            return
         try:
             status, action, _ = get_signal_from_db()
             action = str(action or "").strip().lower()
@@ -219,15 +220,21 @@ def _shutdown_watcher():
                 SHUTDOWN_REQUESTED = True
                 print("shutdown initiated!")
                 return
-        except Exception:
-            pass
+        except Exception as exc:
+            print(f"Signal watcher poll failed: {exc}")
 
 
 def _start_shutdown_watcher():
-    global SHUTDOWN_WATCHER_STARTED
-    if not SHUTDOWN_WATCHER_STARTED:
+    global SHUTDOWN_WATCHER_STARTED, SHUTDOWN_WATCHER_THREAD
+    if SHUTDOWN_WATCHER_THREAD is None or not SHUTDOWN_WATCHER_THREAD.is_alive():
+        SHUTDOWN_WATCHER_STOP.clear()
         SHUTDOWN_WATCHER_STARTED = True
-        threading.Thread(target=_shutdown_watcher, daemon=True).start()
+        SHUTDOWN_WATCHER_THREAD = threading.Thread(
+            target=_shutdown_watcher,
+            name="hotmailbot-signal-watcher",
+            daemon=True,
+        )
+        SHUTDOWN_WATCHER_THREAD.start()
 
 
 def _load_telegram_chat_ids():
@@ -466,8 +473,42 @@ def wait_for_code_by_recovery_mail(recovery_email, timeout=120, poll_interval=1)
     return False, ""
 
 
+def sync_pc_time() -> bool:
+    """Sync local PC time with the system time service."""
+    try:
+        system = platform.system().lower()
+        if system == "windows":
+            subprocess.run(
+                ["w32tm", "/resync"],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            return True
+
+        if system in {"linux", "darwin"}:
+            subprocess.run(
+                ["timedatectl", "set-ntp", "true"],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            subprocess.run(
+                ["timedatectl", "timesync-status"],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            return True
+
+        return False
+    except (subprocess.CalledProcessError, OSError):
+        return False
+
+
 def keep_alive(retries=5, delay=3, current_action=None):
     """Update the family/hotmail server heartbeat row in the database."""
+    sync_pc_time()
     attempt = 1
     while attempt <= retries:
         try:
