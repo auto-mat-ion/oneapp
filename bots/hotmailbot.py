@@ -2268,7 +2268,7 @@ def click_join_family_link_btn(driver, new_profile_data):
             button.click()
 
             password = new_profile_data.get("pass", "")
-            recovery = new_profile_data.get("recovery", "")
+            recovery = new_profile_data.get("recovery_email", "")
             email = new_profile_data.get("email", "")
             click_use_your_password_button(driver)
             enter_password(driver, password=password)
@@ -2288,7 +2288,6 @@ def click_join_family_link_btn(driver, new_profile_data):
                             return False
                         enter_code_and_click_next_after_pass_change(driver, code)
 
-                # return True
             else:
                 click_existing_account_smtp(driver)
                 enter_password(driver, password=password)
