@@ -985,44 +985,44 @@ def get_new_profile_path():
 
 def initialize_new_profile_driver():
     try:
-        with lock:
-            # user_data_dir = get_new_profile_path()
-            user_data_dir = ""
+        # Driver startup can be slow; only protect the shared registry update.
+        # user_data_dir = get_new_profile_path()
+        user_data_dir = ""
 
-            # status, proxy = get_proxy()
-            proxy = "NO PROXY USED"
+        # status, proxy = get_proxy()
+        proxy = "NO PROXY USED"
 
-            if SAVE_COOKIES:
-                driver = Driver(
-                    uc=True,
-                    # browser="firefox",
-                    # proxy=proxy,
-                    binary_location=chrome_location,
-                    user_data_dir=user_data_dir,
-                    extension_dir=extension_dir,
-                    locale_code="en",
-                )
-            else:
-                user_data_dir = "Cookies not saved. SAVE_COOKIES option turned off."
-                driver = Driver(
-                    uc=True,
-                    # browser="firefox",
-                    # proxy=proxy,
-                    binary_location=chrome_location,
-                    # user_data_dir=user_data_dir,
-                    extension_dir=extension_dir,
-                    locale_code="en",
-                )
-
-            return (
-                True,
-                {
-                    "driver": _track_driver(driver),
-                    "user_path": user_data_dir,
-                    "proxy": proxy,
-                },
-                None,
+        if SAVE_COOKIES:
+            driver = Driver(
+                uc=True,
+                # browser="firefox",
+                # proxy=proxy,
+                binary_location=chrome_location,
+                user_data_dir=user_data_dir,
+                extension_dir=extension_dir,
+                locale_code="en",
             )
+        else:
+            user_data_dir = "Cookies not saved. SAVE_COOKIES option turned off."
+            driver = Driver(
+                uc=True,
+                # browser="firefox",
+                # proxy=proxy,
+                binary_location=chrome_location,
+                # user_data_dir=user_data_dir,
+                extension_dir=extension_dir,
+                locale_code="en",
+            )
+
+        return (
+            True,
+            {
+                "driver": _track_driver(driver),
+                "user_path": user_data_dir,
+                "proxy": proxy,
+            },
+            None,
+        )
     except Exception as E:
         try:
             rollback_proxy(proxy)
