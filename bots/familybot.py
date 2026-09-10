@@ -346,6 +346,7 @@ def _reset_runtime_state():
             driver.quit()
         except Exception:
             pass
+
     ACTIVE_DRIVERS.clear()
     VPN_CONNECTION_WATCHDOG = None
     SHUTDOWN_WATCHER_THREAD = None
@@ -980,35 +981,38 @@ def connect_us_random():
 
 def initialize_new_profile_driver():
     try:
-        with lock:
-            # status, proxy = get_proxy()
-            proxy = "NO PROXY USED"
+        # Driver startup can be slow; only protect the shared registry update.
+        proxy = "NO PROXY USED"
+        user_data_dir = "NONE"
 
-            if SAVE_COOKIES:
-                driver = Driver(
-                    uc=True,
-                    # browser="firefox",
-                    # proxy=proxy,
-                    binary_location=chrome_location,
-                    # extension_dir=extension_dir,
-                    locale_code="en",
-                )
-            else:
-                user_data_dir = "NONE"
-                driver = Driver(
-                    uc=True,
-                    # browser="firefox",
-                    # proxy=proxy,
-                    binary_location=chrome_location,
-                    # extension_dir=extension_dir,
-                    locale_code="en",
-                )
-
-            return (
-                True,
-                {"driver": _track_driver(driver), "user_path": user_data_dir, "proxy": proxy},
-                None,
+        if SAVE_COOKIES:
+            driver = Driver(
+                uc=True,
+                # browser="firefox",
+                # proxy=proxy,
+                binary_location=chrome_location,
+                # extension_dir=extension_dir,
+                locale_code="en",
             )
+        else:
+            driver = Driver(
+                uc=True,
+                # browser="firefox",
+                # proxy=proxy,
+                binary_location=chrome_location,
+                # extension_dir=extension_dir,
+                locale_code="en",
+            )
+
+        return (
+            True,
+            {
+                "driver": _track_driver(driver),
+                "user_path": user_data_dir,
+                "proxy": proxy,
+            },
+            None,
+        )
     except Exception as E:
         return False, f"Driver_init_error: {E}", None
 
@@ -7026,11 +7030,6 @@ def get__premium(driver, new_profile_data):
         save_button_element = WebDriverWait(driver, wait_time).until(
             EC.element_to_be_clickable(SAVE_BUTTON_ELEMENT)
         )
-        # wait for other threads to reach this save point and click together
-
-        print(f"{email_address} : Waiting at save barrier before clicking Save...")
-        save_click_barrier.wait(timeout=10 * 60)
-
         save_button_element.click()
         print(f"{email_address} : Clicked save button")
 
@@ -7433,10 +7432,6 @@ def get__premium_italy_1(driver, new_profile_data):
             'button[aria-label="Subscribe"]',
         )
 
-        print(
-            f"{email_address} : Waiting each other to enter card details at the same time..."
-        )
-        save_click_barrier.wait(timeout=10 * 60)
         # ENTERING CARD DETAILS
         current_status = "entering card number"
         card_number_element = WebDriverWait(driver, wait_time).until(
@@ -7611,11 +7606,6 @@ def get__premium_italy_1(driver, new_profile_data):
         save_button_element = WebDriverWait(driver, wait_time).until(
             EC.element_to_be_clickable(SAVE_BUTTON_ELEMENT)
         )
-        # wait for other threads to reach this save point and click together
-
-        print(f"{email_address} : Waiting at save barrier before clicking Save...")
-        save_click_barrier.wait(timeout=10 * 60)
-
         save_button_element.click()
         print(f"{email_address} : Clicked save button")
 
