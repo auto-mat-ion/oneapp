@@ -503,29 +503,56 @@ def fetch_messages_smtp2(recovery_email):
         return False, []
 
 
+# def wait_for_code_by_recovery_mail(recovery_email, timeout=120, poll_interval=1):
+#     deadline = time.time() + timeout
+#     while time.time() < deadline:
+#         try:
+#             ok, messages = fetch_messages_smtp2(recovery_email)
+#             if ok and messages:
+#                 for message in messages:
+#                     combined = " ".join(
+#                         [
+#                             message.get("subject", ""),
+#                             message.get("from", ""),
+#                             message.get("content", ""),
+#                         ]
+#                     )
+#                     if "microsoft account team" in combined.lower():
+#                         plain = re.sub(r"<[^>]+>", " ", combined)
+#                         match = re.search(r"(?:security code|:)\s*(\d{6})", plain, re.I)
+#                         if match:
+#                             return True, match.group(1)
+#         except:
+#             pass
+#         time.sleep(poll_interval)
+#     return False, ""
+
+
 def wait_for_code_by_recovery_mail(recovery_email, timeout=120, poll_interval=1):
     deadline = time.time() + timeout
     while time.time() < deadline:
         try:
             ok, messages = fetch_messages_smtp2(recovery_email)
-            if ok and messages:
-                for message in messages:
-                    combined = " ".join(
-                        [
-                            message.get("subject", ""),
-                            message.get("from", ""),
-                            message.get("content", ""),
-                        ]
-                    )
-                    if "microsoft account team" in combined.lower():
-                        plain = re.sub(r"<[^>]+>", " ", combined)
-                        match = re.search(r"(?:security code|:)\s*(\d{6})", plain, re.I)
-                        if match:
-                            return True, match.group(1)
+
+            last_message = messages[0]
+
+            current_time = datetime.now(timezone(timedelta(hours=-7)))
+
+            message_send_time = datetime.strptime(
+                last_message.get("receivedAt"), "%Y-%m-%d %H:%M:%S"
+            ).replace(tzinfo=timezone(timedelta(hours=-7)))
+
+            if (current_time - message_send_time).total_seconds() < 15:
+                plain = re.sub(
+                    r"<[^>]+>", " ", last_message.get("content")
+                )  # strip HTML
+                match = re.search(r":\s*(\d{6})", plain)
+                if match:
+                    return True, match.group(1)
+            time.sleep(poll_interval)
         except:
             pass
-        time.sleep(poll_interval)
-    return False, ""
+    return False, "Message not sent - Timed out"
 
 
 def sync_pc_time() -> bool:
@@ -2241,13 +2268,31 @@ def click_join_family_link_btn(driver, new_profile_data):
             button.click()
 
             password = new_profile_data.get("pass", "")
+            recovery = new_profile_data.get("recovery", "")
+            email = new_profile_data.get("email", "")
             click_use_your_password_button(driver)
             enter_password(driver, password=password)
             click_password_next_button(driver)
+            if password_use_unavailable(driver):
+                click_send_code_to_recovery_email_button(driver)
+                enter_recovery_email_2(driver, recovery)
+                click_password_next_button(driver)
+                if email_login_limit_reached(driver):
+                    print(f"{email} : Login limit reached. Using password.")
+                    click_use_your_password_button(driver)
+                    enter_password(driver, password)
+                    click_password_next_button(driver)
+                else:
+                    status, code = wait_for_code_by_recovery_mail(recovery)
+                    if not status:
+                        return False
+                    enter_code_and_click_next_after_pass_change(driver, code)
 
-            click_existing_account_smtp(driver)
-            enter_password(driver, password=password)
-            click_password_next_button(driver)
+                # return True
+            else:
+                click_existing_account_smtp(driver)
+                enter_password(driver, password=password)
+                click_password_next_button(driver)
 
             button = WebDriverWait(driver, 5).until(
                 EC.element_to_be_clickable(
@@ -2869,6 +2914,29 @@ def wrong_password_error_displayed(driver):
             return False
     except:
         return False
+
+
+def password_use_unavailable(driver):
+    """
+    Checks if the password is unavailable label appears.
+    """
+    try:
+        PASSWORD_UNAVAILABLE_ELEMENT = (By.CSS_SELECTOR, 'div[role="alert"]')
+
+        unavailable_password_element = WebDriverWait(driver, 4).until(
+            EC.visibility_of_element_located(PASSWORD_UNAVAILABLE_ELEMENT)
+        )
+
+        if unavailable_password_element.text.lower().startswith(
+            "password sign-in isn't available"
+        ):
+            return True
+        else:
+            return False
+    except:
+        return False
+
+        s
 
 
 def invalid_phone_number(driver):
