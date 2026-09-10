@@ -5239,6 +5239,19 @@ def get_new_profile_data():
             host=DB_HOST, user=DB_USER, password=DB_PASSWORD, database=DB_NAME
         )
         cursor = conn.cursor()
+
+        cursor.execute(
+            "SELECT email, pass FROM processing_emails "
+            "WHERE server_ip = %s AND bot_type = %s LIMIT 1",
+            (SERVER_IP, BOT_TYPE),
+        )
+        row = cursor.fetchone()
+        if row:
+            print(f"Found processing email for this server: {row[0]}. Using it.")
+            cursor.close()
+            conn.close()
+            return True, {"email": row[0], "pass": row[1]}
+
         cursor.execute("SELECT email, pass FROM input_emails LIMIT 1")
         row = cursor.fetchone()
         if not row:
