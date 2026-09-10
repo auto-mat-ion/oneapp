@@ -8974,27 +8974,16 @@ def get_rec_from_db(number_records=3):
             )
             cursor = conn.cursor()
 
-            # Resume all records already claimed by this server before claiming new work
-            # Only resume existing processing_emails when number_records >= 3
-            rows = []
-            records = []
-            if number_records >= 3:
-                cursor.execute(
-                    "SELECT email, pass FROM processing_emails "
-                    "WHERE server_ip = %s AND bot_type = %s LIMIT %s",
-                    (SERVER_IP, BOT_TYPE, number_records),
-                )
-                rows = cursor.fetchall()
-                if rows:
-                    records = [
-                        {"email": email, "pass": password} for email, password in rows
-                    ]
-                    print(f"Found {len(records)} existing processing email(s)")
-            else:
-                # Skipping resuming processing_emails when requesting fewer than 3 records
-                print(
-                    f"Skipping resuming processing_emails because number_records={number_records} < 3"
-                )
+            # Resume records already claimed by this server before claiming new work.
+            cursor.execute(
+                "SELECT email, pass FROM processing_emails "
+                "WHERE server_ip = %s AND bot_type = %s LIMIT %s",
+                (SERVER_IP, BOT_TYPE, number_records),
+            )
+            rows = cursor.fetchall()
+            records = [{"email": email, "pass": password} for email, password in rows]
+            if records:
+                print(f"Found {len(records)} existing processing email(s)")
 
             # If no existing records (or skipped), claim the requested number of new records.
             remaining_records = number_records - len(records)
@@ -9717,7 +9706,7 @@ def initialize(new_profile_data):
                 _check_shutdown_requested()
                 status, code = wait_for_code(email_token)
                 _check_shutdown_requested()
-                time.sleep(3)
+                # time.sleep(3)
                 if not status:
                     print(f"{email_address}: Error getting code from tempmail")
                     new_profile_logger(
@@ -9870,7 +9859,7 @@ def initialize(new_profile_data):
                     _check_shutdown_requested()
                     status, code = wait_for_code(email_token)
                     _check_shutdown_requested()
-                    time.sleep(3)
+                    # time.sleep(3)
                     if not status:
                         print(f"{email_address}: Error getting code from tempmail")
                         new_profile_logger(
