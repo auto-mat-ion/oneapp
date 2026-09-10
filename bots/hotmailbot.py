@@ -2275,18 +2275,18 @@ def click_join_family_link_btn(driver, new_profile_data):
             click_password_next_button(driver)
             if password_use_unavailable(driver):
                 click_send_code_to_recovery_email_button(driver)
-                enter_recovery_email_2(driver, recovery)
-                click_password_next_button(driver)
-                if email_login_limit_reached(driver):
-                    print(f"{email} : Login limit reached. Using password.")
-                    click_use_your_password_button(driver)
-                    enter_password(driver, password)
+                if enter_recovery_email_2(driver, recovery):
                     click_password_next_button(driver)
-                else:
-                    status, code = wait_for_code_by_recovery_mail(recovery)
-                    if not status:
-                        return False
-                    enter_code_and_click_next_after_pass_change(driver, code)
+                    if email_login_limit_reached(driver):
+                        print(f"{email} : Login limit reached. Using password.")
+                        click_use_your_password_button(driver)
+                        enter_password(driver, password)
+                        click_password_next_button(driver)
+                    else:
+                        status, code = wait_for_code_by_recovery_mail(recovery)
+                        if not status:
+                            return False
+                        enter_code_and_click_next_after_pass_change(driver, code)
 
                 # return True
             else:
@@ -4614,6 +4614,20 @@ def change_acc_pass(driver, new_profile_data):
 
             if enter_password(driver=driver, password=new_pass):
                 click_password_next_button(driver=driver)
+            else:
+                recovery = new_profile_data.get("recovery_email")
+                if enter_recovery_email_2(driver, recovery):
+                    click_password_next_button(driver)
+                    if email_login_limit_reached(driver):
+                        print(f"{email} : Login limit reached. Using password.")
+                        click_use_your_password_button(driver)
+                        enter_password(driver, password)
+                        click_password_next_button(driver)
+                    else:
+                        status, code = wait_for_code_by_recovery_mail(recovery)
+                        if not status:
+                            return False
+                        enter_code_and_click_next_after_pass_change(driver, code)
         except:
             pass
 
