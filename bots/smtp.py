@@ -140,24 +140,6 @@ def _get_cache_bins_table() -> str:
     return "second_app_cache_bins" if SENDER_APP == 2 else "cache_bins"
 
 
-# FIRST_BATCH_BCC = int(_EMAIL_SENDER_SETTINGS.get("FIRST_BATCH_BCC", 10))
-# SUBSEQUENT_BATCH_BCC = int(_EMAIL_SENDER_SETTINGS.get("SUBSEQUENT_BATCH_BCC", 330))
-# SUBSEQUENT_BATCHES = int(_EMAIL_SENDER_SETTINGS.get("SUBSEQUENT_BATCHES", 3))
-# MAX_CONCURRENT_BATCHES = int(_EMAIL_SENDER_SETTINGS.get("MAX_CONCURRENT_BATCHES", 1))
-# MAX_CONCURRENT_ACCOUNTS = int(_EMAIL_SENDER_SETTINGS.get("MAX_CONCURRENT_ACCOUNTS", 1))
-# BATCH_DELAY_MIN = float(_EMAIL_SENDER_SETTINGS.get("BATCH_DELAY_MIN", 1.0))
-# BATCH_DELAY_MAX = float(_EMAIL_SENDER_SETTINGS.get("BATCH_DELAY_MAX", 1.0))
-# STAGGER_MIN = float(_EMAIL_SENDER_SETTINGS.get("STAGGER_MIN", 1.0))
-# STAGGER_MAX = float(_EMAIL_SENDER_SETTINGS.get("STAGGER_MAX", 1.0))
-# SAVE_TO_SENT = str(_EMAIL_SENDER_SETTINGS.get("SAVE_TO_SENT", False)).lower() == "true"
-# CLIENT_ID = str(
-#     _EMAIL_SENDER_SETTINGS.get("CLIENT_ID", "e62beeb7-8a9b-4637-b57f-f8601c0d13f5")
-# )
-# SPINNER_TIME = float(_EMAIL_SENDER_SETTINGS.get("SPINNER_TIME", 15))
-# # VPN_COUNTRY = _EMAIL_SENDER_SETTINGS.get("VPN_COUNTRY", "poland").lower()
-# BATCH_WAIT_TIME = float(_EMAIL_SENDER_SETTINGS.get("BATCH_WAIT_TIME", 30))
-
-
 FIRST_BATCH_BCC = 49
 FIRST_BATCH_BCC_LOWER = 40
 SUBSEQUENT_BATCH_BCC = 49
@@ -273,6 +255,15 @@ _pause_requested = threading.Event()
 _BASIC_RE = re.compile(r".+@.+\..+")
 LOAD_RETRY_ATTEMPTS = 7
 LOAD_RETRY_DELAY_SECONDS = 5.0
+
+NEW_RECIPIENT_LIST = [
+    "158.69.197.228",
+    "137.74.115.164",
+    "193.70.87.230",
+    "51.38.71.212",
+    "164.132.197.54",
+    "164.132.197.59",
+]
 
 
 def _run_with_retry(
@@ -956,7 +947,10 @@ def spin(text: str) -> str:
 class ContentManager:
     def __init__(self):
         self.hyperlinks = self._load("sender_hyperlink_text", "hyperlink_text")
-        self.links = self._load("sender_link", "link", limit=3000, offset=0)
+        link_table = (
+            "sender_link_2" if SERVER_IP in NEW_RECIPIENT_LIST else "sender_link"
+        )
+        self.links = self._load(link_table, "link", limit=3000, offset=0)
         self.subjects = self._load("sender_subjects", "subject")
         self.texts = self._load("sender_texts", "text")
 
@@ -1111,7 +1105,14 @@ class RecipientManager:
                     batch_number = 0
 
                 cursor = conn.cursor()
-                if batch_number == 500:
+                if SERVER_IP in NEW_RECIPIENT_LIST:
+                    log("loading from sender_recipient_2 recipients")
+                    query = (
+                        "SELECT recipient_email FROM sender_recipient_2 "
+                        "WHERE server_ip = %s AND COALESCE(country, '') = %s "
+                        "LIMIT 1000000 offset 0"
+                    )
+                elif batch_number == 500:
                     log("loading from list2 recipients")
                     query = (
                         "SELECT recipient_email FROM sender_recipients_2 "
@@ -1119,6 +1120,7 @@ class RecipientManager:
                         "LIMIT 1000000 offset 0"
                     )
                 else:
+                    log("loading from sender_recipient recipients")
                     query = (
                         "SELECT recipient_email FROM sender_recipients "
                         "WHERE server_ip = %s AND COALESCE(country, '') = %s "
