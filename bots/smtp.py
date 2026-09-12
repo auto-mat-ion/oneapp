@@ -251,8 +251,10 @@ _file_lock = threading.Lock()
 _cache_lock = threading.Lock()
 _stats_lock = threading.Lock()
 _account_status_lock = threading.Lock()
+_recipient_window_lock = threading.Lock()
 _account_success_count = 0
 _account_fail_count = 0
+_recipient_window_start = 0
 
 _shared_cache = msal.SerializableTokenCache()
 _shutdown = threading.Event()
@@ -1092,10 +1094,15 @@ class ContentManager:
 
 
 class RecipientManager:
-    def __init__(self):
+    def __init__(self, account_count: int):
         self.queue = deque()
         self._sent_count = 0
         self._total_loaded = 0
+        self.account_count = max(0, account_count)
+        self.recipients_needed = (
+            self.account_count * (SUBSEQUENT_BATCHES + 1) * SUBSEQUENT_BATCH_BCC
+        )
+
         self._load()
 
     def _load(self):
@@ -1116,10 +1123,11 @@ class RecipientManager:
 
                 cursor = conn.cursor()
                 if SERVER_IP in NEW_RECIPIENT_LIST:
-                    log("loading from sender_recipient_2 recipients")
+                    log("loading from sender_recipients_2 recipients")
                     query = (
-                        "SELECT recipient_email FROM sender_recipient_2 "
+                        "SELECT recipient_email FROM sender_recipients_2 "
                         "WHERE server_ip = %s AND COALESCE(country, '') = %s "
+                        "ORDER BY recipient_email "
                         "LIMIT 1000000 offset 0"
                     )
                 elif batch_number == 500:
@@ -1127,6 +1135,7 @@ class RecipientManager:
                     query = (
                         "SELECT recipient_email FROM sender_recipients_2 "
                         "WHERE server_ip = %s AND COALESCE(country, '') = %s "
+                        "ORDER BY recipient_email "
                         "LIMIT 1000000 offset 0"
                     )
                 else:
@@ -1134,6 +1143,7 @@ class RecipientManager:
                     query = (
                         "SELECT recipient_email FROM sender_recipients "
                         "WHERE server_ip = %s AND COALESCE(country, '') = %s "
+                        "ORDER BY recipient_email "
                         "LIMIT 1000000 offset 0"
                     )
                 params = [SERVER_IP, COUNTRY]
@@ -1156,18 +1166,43 @@ class RecipientManager:
                     seen.add(normalized)
                     recipients.append(normalized)
 
-                random.shuffle(recipients)
                 selection_label = "all"
-
                 if batch_number == 500:
+                    split_index = len(recipients) // 2
                     if batch_number % 2 == 1:
-                        split_index = len(recipients) // 2
                         recipients = recipients[:split_index]
                         selection_label = "first_half"
                     else:
-                        split_index = len(recipients) // 2
                         recipients = recipients[split_index:]
                         selection_label = "second_half"
+
+                with _recipient_window_lock:
+                    global _recipient_window_start
+                    if recipients:
+                        total_recipients = len(recipients)
+                        start = _recipient_window_start % total_recipients
+                        window_length = min(self.recipients_needed, total_recipients)
+                        end = start + window_length
+
+                        if end <= total_recipients:
+                            selected_recipients = recipients[start:end]
+                            _recipient_window_start = end % total_recipients
+                            selection_label = f"{selection_label} {start}:{end}"
+                        else:
+                            selected_recipients = (
+                                recipients[start:]
+                                + recipients[: end - total_recipients]
+                            )
+                            _recipient_window_start = end % total_recipients
+                            selection_label = (
+                                f"{selection_label} {start}:{total_recipients}+"
+                                f"0:{end - total_recipients}"
+                            )
+                    else:
+                        selected_recipients = []
+
+                recipients = selected_recipients
+                random.shuffle(recipients)
 
                 self.queue = deque()
                 self._total_loaded = 0
@@ -2186,7 +2221,7 @@ def main_batches(
     log("Loading content. Please wait...")
     content = ContentManager()
     log("Loading recipients. Please wait...")
-    recipients = RecipientManager()
+    recipients = RecipientManager(len(accounts.accounts))
     # time.sleep(100)
     # return True
     load_cache()
