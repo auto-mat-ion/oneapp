@@ -160,6 +160,7 @@ BATCH_WAIT_TIME = 0
 MAX_RUNTIME_SECONDS = 50 * 60
 NEXT_RUN_WAIT_TIME = 4 * 60 * 60
 STAGGER_ = 3
+SUBSEQUENT_BATCHES = 2
 
 if SERVER_IP in [
     "51.77.216.17",
@@ -195,20 +196,29 @@ elif SERVER_IP in ["57.129.48.113"]:
         "mitestingacc.03@gmail.com",
         "stacash.affiliate@gmail.com",
     ]
-elif SERVER_IP in ["13.140.147.200"]:
-    SAMPLE_RECIPIENT_EMAIL = ["wrochna1988@gmail.com"]
+
 elif SERVER_IP in ["164.132.105.244"]:
     SAMPLE_RECIPIENT_EMAIL = ["andrewsetup17@gmail.com"]
-elif SERVER_IP in ["164.132.110.181"]:
-    SAMPLE_RECIPIENT_EMAIL = ["aidanmotthews986@gmail.com"]
-elif SERVER_IP in ["164.132.104.37"]:
-    SAMPLE_RECIPIENT_EMAIL = ["marcusfrancis0227@gmail.com"]
 
 elif SERVER_IP in ["51.161.34.220"]:
     SAMPLE_RECIPIENT_EMAIL = ["durwoodstacks100@gmail.com"]
 
+###
+elif SERVER_IP in ["137.74.115.164"]:
+    SAMPLE_RECIPIENT_EMAIL = [
+        "marcusfrancis0227@gmail.com",
+        "mitestingacc.04@gmail.com",
+    ]
+
+elif SERVER_IP in ["193.70.87.230"]:
+    SAMPLE_RECIPIENT_EMAIL = ["wrochna1988@gmail.com", "dover.miranach@gmail.com"]
+
+elif SERVER_IP in ["164.132.197.54"]:
+    SAMPLE_RECIPIENT_EMAIL = ["aidanmotthews986@gmail.com", "bradley.konsa@gmail.com"]
+
 else:
     SAMPLE_RECIPIENT_EMAIL = []
+
 
 VPN_COUNTRY = {
     "51.91.59.107": "poland",
@@ -2137,13 +2147,12 @@ def main_batches(
 ):
     print("**********************************************************\n\n\nStarting...")
 
-    global BATCH_NUMBER, SENDER_APP, MAX_CONCURRENT_ACCOUNTS
+    global BATCH_NUMBER, SENDER_APP, MAX_CONCURRENT_ACCOUNTS, SUBSEQUENT_BATCHES
     SENDER_APP = app_choice
     print(f"Selected {'New' if SENDER_APP == 2 else 'Old'} app.")
 
     BATCH_NUMBER = str(batch_number)
     print(f"Selected batch: {BATCH_NUMBER}")
-    # SUBSEQUENT_BATCHES = random.randint(17, 20)
     SUBSEQUENT_BATCHES = 2
 
     time.sleep(5)
