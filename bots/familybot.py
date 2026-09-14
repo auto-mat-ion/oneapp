@@ -8353,19 +8353,25 @@ def get__premium_italy(driver, new_profile_data):
 
                 return False, "Card was declined"
             else:
-                print(f"{email_address} : Card not declined.")
+                time.sleep(200)
+                if affirm_card_is_added(driver, card_details_dict.get("name_on_card")):
+                    print(
+                        f"{email_address} : Affirmed Card was added to payments successfully."
+                    )
+                else:
+                    print(f"{email_address} : Card not declined.")
 
-            print(f"{email_address} : Card not added to payments.")
-            # return False, "Card not added to payments"
+                    print(f"{email_address} : Card not added to payments.")
+                    return False, "Card not added to payments"
 
         current_status = "Add billing address if prompted"
         # add_billing(driver, new_profile_data, card_details_dict)
 
         # time.sleep(1)
-        print(
-            f"{email_address} : Waiting 100 seconds before clicking scroll down button..."
-        )
-        time.sleep(200)
+        # print(
+        #     f"{email_address} : Waiting 100 seconds before clicking scroll down button..."
+        # )
+        # time.sleep(200)
         _check_shutdown_requested()
         try:
             current_status = "clicking scroll down button"
