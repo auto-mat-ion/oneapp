@@ -991,7 +991,7 @@ def initialize_new_profile_driver():
                 # browser="firefox",
                 # proxy=proxy,
                 binary_location=chrome_location,
-                # extension_dir=extension_dir,
+                extension_dir=extension_dir,
                 locale_code="en",
             )
         else:
@@ -1000,7 +1000,7 @@ def initialize_new_profile_driver():
                 # browser="firefox",
                 # proxy=proxy,
                 binary_location=chrome_location,
-                # extension_dir=extension_dir,
+                extension_dir=extension_dir,
                 locale_code="en",
             )
 
@@ -8356,12 +8356,16 @@ def get__premium_italy(driver, new_profile_data):
                 print(f"{email_address} : Card not declined.")
 
             print(f"{email_address} : Card not added to payments.")
-            return False, "Card not added to payments"
+            # return False, "Card not added to payments"
 
         current_status = "Add billing address if prompted"
         # add_billing(driver, new_profile_data, card_details_dict)
 
         # time.sleep(1)
+        print(
+            f"{email_address} : Waiting 100 seconds before clicking scroll down button..."
+        )
+        time.sleep(200)
         _check_shutdown_requested()
         try:
             current_status = "clicking scroll down button"
@@ -10137,3 +10141,6 @@ def run_family_link_extractor():
         else:
             print("No unshared family acc in database...")
             break
+
+
+# fun = initialize(replacement_profiles[0])
