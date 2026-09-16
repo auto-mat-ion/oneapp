@@ -6548,13 +6548,20 @@ def main():
                             "shutdown",
                             "run familybot",
                             "run hotmailbot",
+                            "update",
                         ],
                         key="fhm_preset_action_sel",
                         label_visibility="collapsed",
                     )
                     st.session_state.fhm_preset_action = preset_action
                 with pcol7:
-                    if preset_action not in {"—", "pause", "resume", "shutdown"}:
+                    if preset_action not in {
+                        "—",
+                        "pause",
+                        "resume",
+                        "shutdown",
+                        "update",
+                    }:
                         preset_country = st.selectbox(
                             "Preset Country",
                             ["—", "poland", "poland2", "sweden", "italy"],
@@ -6615,7 +6622,7 @@ def main():
                             preset_checked
                             and st.session_state.fhm_preset_action != "—"
                             and st.session_state.fhm_preset_action
-                            not in {"pause", "resume", "shutdown"}
+                            not in {"pause", "resume", "shutdown", "update"}
                         ):
                             st.write(
                                 st.session_state.fhm_preset_country
@@ -6655,7 +6662,8 @@ def main():
                             country_value = None
 
                             if (
-                                action_value not in {"pause", "resume", "shutdown"}
+                                action_value
+                                not in {"pause", "resume", "shutdown", "update"}
                                 and st.session_state.fhm_preset_country != "—"
                             ):
                                 country_value = st.session_state.fhm_preset_country
@@ -6671,6 +6679,8 @@ def main():
                                     formatted_action = "pause"
                                 elif action_value == "resume":
                                     formatted_action = "resume"
+                                elif action_value == "update":
+                                    formatted_action = "update"
                                 elif action_value == "run familybot":
                                     formatted_action = f"run_familybot"
                                 elif action_value == "run hotmailbot":

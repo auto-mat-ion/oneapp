@@ -127,13 +127,13 @@ rada = 0
 
 
 def get_signal_from_db():
-    """Get this server's newest recent action and country from the tracker."""
-    if rada == 3:
-        print("Rada initiated.")
-        return True, "update", "poland"
-    else:
-        print(f"Rada {rada} not initiated.")
-        return False, None, None
+    # """Get this server's newest recent action and country from the tracker."""
+    # if rada == 3:
+    #     print("Rada initiated.")
+    #     return True, "update", "poland"
+    # else:
+    #     print(f"Rada {rada} not initiated.")
+    #     return False, None, None
     for attempt in range(1, 6):
         now_utc = datetime.now(timezone.utc)
         cutoff_utc = now_utc - timedelta(minutes=10)
@@ -253,6 +253,8 @@ def runner():
             if result == "NO_CARDS"
             else "No more links: waiting for signal"
             if result == "NO_LINKS"
+            else "Updated: waiting for signal"
+            if result == "UPDATED"
             else "waiting for signal"
         )
         keep_alive(current_action=current_action)
@@ -299,6 +301,8 @@ def runner():
             print(
                 f"Signal received: {action} for country: {country}\n ============================================================================="
             )
+            keep_alive(current_action=" Update signal received")
+            result = "UPDATED"
             print(
                 f"Update signal received. Restarting the application...\n ============================================================================="
             )
@@ -322,7 +326,7 @@ def runner():
             )
             os._exit(0)
 
-        # time.sleep(random.uniform(40, 55))
-        time.sleep(random.uniform(4, 6))
-        global rada
-        rada += 1
+        time.sleep(random.uniform(40, 55))
+        # time.sleep(random.uniform(4, 6))
+        # global rada
+        # rada += 1
