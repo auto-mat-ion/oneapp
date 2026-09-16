@@ -24,6 +24,7 @@ DB_USER = APP_SETTINGS.get("DB_USER")
 DB_PASSWORD = APP_SETTINGS.get("DB_PASSWORD")
 DB_NAME = APP_SETTINGS.get("DB_NAME")
 SERVER_IP = get_server_ip()
+# SERVER_IP = get_server_ip()
 
 CARD_CONTROL_DB_CONFIG = {
     "host": os.getenv("CARD_CONTROL_DB_HOST", "sql5.freesqldatabase.com"),
@@ -127,7 +128,7 @@ rada = 0
 
 def get_signal_from_db():
     """Get this server's newest recent action and country from the tracker."""
-    if rada == 7:
+    if rada == 3:
         print("Rada initiated.")
         return True, "update", "poland"
     else:
@@ -301,7 +302,10 @@ def runner():
             print(
                 f"Update signal received. Restarting the application...\n ============================================================================="
             )
-            update_path = os.path.join(BASE_DIR, "..", "update_family.bat")
+            update_path = os.path.abspath(
+                os.path.join(BASE_DIR, "..", "update_family.bat")
+            )
+
             print(f"Executing update script: {update_path}")
             time.sleep(10)
 
