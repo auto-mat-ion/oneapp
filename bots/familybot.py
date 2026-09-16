@@ -6183,6 +6183,24 @@ def credit_card_is_declined(driver):
 
         except:
             return False
+            try:
+                ERROR_ELEMENT = (
+                    By.CSS_SELECTOR,
+                    'span[class*="ms-MessageBar-innerText"]',
+                )
+
+                error_element = WebDriverWait(driver, 1).until(
+                    EC.visibility_of_element_located(ERROR_ELEMENT)
+                )
+                if "sorry, something went wrong" in error_element.text.lower():
+                    return True
+                else:
+                    return False
+
+                # return True if [i for i in error_element] else False
+
+            except:
+                return False
 
 
 def affirm_card_is_added(driver, cardholder_name):
@@ -8353,7 +8371,7 @@ def get__premium_italy(driver, new_profile_data):
 
                 return False, "Card was declined"
             else:
-                time.sleep(200)
+                # time.sleep(200)
                 if affirm_card_is_added(driver, card_details_dict.get("name_on_card")):
                     print(
                         f"{email_address} : Affirmed Card was added to payments successfully."
