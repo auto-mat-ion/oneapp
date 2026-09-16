@@ -303,6 +303,7 @@ def runner():
             )
             update_path = os.path.join(BASE_DIR, "..", "update_family.bat")
             print(f"Executing update script: {update_path}")
+            time.sleep(10)
 
             subprocess.Popen(
                 ["cmd.exe", "/c", update_path],
