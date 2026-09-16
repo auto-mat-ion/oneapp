@@ -1122,30 +1122,37 @@ class RecipientManager:
                     batch_number = 0
 
                 cursor = conn.cursor()
-                if SERVER_IP in NEW_RECIPIENT_LIST:
-                    log("loading from sender_recipients_2 recipients")
-                    query = (
-                        "SELECT recipient_email FROM sender_recipients_2 "
-                        "WHERE server_ip = %s AND COALESCE(country, '') = %s "
-                        "ORDER BY recipient_email "
-                        "LIMIT 1000000 offset 0"
-                    )
-                elif batch_number == 500:
-                    log("loading from list2 recipients")
-                    query = (
-                        "SELECT recipient_email FROM sender_recipients_2 "
-                        "WHERE server_ip = %s AND COALESCE(country, '') = %s "
-                        "ORDER BY recipient_email "
-                        "LIMIT 1000000 offset 0"
-                    )
-                else:
-                    log("loading from sender_recipient recipients")
-                    query = (
-                        "SELECT recipient_email FROM sender_recipients "
-                        "WHERE server_ip = %s AND COALESCE(country, '') = %s "
-                        "ORDER BY recipient_email "
-                        "LIMIT 1000000 offset 0"
-                    )
+                # if SERVER_IP in NEW_RECIPIENT_LIST:
+                #     log("loading from sender_recipients_2 recipients")
+                #     query = (
+                #         "SELECT recipient_email FROM sender_recipients_2 "
+                #         "WHERE server_ip = %s AND COALESCE(country, '') = %s "
+                #         "ORDER BY recipient_email "
+                #         "LIMIT 1000000 offset 0"
+                #     )
+                # elif batch_number == 500:
+                #     log("loading from list2 recipients")
+                #     query = (
+                #         "SELECT recipient_email FROM sender_recipients_2 "
+                #         "WHERE server_ip = %s AND COALESCE(country, '') = %s "
+                #         "ORDER BY recipient_email "
+                #         "LIMIT 1000000 offset 0"
+                #     )
+                # else:
+                #     log("loading from sender_recipient recipients")
+                #     query = (
+                #         "SELECT recipient_email FROM sender_recipients "
+                #         "WHERE server_ip = %s AND COALESCE(country, '') = %s "
+                #         "ORDER BY recipient_email "
+                #         "LIMIT 1000000 offset 0"
+                #     )
+                log("loading from sender_recipient recipients")
+                query = (
+                    "SELECT recipient_email FROM sender_recipients "
+                    "WHERE server_ip = %s AND COALESCE(country, '') = %s "
+                    "ORDER BY recipient_email "
+                    "LIMIT 1000000 offset 0"
+                )
                 params = [SERVER_IP, COUNTRY]
 
                 cursor.execute(query, params)
