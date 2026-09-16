@@ -307,16 +307,15 @@ def runner():
             )
 
             print(f"Executing update script: {update_path}")
-            time.sleep(10)
-
             subprocess.Popen(
-                ["cmd.exe", "/c", update_path],
+                ["cmd.exe", "/d", "/c", "call", update_path],
                 cwd=os.path.dirname(BASE_DIR),
                 creationflags=subprocess.CREATE_NEW_CONSOLE
                 | subprocess.CREATE_NEW_PROCESS_GROUP,
+                close_fds=True,
             )
             subprocess.run(
-                ["taskkill", "/PID", str(os.getppid()), "/T", "/F"],
+                ["taskkill", "/PID", str(os.getppid()), "/F"],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 check=False,
