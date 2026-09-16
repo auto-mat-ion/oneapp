@@ -6182,7 +6182,7 @@ def credit_card_is_declined(driver):
             return True if [i for i in error_element] else False
 
         except:
-            return False
+            # return False
             try:
                 ERROR_ELEMENT = (
                     By.CSS_SELECTOR,

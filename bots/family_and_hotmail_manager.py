@@ -1,6 +1,7 @@
 import json
 import os
 import random
+import subprocess
 import time
 from datetime import datetime, timedelta, timezone
 
@@ -121,8 +122,17 @@ def get_card_control_action():
     return str(action or "").strip().lower() if status else None
 
 
+rada = 0
+
+
 def get_signal_from_db():
     """Get this server's newest recent action and country from the tracker."""
+    if rada == 7:
+        print("Rada initiated.")
+        return True, "update", "poland"
+    else:
+        print(f"Rada {rada} not initiated.")
+        return False, None, None
     for attempt in range(1, 6):
         now_utc = datetime.now(timezone.utc)
         cutoff_utc = now_utc - timedelta(minutes=10)
@@ -247,6 +257,7 @@ def runner():
         keep_alive(current_action=current_action)
         # keep_alive()
         status, action, country = get_signal_from_db()
+
         if status and action == "run_familybot":
             print(
                 f"Signal received: {action} for country: {country}\n ============================================================================="
@@ -283,4 +294,29 @@ def runner():
                 "\n\n============================================================================\nWaiting for a signal..."
             )
 
-        time.sleep(random.uniform(40, 55))
+        if status and action == "update":
+            print(
+                f"Signal received: {action} for country: {country}\n ============================================================================="
+            )
+            print(
+                f"Update signal received. Restarting the application...\n ============================================================================="
+            )
+            update_path = os.path.join(BASE_DIR, "..", "update_family.bat")
+            subprocess.Popen(
+                ["cmd.exe", "/c", update_path],
+                cwd=BASE_DIR,
+                creationflags=subprocess.CREATE_NEW_CONSOLE
+                | subprocess.CREATE_NEW_PROCESS_GROUP,
+            )
+            subprocess.run(
+                ["taskkill", "/PID", str(os.getppid()), "/T", "/F"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+            )
+            os._exit(0)
+
+        # time.sleep(random.uniform(40, 55))
+        time.sleep(random.uniform(4, 6))
+        global rada
+        rada += 1
