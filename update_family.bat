@@ -1,5 +1,6 @@
 @echo off
 setlocal
+cd /d "%~dp0"
 
 echo Pulling latest code...
 copy bots\settings.json %TEMP%\settings.json.bak /Y
@@ -42,4 +43,4 @@ REM 4. Launch
 echo Starting main.py...
 echo 1 | .venv\Scripts\python.exe main.py
 
-pause
+REM  pause

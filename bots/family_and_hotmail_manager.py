@@ -302,9 +302,11 @@ def runner():
                 f"Update signal received. Restarting the application...\n ============================================================================="
             )
             update_path = os.path.join(BASE_DIR, "..", "update_family.bat")
+            print(f"Executing update script: {update_path}")
+
             subprocess.Popen(
                 ["cmd.exe", "/c", update_path],
-                cwd=BASE_DIR,
+                cwd=os.path.dirname(BASE_DIR),
                 creationflags=subprocess.CREATE_NEW_CONSOLE
                 | subprocess.CREATE_NEW_PROCESS_GROUP,
             )
