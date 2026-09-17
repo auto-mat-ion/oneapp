@@ -42,4 +42,4 @@ REM 4. Launch
 echo Starting main.py...
 .venv\Scripts\python.exe main.py
 
-pause
+REM  pause
