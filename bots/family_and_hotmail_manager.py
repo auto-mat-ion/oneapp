@@ -126,7 +126,7 @@ def get_card_control_action():
 rada = 0
 
 
-def get_signal_from_db():
+def get_signal_from_db(include_source=False):
     # """Get this server's newest recent action and country from the tracker."""
     # if rada == 3:
     #     print("Rada initiated.")
@@ -166,8 +166,14 @@ def get_signal_from_db():
 
             signal = actions_by_server.get(str(SERVER_IP).strip())
             if signal:
-                return True, signal["action"], signal["country"]
-            return _get_card_control_signal(cutoff_utc, now_utc)
+                result = True, signal["action"], signal["country"]
+                if include_source:
+                    return (*result, "familybot_actions_tracker")
+                return result
+            result = _get_card_control_signal(cutoff_utc, now_utc)
+            if include_source:
+                return (*result, "card_control")
+            return result
         except Exception as exc:
             if attempt >= 3:
                 print(
@@ -181,6 +187,8 @@ def get_signal_from_db():
             if connection is not None:
                 connection.close()
 
+    if include_source:
+        return False, None, None, None
     return False, None, None
 
 
