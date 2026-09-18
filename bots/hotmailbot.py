@@ -250,8 +250,12 @@ def _check_pause_requested():
 
 def _shutdown_signal_active():
     try:
-        status, action, _ = get_signal_from_db()
-        return status and str(action or "").strip().lower() == "shutdown"
+        status, action, _, source = get_signal_from_db(include_source=True)
+        return (
+            status
+            and source != "card_control"
+            and str(action or "").strip().lower() == "shutdown"
+        )
     except Exception:
         return False
 
@@ -262,7 +266,9 @@ def _shutdown_watcher():
         if SHUTDOWN_WATCHER_STOP.wait(random.uniform(20, 30)):
             return
         try:
-            status, action, _ = get_signal_from_db()
+            status, action, _, source = get_signal_from_db(include_source=True)
+            if source == "card_control":
+                continue
             action = str(action or "").strip().lower()
             if status and action == "pause":
                 PAUSE_REQUESTED = True

@@ -390,13 +390,25 @@ def _check_pause_requested():
     print("resume initiated!")
 
 
+def _signal_applies_to_country(action, country, source):
+    if source != "card_control" or action not in {"pause", "shutdown", "shutdown_all"}:
+        return True
+    return str(country or "").strip().lower() == PREFERRED_SMS_COUNTRY.lower()
+
+
 def _shutdown_signal_active():
     try:
-        status, action, _ = get_signal_from_db()
-        return status and str(action or "").strip().lower() in {
-            "shutdown",
-            "shutdown_all",
-        }
+        status, action, country, source = get_signal_from_db(include_source=True)
+        action = str(action or "").strip().lower()
+        return (
+            status
+            and _signal_applies_to_country(action, country, source)
+            and action
+            in {
+                "shutdown",
+                "shutdown_all",
+            }
+        )
     except Exception:
         return False
 
@@ -407,8 +419,10 @@ def _shutdown_watcher():
         if SHUTDOWN_WATCHER_STOP.wait(random.uniform(20, 30)):
             return
         try:
-            status, action, _ = get_signal_from_db()
+            status, action, country, source = get_signal_from_db(include_source=True)
             action = str(action or "").strip().lower()
+            if not status or not _signal_applies_to_country(action, country, source):
+                continue
             if status and action == "pause":
                 PAUSE_REQUESTED = True
             elif status and action == "resume":

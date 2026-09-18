@@ -67,8 +67,8 @@ with pause_clicked:
     if st.button("Pause", use_container_width=True):
         try:
             with st.spinner("Sending pause command..."):
-                record_action("pause")
-            st.success("Pause command sent.")
+                record_action("pause", country)
+            st.success(f"Pause command sent for {country}.")
         except mysql.connector.Error as error:
             st.error(f"Could not send pause command: {error}")
 
@@ -85,7 +85,7 @@ with shutdown_clicked:
     if st.button("Shutdown", use_container_width=True):
         try:
             with st.spinner("Sending shutdown command..."):
-                record_action("shutdown")
-            st.success("Shutdown command sent.")
+                record_action("shutdown", country)
+            st.success(f"Shutdown command sent for {country}.")
         except mysql.connector.Error as error:
             st.error(f"Could not send shutdown command: {error}")
