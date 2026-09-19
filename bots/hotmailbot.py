@@ -2410,6 +2410,7 @@ def use_link_to_join_family_acc(driver, new_profile_data):
             _check_shutdown_requested()
             print("Using family url to join.")
             driver.get(invite_url)
+            click_looks_good_button(driver)
             check_btn_retries = 0
             proceed = False
             while (check_btn_retries < 15) and (not proceed):

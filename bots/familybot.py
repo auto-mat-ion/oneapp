@@ -10182,3 +10182,5 @@ def run_family_link_extractor():
 
 
 # fun = initialize(replacement_profiles[0])
+# PREFERRED_SMS_COUNTRY = "United States"
+# num_available_cards()
