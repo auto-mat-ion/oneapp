@@ -2299,6 +2299,7 @@ def click_join_family_link_btn(driver, new_profile_data):
                 enter_password(driver, password=password)
                 click_password_next_button(driver)
 
+            click_looks_good_button(driver)
             button = WebDriverWait(driver, 5).until(
                 EC.element_to_be_clickable(
                     (By.CSS_SELECTOR, 'button[aria-label="Join now"]')
@@ -2410,7 +2411,7 @@ def use_link_to_join_family_acc(driver, new_profile_data):
             _check_shutdown_requested()
             print("Using family url to join.")
             driver.get(invite_url)
-            click_looks_good_button(driver)
+
             check_btn_retries = 0
             proceed = False
             while (check_btn_retries < 15) and (not proceed):
