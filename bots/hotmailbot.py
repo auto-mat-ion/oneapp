@@ -4528,6 +4528,8 @@ def entire_smtp_process(driver, new_profile_data):
         else:
             print(f"{email_address} : Accept access page NOT displayed")
 
+        click_looks_good_button(driver)
+
         if all_done_page(driver):
             print(
                 f"{email_address} : Manual signing completed successfully. Saving tokens"
@@ -4580,6 +4582,7 @@ def smtp_process(driver, new_profile_data):
 
         except Exception as e:
             _check_shutdown_requested()
+            click_looks_good_button(driver)
             print(
                 f"{new_profile_data.get('email')} : Exception during SMTP process: {str(e)}"
             )
