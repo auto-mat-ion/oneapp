@@ -72,48 +72,57 @@ SAMPLE_RECIPIENT = 1
 
 
 def update():
-    """Launch the updater, send option 4 when prompted, then close the invoking terminal."""
+    """Launch the SMTP updater and close the invoking process."""
     try:
-        base_dir = Path(__file__).resolve().parent.parent
-        bat_path = base_dir / "update.bat"
-        if not bat_path.exists():
-            raise FileNotFoundError(f"Update script not found: {bat_path}")
-
-        proc = subprocess.Popen(
-            ["cmd.exe", "/c", f'call "{bat_path}"'],
-            cwd=str(base_dir),
-            stdin=subprocess.PIPE,
-            stdout=None,
-            stderr=None,
-            creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0),
-            text=True,
+        print(
+            f"Update signal received. Restarting the application...\n ============================================================================="
         )
+        base_dir = Path(__file__).resolve().parent.parent
+        update_path = base_dir / "update_smtp.bat"
+        if not update_path.exists():
+            raise FileNotFoundError(f"Update script not found: {update_path}")
 
-        if proc.stdin is not None:
-            try:
-                proc.stdin.write("4\n")
-                proc.stdin.flush()
-            except Exception:
-                pass
-            finally:
-                try:
-                    proc.stdin.close()
-                except Exception:
-                    pass
+        print(f"Executing update script: {update_path}")
+        BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-        parent_pid = os.getppid()
-        try:
-            subprocess.run(
-                ["taskkill", "/PID", str(parent_pid), "/T", "/F"],
-                check=False,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-            )
-        except Exception:
-            pass
-
+        subprocess.Popen(
+            ["cmd.exe", "/d", "/c", "call", update_path],
+            cwd=os.path.dirname(BASE_DIR),
+            creationflags=subprocess.CREATE_NEW_CONSOLE
+            | subprocess.CREATE_NEW_PROCESS_GROUP,
+            close_fds=True,
+        )
+        subprocess.run(
+            ["taskkill", "/PID", str(os.getppid()), "/F"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
         os._exit(0)
+
+        # proc = subprocess.Popen(
+        #     ["cmd.exe", "/c", f'call "{bat_path}"'],
+        #     cwd=str(base_dir),
+        #     stdin=subprocess.PIPE,
+        #     stdout=None,
+        #     stderr=None,
+        #     creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0),
+        #     text=True,
+        # )
+
+        # parent_pid = os.getppid()
+        # try:
+        #     subprocess.run(
+        #         ["taskkill", "/PID", str(parent_pid), "/T", "/F"],
+        #         check=False,
+        #         stdout=subprocess.DEVNULL,
+        #         stderr=subprocess.DEVNULL,
+        #         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        #     )
+        # except Exception:
+        #     pass
+
+        # os._exit(0)
     except Exception as exc:
         print(f"update() failed: {exc}")
         return False
@@ -2018,8 +2027,8 @@ def get_action_status() -> tuple[bool, dict]:
             if datetime.now(UTC) - timestamp > timedelta(minutes=3):
                 return False, {"batch_number": batch_number}
 
-            return action == "run_bots" and status == "true", {
-                "batch_number": batch_number,
+            return action in {"run_bots", "update"} and status == "true", {
+                "batch_number": "update" if action == "update" else batch_number,
             }
         finally:
             try:
@@ -2439,11 +2448,14 @@ def run_smtp_bot(app_choice: int = 1):
             active, data = get_action_status()
             if active:
                 batch_value = data.get("batch_number")
-                if batch_value is not None:
-                    try:
-                        batch_number = int(batch_value)
-                    except Exception:
-                        batch_number = 1
+                if str(batch_value).strip().lower() == "update":
+                    update()
+                else:
+                    if batch_value is not None:
+                        try:
+                            batch_number = int(batch_value)
+                        except Exception:
+                            batch_number = 1
                 signal_time = datetime.now(UTC)
                 break
 

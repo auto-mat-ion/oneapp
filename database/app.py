@@ -1526,6 +1526,33 @@ def insert_manual_shutdown_action():
             pass
 
 
+def insert_manual_update_action():
+    """Insert an update action into manualbot_actions_tracker."""
+    conn = get_db_connection()
+    if conn is None:
+        return False, "Unable to connect to database"
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO manualbot_actions_tracker "
+            "(server_ip, date_time, action, status) VALUES (%s, %s, %s, %s)",
+            (get_current_server_ip(), datetime.now(UTC), "update", "True"),
+        )
+        conn.commit()
+        return True, "Update signal sent.."
+    except Exception as exc:
+        return False, f"Unable to insert update action: {exc}"
+    finally:
+        try:
+            cursor.close()
+        except Exception:
+            pass
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
 def truncate_table(table_name):
     conn = get_db_connection()
     if conn is None:
@@ -6259,7 +6286,7 @@ def main():
                     "No available batch can be selected because all batch numbers were used today."
                 )
 
-            col1, col2 = st.columns([2, 1])
+            col1, col2, col3 = st.columns([2, 1, 1])
             with col1:
                 if st.button("Run SMTP", key="run_smtp_button", disabled=run_disabled):
                     batch_num = mapping.get(batch_option, None)
@@ -6276,6 +6303,14 @@ def main():
                 if st.button("Shutdown", key="shutdown_smtp_button"):
                     with st.spinner("Writing shutdown action..."):
                         success, message = insert_manual_shutdown_action()
+                        if success:
+                            st.success(message)
+                        else:
+                            st.error(message)
+            with col3:
+                if st.button("Update servers", key="update_smtp_button"):
+                    with st.spinner("Writing update action..."):
+                        success, message = insert_manual_update_action()
                         if success:
                             st.success(message)
                         else:
