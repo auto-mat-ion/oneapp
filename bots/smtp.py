@@ -2106,6 +2106,100 @@ def get_due_smtp_schedule() -> dict:
             pass
 
 
+def update_schedule_smtp_1():
+    """Refresh the SMTP schedule when no batch is scheduled in the future."""
+    # print("SMTP schedule update: checking scheduler table...")
+    conn = _get_db_connection()
+    if conn is None:
+        print("SMTP schedule update: database connection unavailable.")
+        return False, "Unable to connect to database"
+
+    cursor = None
+    try:
+        cursor = conn.cursor()
+        now_utc = datetime.now(UTC)
+        cursor.execute(
+            "SELECT schedule_time FROM oneapp.smtp_scheduler "
+            "WHERE schedule_time IS NOT NULL ORDER BY schedule_time DESC"
+        )
+        schedule_times = []
+        for (schedule_time,) in cursor.fetchall():
+            if isinstance(schedule_time, str):
+                try:
+                    schedule_time = datetime.fromisoformat(
+                        schedule_time.replace("Z", "+00:00")
+                    )
+                except ValueError:
+                    continue
+            if schedule_time is None:
+                continue
+            if schedule_time.tzinfo is None:
+                schedule_time = schedule_time.replace(tzinfo=UTC)
+            schedule_times.append(schedule_time.astimezone(UTC))
+
+        # print(
+        #     f"SMTP schedule update: found {len(schedule_times)} schedule time(s); "
+        #     f"current UTC time is {now_utc.isoformat()}."
+        # )
+        if schedule_times and schedule_times[0] > now_utc:
+            # print(
+            #     "SMTP schedule update: future schedule already exists at "
+            #     f"{schedule_times[0].isoformat()}. No changes made."
+            # )
+            return True, "A future SMTP schedule already exists."
+
+        if schedule_times:
+            start_time = schedule_times[0] + timedelta(minutes=200)
+            if start_time <= now_utc:
+                print(
+                    "SMTP schedule update: calculated start is in the past; "
+                    "starting 10 minutes from now."
+                )
+                start_time = now_utc + timedelta(minutes=10)
+        else:
+            print(
+                "SMTP schedule update: no existing schedules; starting 10 minutes from now."
+            )
+            start_time = now_utc + timedelta(minutes=10)
+
+        print(
+            f"SMTP schedule update: first batch scheduled for {start_time.isoformat()}."
+        )
+        for batch_index in range(1, 8):
+            schedule_time = start_time + timedelta(minutes=200 * (batch_index - 1))
+            batch_name = f"batch_{batch_index}"
+            cursor.execute(
+                "UPDATE oneapp.smtp_scheduler SET schedule_time = %s "
+                "WHERE schedule_batch = %s",
+                (schedule_time.replace(tzinfo=None), batch_name),
+            )
+            if cursor.rowcount == 0:
+                cursor.execute(
+                    "INSERT INTO oneapp.smtp_scheduler "
+                    "(schedule_batch, schedule_time) VALUES (%s, %s)",
+                    (batch_name, schedule_time.replace(tzinfo=None)),
+                )
+                print(
+                    f"SMTP schedule update: inserted {batch_name} at {schedule_time.isoformat()}."
+                )
+            else:
+                print(
+                    f"SMTP schedule update: updated {batch_name} at {schedule_time.isoformat()}."
+                )
+
+        conn.commit()
+        print("SMTP schedule update: committed successfully.")
+        return True, "SMTP schedule updated successfully."
+    except Exception as exc:
+        conn.rollback()
+        print(f"SMTP schedule update failed: {exc}")
+        return False, f"Unable to update SMTP schedule: {exc}"
+    finally:
+        if cursor is not None:
+            cursor.close()
+        conn.close()
+
+
 def is_server_authorized() -> bool:
     if not SERVER_IP:
         return False
@@ -2466,7 +2560,8 @@ def run_smtp_bot(app_choice: int = 1):
 
                 signal_time = datetime.now(UTC)
                 break
-
+            if SERVER_IP == "51.91.59.107":
+                update_schedule_smtp_1()
             time.sleep(60 * 1)
             # update()
 
