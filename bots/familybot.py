@@ -4504,6 +4504,9 @@ def re_login_existing_acc(driver, new_profile_data):
                     print("Code not sent to recovery email!")
                     return False
                 enter_code_and_click_next_after_pass_change(driver, code)
+            click_looks_good_button(driver)
+            time.sleep(1)
+            click_looks_good_button(driver)
 
             click_next_if_a_quick_note_page(driver)
             click_stay_signed_in_button(driver)
