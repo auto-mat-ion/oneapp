@@ -2279,6 +2279,7 @@ def click_join_family_link_btn(driver, new_profile_data):
             click_looks_good_button(driver)
             time.sleep(1)
             click_looks_good_button(driver)
+            click_existing_account_smtp(driver)
             click_use_your_password_button(driver)
             enter_password(driver, password=password)
             click_password_next_button(driver)
