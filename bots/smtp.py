@@ -276,6 +276,7 @@ _pause_requested = threading.Event()
 _BASIC_RE = re.compile(r".+@.+\..+")
 LOAD_RETRY_ATTEMPTS = 7
 LOAD_RETRY_DELAY_SECONDS = 5.0
+CACHE_LOAD_RETRIES = 10
 
 NEW_RECIPIENT_LIST = [
     "158.69.197.228",
@@ -685,19 +686,19 @@ def log(msg: str):
 #     pass
 
 
-def load_cache():
+def load_cache() -> bool:
     def _load_once():
         log("Loading cache")
-
-        conn = _get_db_connection()
-        if conn is None:
-            raise RuntimeError("unable to connect to database for cache")
-
+        conn = None
+        cursor = None
         try:
+            conn = _get_db_connection()
+            if conn is None:
+                raise RuntimeError("unable to connect to database for cache")
+
             cursor = conn.cursor()
             cursor.execute(f"SELECT cache_bin_file FROM {_get_cache_bins_table()}")
             results = cursor.fetchall()
-            cursor.close()
 
             combined_data = {
                 "Account": {},
@@ -722,15 +723,36 @@ def load_cache():
             log(
                 f"Cache loaded from database: {len(results)} servers caches, {num_accounts} accounts"
             )
-        except Exception as e:
-            raise RuntimeError(f"cache load failed: {e}") from e
+        except Exception as exc:
+            raise RuntimeError(f"cache load failed: {exc}") from exc
         finally:
             try:
-                conn.close()
+                if cursor is not None:
+                    cursor.close()
+            except Exception:
+                pass
+            try:
+                if conn is not None:
+                    conn.close()
             except Exception:
                 pass
 
-    _run_with_retry("load cache from database", _load_once, default=None)
+    total_attempts = CACHE_LOAD_RETRIES + 1
+    for attempt in range(1, total_attempts + 1):
+        try:
+            _load_once()
+            return True
+        except Exception as exc:
+            log(f"Cache load attempt {attempt}/{total_attempts} failed: {exc}")
+            if attempt < total_attempts:
+                wait_seconds = random.randint(40, 120)
+                log(f"Retrying cache load in {wait_seconds} seconds.")
+                time.sleep(wait_seconds)
+
+    log(
+        f"Cache could not be loaded after {CACHE_LOAD_RETRIES} retries. Returning to signal loop."
+    )
+    return False
 
 
 def load_cache_fottest(cache_path: Optional[str] = None) -> bool:
@@ -2334,7 +2356,8 @@ def main_batches(
     recipients = RecipientManager(len(accounts.accounts))
     # time.sleep(100)
     # return True
-    load_cache()
+    if not load_cache():
+        return
 
     if not accounts.accounts:
         log("✗ No accounts. Exiting.")
