@@ -10043,6 +10043,8 @@ def initialize(new_profile_data):
 
     except Exception as E:
         try:
+            print(f"{email_address}: Exception error occurred: {E}")
+            time.sleep(100)
             new_profile_logger(email_address, "FAIL", f"EXCEPTION_ERROR: {E}")
         except:
             pass
@@ -10182,8 +10184,3 @@ def run_family_link_extractor():
         else:
             print("No unshared family acc in database...")
             break
-
-
-# fun = initialize(replacement_profiles[0])
-# PREFERRED_SMS_COUNTRY = "United States"
-# num_available_cards()
