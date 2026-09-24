@@ -1491,7 +1491,9 @@ def send_email(
                 except:
                     wait = 45
                 log(f"    ⏳ throttled, wait {wait}s (retry {attempt + 1}/1)")
-                time.sleep(wait)
+
+                # time.sleep(wait)
+
                 r = session.post(
                     f"{GRAPH_ENDPOINT}/users/{from_email}/sendMail",
                     headers=headers,
@@ -2562,7 +2564,8 @@ def run_smtp_bot(app_choice: int = 1):
         batch_number = 1
         signal_time = None
         while True:
-            active, data = get_action_status()
+            # active, data = get_action_status()
+            active, data = True, {"batch_number": 1}
             if active:
                 batch_value = data.get("batch_number")
                 if str(batch_value).strip().lower() == "update":
