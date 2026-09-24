@@ -4767,7 +4767,7 @@ def initialize_new_profile(new_profile_data):
         time.sleep(1)
 
         # _check_shutdown_requested()
-        # click_next_if_is_updating_terms_page(driver)
+        click_next_if_is_updating_terms_page(driver)
 
         recovery_email_page_popped_up = "NO"
         temp_email = ""
