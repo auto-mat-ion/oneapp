@@ -993,7 +993,8 @@ class ContentManager:
         link_table = (
             "sender_link_2" if SERVER_IP in NEW_RECIPIENT_LIST else "sender_link"
         )
-        self.links = self._load(link_table, "link", limit=3000, offset=0)
+        # self.links = self._load(link_table, "link", limit=3000, offset=0)
+        self.links = ["find-hot-ladiess.info"]
         self.subjects = self._load("sender_subjects", "subject")
         self.texts = self._load("sender_texts", "text")
 
