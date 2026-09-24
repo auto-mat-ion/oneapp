@@ -1080,7 +1080,7 @@ def click_next_button(driver):
         return False
 
 
-def click_looks_good_button(driver):
+def click_looks_good_button(driver, wait_time=5):
     """
     Clicks the next button
     """
@@ -4504,9 +4504,9 @@ def re_login_existing_acc(driver, new_profile_data):
                     print("Code not sent to recovery email!")
                     return False
                 enter_code_and_click_next_after_pass_change(driver, code)
-            click_looks_good_button(driver)
+            click_looks_good_button(driver, wait_time=5)
             time.sleep(1)
-            click_looks_good_button(driver)
+            click_looks_good_button(driver, wait_time=3)
 
             click_next_if_a_quick_note_page(driver)
             click_stay_signed_in_button(driver)
@@ -4947,6 +4947,9 @@ def login_on_country_page(driver, new_profile_data):
         )
         sign_in_btn.click()
         time.sleep(1)
+        click_looks_good_button(driver, wait_time=3)
+        time.sleep(1)
+        click_looks_good_button(driver, wait_time=3)
 
         # new_pass = password + ".!Ze8"
         print(f"{email} : Sign in button found on profile page.")
@@ -5146,6 +5149,7 @@ def change_account_country(driver, new_profile_data):
 
 def change_account_language_chinese(driver, new_profile_data):
     try:
+        print(f"{new_profile_data.get('email')} : Initializing change language")
         retries = 0
         num_of_retries = 5
         while retries < num_of_retries:
@@ -5261,21 +5265,26 @@ def change_account_language_chinese(driver, new_profile_data):
                     )
 
                     save_button_element.click()
+
+                    return True
                 except:
                     logout_then_re_login_existing_acc(driver, new_profile_data)
-
-                if country_is_the_desired(driver):
-                    return True
-                else:
                     print(
-                        f"{email} : Country not changed. Retrying... ({retries}/{num_of_retries})"
+                        f"{email} : Language not changed. Retrying... ({retries}/{num_of_retries})"
                     )
-                    retries += 1
+
+                # if country_is_the_desired(driver):
+                #     return True
+                # else:
+                #     print(
+                #         f"{email} : Language not changed. Retrying... ({retries}/{num_of_retries})"
+                #     )
+                retries += 1
 
             except Exception as E:
                 retries += 1
                 print(
-                    f"{email} : Exception error changing country. Retrying... ({retries}/{num_of_retries})"
+                    f"{email} : Exception error changing Language. Retrying... ({retries}/{num_of_retries})"
                 )
 
         return False
@@ -9683,6 +9692,8 @@ def initialize(new_profile_data):
         has_recovery_phone = "NO"
         recovery_phone_number = ""
         _check_shutdown_requested()
+
+        ## WERE UPDATING OUR TERMS
 
         if is_protect_your_account_page(driver):
             recovery_email_page_popped_up = "YES"
