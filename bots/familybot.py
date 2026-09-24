@@ -9684,7 +9684,7 @@ def initialize(new_profile_data):
         time.sleep(1)
 
         _check_shutdown_requested()
-        # click_next_if_is_updating_terms_page(driver)
+        click_next_if_is_updating_terms_page(driver)
 
         recovery_email_page_popped_up = "NO"
         temp_email = ""
@@ -9692,8 +9692,6 @@ def initialize(new_profile_data):
         has_recovery_phone = "NO"
         recovery_phone_number = ""
         _check_shutdown_requested()
-
-        ## WERE UPDATING OUR TERMS
 
         if is_protect_your_account_page(driver):
             recovery_email_page_popped_up = "YES"
