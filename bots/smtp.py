@@ -993,8 +993,7 @@ class ContentManager:
         link_table = (
             "sender_link_2" if SERVER_IP in NEW_RECIPIENT_LIST else "sender_link"
         )
-        # self.links = self._load(link_table, "link", limit=3000, offset=0)
-        self.links = ["find-hot-ladiess.info"]
+        self.links = self._load(link_table, "link", limit=3000, offset=0)
         self.subjects = self._load("sender_subjects", "subject")
         self.texts = self._load("sender_texts", "text")
 
@@ -1492,9 +1491,7 @@ def send_email(
                 except:
                     wait = 45
                 log(f"    ⏳ throttled, wait {wait}s (retry {attempt + 1}/1)")
-
-                # time.sleep(wait)
-
+                time.sleep(wait)
                 r = session.post(
                     f"{GRAPH_ENDPOINT}/users/{from_email}/sendMail",
                     headers=headers,
@@ -2565,8 +2562,7 @@ def run_smtp_bot(app_choice: int = 1):
         batch_number = 1
         signal_time = None
         while True:
-            # active, data = get_action_status()
-            active, data = True, {"batch_number": 1}
+            active, data = get_action_status()
             if active:
                 batch_value = data.get("batch_number")
                 if str(batch_value).strip().lower() == "update":
