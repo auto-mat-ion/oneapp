@@ -719,9 +719,9 @@ def keep_alive(retries=5, delay=3, current_action=None):
                     )
 
                 conn.commit()
-                print(
-                    f"keep_alive updated for server_status_family_and_hotmail at {now_utc}"
-                )
+                # print(
+                #     f"keep_alive updated for server_status_family_and_hotmail at {now_utc}"
+                # )
                 return True
             finally:
                 conn.close()
