@@ -10082,7 +10082,9 @@ def run_familybot(country=None, concurrent=1):
         get_premium_start_barrier
     if country:
         PREFERRED_SMS_COUNTRY = str(country).lower()
-        CHANGE_COUNTRY = str(country).lower()
+        CHANGE_COUNTRY = (
+            "poland" if str(country).lower() == "poland2" else str(country).lower()
+        )
 
     CONCURRENT_WINDOWS = concurrent
     initialize_barrier = threading.Barrier(CONCURRENT_WINDOWS)
