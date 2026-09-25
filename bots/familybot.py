@@ -5265,7 +5265,9 @@ def change_account_language_chinese(driver, new_profile_data):
                     )
 
                     save_button_element.click()
-
+                    print(
+                        f"{new_profile_data.get('email')} : Successfully changed language"
+                    )
                     return True
                 except:
                     logout_then_re_login_existing_acc(driver, new_profile_data)
