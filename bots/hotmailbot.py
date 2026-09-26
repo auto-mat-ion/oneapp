@@ -4508,7 +4508,7 @@ def entire_smtp_process(driver, new_profile_data):
                     else:
                         status, code = wait_for_code_by_recovery_mail(recovery)
                         if not status:
-                            return False
+                            return False, "Recovery code not received"
                         enter_code_and_click_next_after_pass_change(driver, code)
         else:
             recovery = new_profile_data.get("recovery_email")
@@ -4522,7 +4522,7 @@ def entire_smtp_process(driver, new_profile_data):
                 else:
                     status, code = wait_for_code_by_recovery_mail(recovery)
                     if not status:
-                        return False
+                        return False, "Recovery code not received"
                     enter_code_and_click_next_after_pass_change(driver, code)
 
         time.sleep(1)
@@ -4673,7 +4673,7 @@ def change_acc_pass(driver, new_profile_data):
                     else:
                         status, code = wait_for_code_by_recovery_mail(recovery)
                         if not status:
-                            return False
+                            return False, "Recovery code not received"
                         enter_code_and_click_next_after_pass_change(driver, code)
         except:
             pass
