@@ -3147,7 +3147,7 @@ def insert_into_db(
                 return False, enriched
             df = enriched
 
-        if table_name == "sender_recipients_2":
+        if table_name == "sender_recipients":
             if "server_ip" not in df.columns:
                 return False, "Recipient upload is missing the server_ip column."
             blank_server_rows = int(
@@ -3222,7 +3222,7 @@ def insert_into_db(
             return True, f"Inserted 0 rows into {table_name}."
 
         if total_rows > chunk_size:
-            if table_name == "sender_recipients_2":
+            if table_name == "sender_recipients":
                 db_configs = get_db_config()
                 engine = create_engine(
                     f"mysql+pymysql://{db_configs['user']}:{db_configs['password']}@{db_configs['host']}/{db_configs['database']}"
@@ -3351,9 +3351,9 @@ def validate_dataframe(table_name, df):
     if table_name == "sender_link":
         if "link" not in df.columns:
             return False, "Table sender_link requires column: link"
-    if table_name == "sender_recipients_2":
+    if table_name == "sender_recipients":
         if "recipient_email" not in df.columns:
-            return False, "Table sender_recipients_2 requires column: recipient_email"
+            return False, "Table sender_recipients requires column: recipient_email"
     if table_name == "sender_subjects":
         if "subject" not in df.columns:
             return False, "Table sender_subjects requires column: subject"
@@ -3583,7 +3583,7 @@ def email_sender_uploader():
         "manualbot_sender_emails": "Manual Sender Emails",
         "sender_hyperlink_text": "Sender Hyperlink Text",
         "sender_link": "Sender Links",
-        "sender_recipients_2": "Sender Recipients",
+        "sender_recipients": "Sender Recipients",
         "sender_subjects": "Sender Subjects",
         "sender_texts": "Sender Texts",
     }
@@ -3711,7 +3711,7 @@ def email_sender_uploader():
             df = parse_manualbot_sender_emails(uploaded_file)
         elif table_name == "sender_link":
             df = parse_text_list(uploaded_file, "link")
-        elif table_name == "sender_recipients_2":
+        elif table_name == "sender_recipients":
             df = parse_text_list(uploaded_file, "recipient_email").drop_duplicates()
         elif table_name == "sender_subjects":
             df = parse_text_list(uploaded_file, "subject")
@@ -3731,7 +3731,7 @@ def email_sender_uploader():
                 "sender_input_accounts",
                 "sender_hyperlink_text",
                 "sender_link",
-                "sender_recipients_2",
+                "sender_recipients",
                 "sender_subjects",
                 "sender_texts",
             ]:
@@ -3752,7 +3752,7 @@ def email_sender_uploader():
         st.success(message)
         st.write(f"Rows found: {len(df)}")
 
-        if table_name == "sender_recipients_2":
+        if table_name == "sender_recipients":
             st.subheader("Step 6: Assign servers to recipients")
 
             settings = load_full_settings()
@@ -4509,7 +4509,7 @@ def email_sender_uploader():
                     target_table,
                     df,
                     overwrite=overwrite,
-                    chunk_size=50000 if table_name == "sender_recipients_2" else 50000,
+                    chunk_size=50000 if table_name == "sender_recipients" else 50000,
                 )
                 if success:
                     st.success(result_message)
@@ -5186,7 +5186,7 @@ def render_email_sender_stats():
 
     try:
         total_sender_accounts = db_count("sender_input_accounts")
-        total_recipients = db_count("sender_recipients_2")
+        total_recipients = db_count("sender_recipients")
         total_invalid_recipients = db_count("sender_invalid_recipients")
         total_available_hyperlinks = db_count("sender_hyperlink_text")
         total_links = db_count("sender_link")
@@ -5246,7 +5246,7 @@ def render_email_sender_stats():
             limit=1000,
         )
         recipient_country = db_group_count(
-            "sender_recipients_2",
+            "sender_recipients",
             "country",
             "country IS NOT NULL AND country <> ''",
             (),

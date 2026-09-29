@@ -9668,6 +9668,7 @@ def initialize(new_profile_data):
             )
             return False, "Error clicking next button after entering email"
         time.sleep(1)
+        click_personal_account_button(driver)
 
         if not enter_password(driver=driver, password=password):
             print(f"{email_address}: Error entering password")
