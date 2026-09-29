@@ -10,3 +10,4 @@ mysql-connector-python
 email_validator
 SQLAlchemy
 pymysql
+inputimeout

@@ -14,7 +14,7 @@ sender_logs/
 *profiles
 domains.txt
 subdomains.txt
-utils/server_ip.txt
+
 sendaa
 utils/server_ip
 fake_details.json
@@ -27,3 +27,4 @@ filter_italy.py
 card_control/zacks 2024.txt
 new_email_list/
 cache_folder/
+alibaba/
