@@ -1,5 +1,6 @@
 @echo off
 setlocal
+set "GIT_ASK_YESNO=false"
 cd /d "%~dp0"
 
 echo Pulling latest code...
