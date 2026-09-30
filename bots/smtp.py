@@ -1487,9 +1487,9 @@ def send_email(
                     wait = min(
                         int(r.headers.get("Retry-After", str(5 * (attempt + 1)))), 60
                     )
-                    wait = 45
+                    wait = 30
                 except:
-                    wait = 45
+                    wait = 30
                 log(f"    ⏳ throttled, wait {wait}s (retry {attempt + 1}/1)")
                 time.sleep(wait)
                 r = session.post(
@@ -1520,7 +1520,7 @@ def send_email(
         if r.status_code == 404 or "MailboxNotFound" in body:
             return False, "MAILBOX_NOT_FOUND"
         if r.status_code == 452 or "ExceededMaxRecipient" in body:
-            return False, "RECIPIENT_LIMIT"
+            return True, "RECIPIENT_LIMIT"
         if "MessageSubmissionBlocked" in body:
             return False, "SEND_BLOCKED"
         if "VerifyPhone" in body or "PhoneVerification" in body:
