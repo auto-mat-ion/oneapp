@@ -316,6 +316,9 @@ PAUSE_REQUESTED = False
 SHUTDOWN_WATCHER_STARTED = False
 SHUTDOWN_WATCHER_STOP = threading.Event()
 SHUTDOWN_WATCHER_THREAD = None
+AUTO_PAUSE_INTERVAL_SECONDS = 60 * 60
+AUTO_PAUSE_STOP = threading.Event()
+AUTO_PAUSE_THREAD = None
 ACTIVE_DRIVERS = weakref.WeakSet()
 
 
@@ -329,16 +332,21 @@ def _reset_runtime_state():
     global SHUTDOWN_REQUESTED, PAUSE_REQUESTED
     global VPN_CONNECTION_STATUS, VPN_CONNECTION_WATCHDOG
     global SHUTDOWN_WATCHER_STARTED, SHUTDOWN_WATCHER_THREAD
+    global AUTO_PAUSE_THREAD
 
     SHUTDOWN_REQUESTED = False
     PAUSE_REQUESTED = False
     VPN_CONNECTION_STATUS = "none"
     VPN_CONNECTION_WATCHDOG_STOP.set()
     SHUTDOWN_WATCHER_STOP.set()
+    AUTO_PAUSE_STOP.set()
 
     old_watcher = SHUTDOWN_WATCHER_THREAD
     if old_watcher is not None and old_watcher.is_alive():
         old_watcher.join(timeout=2)
+    old_auto_pause = AUTO_PAUSE_THREAD
+    if old_auto_pause is not None and old_auto_pause.is_alive():
+        old_auto_pause.join(timeout=2)
     old_watchdog = VPN_CONNECTION_WATCHDOG
     if old_watchdog is not None and old_watchdog.is_alive():
         old_watchdog.join(timeout=2)
@@ -352,9 +360,11 @@ def _reset_runtime_state():
     ACTIVE_DRIVERS.clear()
     VPN_CONNECTION_WATCHDOG = None
     SHUTDOWN_WATCHER_THREAD = None
+    AUTO_PAUSE_THREAD = None
     SHUTDOWN_WATCHER_STARTED = False
     VPN_CONNECTION_WATCHDOG_STOP.clear()
     SHUTDOWN_WATCHER_STOP.clear()
+    AUTO_PAUSE_STOP.clear()
 
 
 def _run_lifecycle(run):
@@ -383,9 +393,10 @@ def _check_pause_requested():
         return
 
     print("pause initiated!")
+    paused_at = datetime.now().astimezone().strftime("%H:%M:%S")
     while PAUSE_REQUESTED and not SHUTDOWN_REQUESTED:
         SHUTDOWN_WATCHER_STOP.wait(random.uniform(20, 30))
-        keep_alive(current_action="paused")
+        keep_alive(current_action=f"paused {paused_at}")
     if SHUTDOWN_REQUESTED:
         print("shutdown initiated!")
         raise InterruptedError("shutdown initiated")
@@ -453,6 +464,37 @@ def _start_shutdown_watcher():
             daemon=True,
         )
         SHUTDOWN_WATCHER_THREAD.start()
+
+
+def _auto_pause_timer():
+    global PAUSE_REQUESTED
+    while not AUTO_PAUSE_STOP.is_set() and not SHUTDOWN_REQUESTED:
+        countdown_started = time.monotonic()
+        while not PAUSE_REQUESTED and not SHUTDOWN_REQUESTED:
+            remaining = AUTO_PAUSE_INTERVAL_SECONDS - (
+                time.monotonic() - countdown_started
+            )
+            if remaining <= 0:
+                PAUSE_REQUESTED = True
+                break
+            if AUTO_PAUSE_STOP.wait(min(remaining, 1)):
+                return
+
+        while PAUSE_REQUESTED and not SHUTDOWN_REQUESTED:
+            if AUTO_PAUSE_STOP.wait(1):
+                return
+
+
+def _start_auto_pause_timer():
+    global AUTO_PAUSE_THREAD
+    if AUTO_PAUSE_THREAD is None or not AUTO_PAUSE_THREAD.is_alive():
+        AUTO_PAUSE_STOP.clear()
+        AUTO_PAUSE_THREAD = threading.Thread(
+            target=_auto_pause_timer,
+            name="familybot-auto-pause-timer",
+            daemon=True,
+        )
+        AUTO_PAUSE_THREAD.start()
 
 
 def _load_telegram_chat_ids():
@@ -10100,6 +10142,7 @@ def run_familybot(country=None, concurrent=1):
     SHUTDOWN_REQUESTED = False
     PAUSE_REQUESTED = False
     _start_shutdown_watcher()
+    _start_auto_pause_timer()
 
     print(
         f"Starting Familybot for country: {PREFERRED_SMS_COUNTRY} and IP: {SERVER_IP}"
