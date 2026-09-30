@@ -4694,6 +4694,255 @@ def get_familybot_available_cards_count():
     return get_familybot_available_cards()[0]
 
 
+def load_familybot_return_preview(country):
+    conn = get_db_connection()
+    if conn is None:
+        return [], "Unable to connect to database."
+
+    cursor = None
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT card_number, expiry_month_year, cvv "
+            "FROM oneapp.familybot_failed_cards WHERE country = %s",
+            (country,),
+        )
+        source_rows = cursor.fetchall()
+        if not source_rows:
+            return [], None
+
+        row_count = len(source_rows)
+        name_and_address_country = (
+            "poland" if country.lower() == "poland2" else country.lower()
+        )
+        cursor.execute(
+            "SELECT firstnames FROM oneapp.familybot_first_names "
+            "WHERE country = %s AND firstnames IS NOT NULL AND TRIM(firstnames) <> '' "
+            "ORDER BY RAND() LIMIT %s",
+            (name_and_address_country, row_count),
+        )
+        first_names = [row[0] for row in cursor.fetchall()]
+        cursor.execute(
+            "SELECT surnames FROM oneapp.familybot_surnames "
+            "WHERE country = %s AND surnames IS NOT NULL AND TRIM(surnames) <> '' "
+            "ORDER BY RAND() LIMIT %s",
+            (name_and_address_country, row_count),
+        )
+        surnames = [row[0] for row in cursor.fetchall()]
+
+        cursor.execute(
+            "SELECT address_line1, city, state, postal_code FROM oneapp.familybot_fake_details "
+            "WHERE country = %s "
+            "ORDER BY RAND() LIMIT %s",
+            (name_and_address_country, row_count),
+        )
+        addresses = cursor.fetchall()
+
+        if len(first_names) < row_count or len(surnames) < row_count:
+            return [], (
+                f"Not enough names for {row_count} records in {country}: "
+                f"found {len(first_names)} first names and {len(surnames)} surnames."
+            )
+
+        return [
+            {
+                "card_number": source[0],
+                "expiry_month_year": source[1],
+                "cvv": source[2],
+                "name_on_card": f"{first_names[index]} {surnames[index]}",
+                "address_line1": addresses[index][0],
+                "city": addresses[index][1],
+                "state": addresses[index][2],
+                "postal_code": addresses[index][3],
+            }
+            for index, source in enumerate(source_rows)
+        ], None
+
+    except Exception as exc:
+        return [], str(exc)
+    finally:
+        if cursor is not None:
+            try:
+                cursor.close()
+            except Exception:
+                pass
+        conn.close()
+
+
+def upload_familybot_returns(country, return_rows):
+    if not return_rows:
+        return False, "There are no records to return."
+
+    conn = get_db_connection()
+    if conn is None:
+        return False, "Unable to connect to database."
+
+    cursor = None
+    stage = "initial"
+    try:
+        cursor = conn.cursor()
+
+        insert_columns = [
+            "card_number",
+            "expiry_month_year",
+            "cvv",
+            "country",
+            "name_on_card",
+            "address_line1",
+            "city",
+            "state",
+            "postal_code",
+        ]
+
+        quoted_columns = ", ".join(f"`{column}`" for column in insert_columns)
+        placeholders = ", ".join(["%s"] * len(insert_columns))
+        insert_query = f"INSERT INTO oneapp.familybot_card_details ({quoted_columns}) VALUES ({placeholders})"
+        stage = "starting transaction"
+        conn.start_transaction()
+        insert_values = []
+        for row in return_rows:
+            values = [
+                row["card_number"],
+                row["expiry_month_year"],
+                row["cvv"],
+                country,
+                row["name_on_card"],
+                row["address_line1"],
+                row["city"],
+                row["state"],
+                row["postal_code"],
+            ]
+
+            insert_values.append(tuple(values))
+
+        cursor.executemany(insert_query, insert_values)
+        stage = "deleting from familybot_failed_cards"
+        # BATCH DELETE from familybot_failed_cards for the returned records
+
+        delete_values = []
+        for row in return_rows:
+            values = [
+                country,
+                row["card_number"],
+                row["expiry_month_year"],
+                row["cvv"],
+            ]
+
+            delete_values.append(tuple(values))
+
+        # placeholders = ", ".join(["(?, ?, ?, ?)"] * len(delete_values))
+        # flat_data = [item for sublist in delete_values for item in sublist]
+
+        DELETE_QUERY = f"DELETE FROM oneapp.familybot_failed_cards WHERE country = %s AND card_number = %s AND expiry_month_year = %s AND cvv = %s"
+
+        cursor.executemany(DELETE_QUERY, delete_values)
+
+        conn.commit()
+        return True, f"Successfully returned {len(return_rows)} records for {country}."
+    except Exception as exc:
+        conn.rollback()
+        return False, f"{str(exc)} (Stage: {stage})"
+    finally:
+        if cursor is not None:
+            try:
+                cursor.close()
+            except Exception:
+                pass
+        conn.close()
+
+
+@st.fragment
+def render_familybot_return_section():
+    st.divider()
+    st.subheader("Return")
+
+    # conn = get_db_connection()
+    # if conn is None:
+    #     return
+    # cursor = None
+    # try:
+    #     cursor = conn.cursor()
+    #     cursor.execute(
+    #         "SELECT DISTINCT country FROM oneapp.table1 "
+    #         "WHERE country IS NOT NULL AND TRIM(country) <> '' ORDER BY country"
+    #     )
+    #     countries = [row[0] for row in cursor.fetchall()]
+    # except Exception as exc:
+    #     st.error(f"Unable to load return countries: {exc}")
+    #     return
+    # finally:
+    #     if cursor is not None:
+    #         try:
+    #             cursor.close()
+    #         except Exception:
+    #             pass
+    #     conn.close()
+
+    success_message = st.session_state.pop("familybot_return_success", None)
+    if success_message:
+        st.success(success_message)
+
+    # if not countries:
+    #     st.info("No countries with records available to return.")
+    #     return
+    countries = [
+        "Poland",
+        "Poland2",
+        "Italy",
+        "Sweden",
+        "United Kingdom",
+        "United States",
+    ]
+    selected_country = st.selectbox(
+        "Country",
+        countries,
+        key="familybot_return_country",
+    )
+    preview_country_key = "familybot_return_preview_country"
+    preview_rows_key = "familybot_return_preview_rows"
+    if st.session_state.get(preview_country_key) != selected_country:
+        preview_rows, error = load_familybot_return_preview(selected_country)
+        st.session_state[preview_country_key] = selected_country
+        st.session_state[preview_rows_key] = preview_rows
+        st.session_state["familybot_return_preview_error"] = error
+
+    preview_rows = st.session_state.get(preview_rows_key, [])
+    preview_error = st.session_state.get("familybot_return_preview_error")
+    if preview_error:
+        st.warning(preview_error)
+    elif not preview_rows:
+        st.info("No records found for the selected country.")
+        return
+
+    preview_df = pd.DataFrame(
+        [
+            {
+                "card_number": row["card_number"],
+                "expiry_month_year": row["expiry_month_year"],
+                "cvv": row["cvv"],
+                "name_on_card": row["name_on_card"],
+                "address_line1": row["address_line1"],
+                "city": row["city"],
+                "state": row["state"],
+                "postal_code": row["postal_code"],
+            }
+            for row in preview_rows
+        ]
+    )
+    st.dataframe(preview_df, width="stretch")
+    st.info(f"Previewing {len(preview_rows)} records for {selected_country}.")
+
+    if preview_rows and st.button("Confirm Return", key="familybot_confirm_return"):
+        with st.spinner("Returning records..."):
+            uploaded, message = upload_familybot_returns(selected_country, preview_rows)
+        if uploaded:
+            st.session_state["familybot_return_success"] = message
+            st.session_state[preview_country_key] = None
+            st.rerun(scope="fragment")
+        else:
+            st.error(f"Return upload failed: {message}")
+
+
 def render_stats_cards(cards):
     for i in range(0, len(cards), 3):
         row = cards[i : i + 3]
@@ -5113,30 +5362,31 @@ def render_familybot_stats():
 
         if not failed_rows:
             st.info("No failed cards found for the selected filters.")
-            return
+        else:
+            failed_df = pd.DataFrame(
+                failed_rows,
+                columns=[
+                    "Date Time",
+                    "Card Number",
+                    "Expiry Month/Year",
+                    "CVV",
+                    "Reason For Fail",
+                    "Country",
+                ],
+            )
+            st.dataframe(failed_df, width="stretch")
 
-        failed_df = pd.DataFrame(
-            failed_rows,
-            columns=[
-                "Date Time",
-                "Card Number",
-                "Expiry Month/Year",
-                "CVV",
-                "Reason For Fail",
-                "Country",
-            ],
-        )
-        st.dataframe(failed_df, width="stretch")
-
-        csv = failed_df.to_csv(index=False)
-        st.download_button(
-            "Download failed cards as CSV",
-            csv,
-            file_name="familybot_failed_cards.csv",
-            mime="text/csv",
-        )
+            csv = failed_df.to_csv(index=False)
+            st.download_button(
+                "Download failed cards as CSV",
+                csv,
+                file_name="familybot_failed_cards.csv",
+                mime="text/csv",
+            )
     except Exception as e:
         st.error(f"Error loading failed cards table: {e}")
+
+    render_familybot_return_section()
 
 
 def render_email_sender_stats():
