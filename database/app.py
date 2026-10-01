@@ -3131,7 +3131,7 @@ def enrich_familybot_card_details(df):
 
 
 def insert_into_db(
-    table_name, df, server_ip=None, bot_type=None, overwrite=False, chunk_size=10000
+    table_name, df, server_ip=None, bot_type=None, overwrite=False, chunk_size=30000
 ):
     conn = get_db_connection()
     if conn is None:
@@ -3229,7 +3229,7 @@ def insert_into_db(
                 )
                 total_rows = len(df)
                 # Lowering chunk_size to 10,000 prevents MySQL server thread-RAM exhaustion
-                chunk_size = 10000
+                chunk_size = 30000
 
                 if total_rows > 0:
                     # Initialize Streamlit UI components
@@ -3259,6 +3259,8 @@ def insert_into_db(
                         # 4. Update progress metrics immediately after the chunk completes
                         inserted += len(chunk_df)
                         progress_percentage = min(inserted / total_rows, 1.0)
+                        if inserted % 600000 == 0:
+                            time.sleep(30)
 
                         progress_bar.progress(progress_percentage)
                         status_text.text(
@@ -3345,21 +3347,24 @@ def validate_dataframe(table_name, df):
                 False,
                 "Table manualbot_sender_emails requires columns: server_ip, email, password, recovery",
             )
-    if table_name == "sender_hyperlink_text":
+    if table_name == "sender_hyperlink_text_2":
         if "hyperlink_text" not in df.columns:
-            return False, "Table sender_hyperlink_text requires column: hyperlink_text"
+            return (
+                False,
+                "Table sender_hyperlink_text_2 requires column: hyperlink_text",
+            )
     if table_name == "sender_link":
         if "link" not in df.columns:
             return False, "Table sender_link requires column: link"
     if table_name == "sender_recipients":
         if "recipient_email" not in df.columns:
             return False, "Table sender_recipients requires column: recipient_email"
-    if table_name == "sender_subjects":
+    if table_name == "sender_subjects_2":
         if "subject" not in df.columns:
-            return False, "Table sender_subjects requires column: subject"
-    if table_name == "sender_texts":
+            return False, "Table sender_subjects_2 requires column: subject"
+    if table_name == "sender_texts_2":
         if "text" not in df.columns:
-            return False, "Table sender_texts requires column: text"
+            return False, "Table sender_texts_2 requires column: text"
     if table_name == "familybot_first_names":
         if "firstnames" not in df.columns:
             return False, "Table familybot_first_names requires column: firstnames"
@@ -3581,11 +3586,11 @@ def email_sender_uploader():
     table_options = {
         "sender_input_accounts": "Sender Input Accounts",
         "manualbot_sender_emails": "Manual Sender Emails",
-        "sender_hyperlink_text": "Sender Hyperlink Text",
+        "sender_hyperlink_text_2": "Sender Hyperlink Text",
         "sender_link": "Sender Links",
         "sender_recipients": "Sender Recipients",
-        "sender_subjects": "Sender Subjects",
-        "sender_texts": "Sender Texts",
+        "sender_subjects_2": "Sender Subjects",
+        "sender_texts_2": "Sender Texts",
     }
 
     country_options = [
@@ -3705,7 +3710,7 @@ def email_sender_uploader():
                 df = parse_second_app_input_accounts(uploaded_file)
             else:
                 df = parse_email_sender_input_accounts(uploaded_file)
-        elif table_name == "sender_hyperlink_text":
+        elif table_name == "sender_hyperlink_text_2":
             df = parse_text_list(uploaded_file, "hyperlink_text")
         elif table_name == "manualbot_sender_emails":
             df = parse_manualbot_sender_emails(uploaded_file)
@@ -3713,9 +3718,9 @@ def email_sender_uploader():
             df = parse_text_list(uploaded_file, "link")
         elif table_name == "sender_recipients":
             df = parse_text_list(uploaded_file, "recipient_email").drop_duplicates()
-        elif table_name == "sender_subjects":
+        elif table_name == "sender_subjects_2":
             df = parse_text_list(uploaded_file, "subject")
-        elif table_name == "sender_texts":
+        elif table_name == "sender_texts_2":
             df = parse_text_list(uploaded_file, "text")
 
         if df is not None:
@@ -3729,11 +3734,11 @@ def email_sender_uploader():
         if selected_country != "All" and "country" not in df.columns:
             if table_name in [
                 "sender_input_accounts",
-                "sender_hyperlink_text",
+                "sender_hyperlink_text_2",
                 "sender_link",
                 "sender_recipients",
-                "sender_subjects",
-                "sender_texts",
+                "sender_subjects_2",
+                "sender_texts_2",
             ]:
                 df["country"] = selected_country
 
@@ -5438,10 +5443,10 @@ def render_email_sender_stats():
         total_sender_accounts = db_count("sender_input_accounts")
         total_recipients = db_count("sender_recipients")
         total_invalid_recipients = db_count("sender_invalid_recipients")
-        total_available_hyperlinks = db_count("sender_hyperlink_text")
+        total_available_hyperlinks = db_count("sender_hyperlink_text_2")
         total_links = db_count("sender_link")
-        total_subjects = db_count("sender_subjects")
-        total_texts = db_count("sender_texts")
+        total_subjects = db_count("sender_subjects_2")
+        total_texts = db_count("sender_texts_2")
 
         total_processed_range = db_count(
             "sender_processed_accounts",
@@ -5503,7 +5508,7 @@ def render_email_sender_stats():
             limit=1000,
         )
         hyperlink_country = db_group_count(
-            "sender_hyperlink_text",
+            "sender_hyperlink_text_2",
             "country",
             "country IS NOT NULL AND country <> ''",
             (),
@@ -5517,14 +5522,14 @@ def render_email_sender_stats():
             limit=1000,
         )
         subject_country = db_group_count(
-            "sender_subjects",
+            "sender_subjects_2",
             "country",
             "country IS NOT NULL AND country <> ''",
             (),
             limit=1000,
         )
         text_country = db_group_count(
-            "sender_texts",
+            "sender_texts_2",
             "country",
             "country IS NOT NULL AND country <> ''",
             (),

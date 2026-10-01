@@ -1,6 +1,6 @@
 @echo off
 setlocal
-
+set "GIT_ASK_YESNO=false"
 echo Pulling latest code...
 copy bots\settings.json %TEMP%\settings.json.bak /Y
 

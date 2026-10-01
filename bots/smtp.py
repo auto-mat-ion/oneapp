@@ -100,29 +100,6 @@ def update():
         )
         os._exit(0)
 
-        # proc = subprocess.Popen(
-        #     ["cmd.exe", "/c", f'call "{bat_path}"'],
-        #     cwd=str(base_dir),
-        #     stdin=subprocess.PIPE,
-        #     stdout=None,
-        #     stderr=None,
-        #     creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0),
-        #     text=True,
-        # )
-
-        # parent_pid = os.getppid()
-        # try:
-        #     subprocess.run(
-        #         ["taskkill", "/PID", str(parent_pid), "/T", "/F"],
-        #         check=False,
-        #         stdout=subprocess.DEVNULL,
-        #         stderr=subprocess.DEVNULL,
-        #         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-        #     )
-        # except Exception:
-        #     pass
-
-        # os._exit(0)
     except Exception as exc:
         print(f"update() failed: {exc}")
         return False
@@ -213,16 +190,16 @@ elif SERVER_IP in ["51.161.34.220"]:
     SAMPLE_RECIPIENT_EMAIL = ["durwoodstacks100@gmail.com"]
 
 ###
-elif SERVER_IP in ["137.74.115.164"]:
+elif SERVER_IP in ["162.19.26.217"]:
     SAMPLE_RECIPIENT_EMAIL = [
         "marcusfrancis0227@gmail.com",
         "mitestingacc.04@gmail.com",
     ]
 
-elif SERVER_IP in ["193.70.87.230"]:
+elif SERVER_IP in ["162.19.27.8"]:
     SAMPLE_RECIPIENT_EMAIL = ["wrochna1988@gmail.com", "dover.miranach@gmail.com"]
 
-elif SERVER_IP in ["164.132.197.54"]:
+elif SERVER_IP in ["146.59.196.225"]:
     SAMPLE_RECIPIENT_EMAIL = ["aidanmotthews986@gmail.com", "bradley.konsa@gmail.com"]
 
 else:
@@ -279,12 +256,24 @@ LOAD_RETRY_DELAY_SECONDS = 5.0
 CACHE_LOAD_RETRIES = 10
 
 NEW_RECIPIENT_LIST = [
-    "158.69.197.228",
-    "137.74.115.164",
-    "193.70.87.230",
-    "51.38.71.212",
-    "164.132.197.54",
-    "164.132.197.59",
+    "144.217.85.183",
+    "152.228.137.224",
+    "217.182.71.146",
+    "146.59.196.225",
+    "51.254.222.49",
+    "162.19.26.243",
+    "162.19.26.44",
+    "162.19.27.233",
+    "162.19.27.118",
+    "162.19.26.209",
+    "162.19.27.8",
+    "162.19.27.214",
+    "162.19.27.84",
+    "162.19.26.200",
+    "162.19.27.76",
+    "162.19.26.195",
+    "162.19.27.202",
+    "162.19.26.217",
 ]
 
 
@@ -989,13 +978,28 @@ def spin(text: str) -> str:
 
 class ContentManager:
     def __init__(self):
-        self.hyperlinks = self._load("sender_hyperlink_text", "hyperlink_text")
+
         link_table = (
             "sender_link_2" if SERVER_IP in NEW_RECIPIENT_LIST else "sender_link"
         )
+        subject_table = (
+            "sender_subjects_2"
+            if SERVER_IP in NEW_RECIPIENT_LIST
+            else "sender_subjects"
+        )
+        hyperlink_table = (
+            "sender_hyperlink_text_2"
+            if SERVER_IP in NEW_RECIPIENT_LIST
+            else "sender_hyperlink_text"
+        )
+        text_table = (
+            "sender_texts_2" if SERVER_IP in NEW_RECIPIENT_LIST else "sender_texts"
+        )
+
+        self.hyperlinks = self._load(hyperlink_table, "hyperlink_text")
         self.links = self._load(link_table, "link", limit=3000, offset=0)
-        self.subjects = self._load("sender_subjects", "subject")
-        self.texts = self._load("sender_texts", "text")
+        self.subjects = self._load(subject_table, "subject")
+        self.texts = self._load(text_table, "text")
 
         self._idx = {"h": 0, "l": 0, "s": 0, "t": 0}
         self._last_spinner_change = datetime.now()
