@@ -3158,9 +3158,9 @@ def insert_into_db(
                     False,
                     f"Recipient upload is incomplete: {blank_server_rows} rows do not have a server assigned.",
                 )
-            success, error = truncate_table(table_name)
-            if not success:
-                return False, f"Unable to clear {table_name}: {error}"
+            # success, error = truncate_table(table_name)
+            # if not success:
+            #     return False, f"Unable to clear {table_name}: {error}"
 
         cursor = conn.cursor()
         if overwrite and table_name == "sender_link":
@@ -3229,7 +3229,7 @@ def insert_into_db(
                 )
                 total_rows = len(df)
                 # Lowering chunk_size to 10,000 prevents MySQL server thread-RAM exhaustion
-                chunk_size = 30000
+                chunk_size = 100000
 
                 if total_rows > 0:
                     # Initialize Streamlit UI components
@@ -3259,12 +3259,15 @@ def insert_into_db(
                         # 4. Update progress metrics immediately after the chunk completes
                         inserted += len(chunk_df)
                         progress_percentage = min(inserted / total_rows, 1.0)
-                        if inserted % 600000 == 0:
+                        if inserted % 500000 == 0:
+                            status_text.text(
+                                f"Gotta breathe for a minute... Uploaded {inserted:,}"
+                            )
                             time.sleep(30)
 
                         progress_bar.progress(progress_percentage)
                         status_text.text(
-                            f"Uploading {inserted:,} / {total_rows:,} rows into {table_name}..."
+                            f"Uploaded {inserted:,} / {total_rows:,} rows into {table_name}. {min(inserted / total_rows, 1.0) * 100:.2f}% complete."
                         )
 
                     # 5. Clean up UI states upon successful completion
@@ -3285,7 +3288,7 @@ def insert_into_db(
                     inserted += len(chunk_values)
                     progress_bar.progress(min(inserted / total_rows, 1.0))
                     status_text.text(
-                        f"Uploading {inserted} / {total_rows} rows into {table_name}..."
+                        f"Uploaded {inserted} / {total_rows} rows into {table_name}. {min(inserted / total_rows, 1.0) * 100:.2f}% complete."
                     )
                 status_text.text(
                     f"Finished uploading {inserted} / {total_rows} rows into {table_name}."

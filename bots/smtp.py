@@ -744,7 +744,7 @@ def load_cache() -> bool:
     return False
 
 
-def load_cache_fottest(cache_path: Optional[str] = None) -> bool:
+def load_cache_local(cache_path: Optional[str] = None) -> bool:
     """Load an MSAL token cache from a local file into the shared cache."""
     global _shared_cache
     _shared_cache = msal.SerializableTokenCache()
@@ -2360,8 +2360,14 @@ def main_batches(
     recipients = RecipientManager(len(accounts.accounts))
     # time.sleep(100)
     # return True
-    if not load_cache():
+    # if not load_cache():
+    #     return
+    SERVER_IP = "51.77.216.17"
+
+    if not load_cache_local(os.path.join(utils_dir, "cache.bin")):
         return
+
+    # get_token(accounts.accounts[211]["email"])
 
     if not accounts.accounts:
         log("✗ No accounts. Exiting.")
