@@ -2318,7 +2318,12 @@ def main_batches(
 ):
     print("**********************************************************\n\n\nStarting...")
 
-    global BATCH_NUMBER, SENDER_APP, MAX_CONCURRENT_ACCOUNTS, SUBSEQUENT_BATCHES
+    global \
+        BATCH_NUMBER, \
+        SENDER_APP, \
+        MAX_CONCURRENT_ACCOUNTS, \
+        SUBSEQUENT_BATCHES, \
+        SERVER_IP
     SENDER_APP = app_choice
     print(f"Selected {'New' if SENDER_APP == 2 else 'Old'} app.")
 
