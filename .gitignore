@@ -30,3 +30,6 @@ cache_folder/
 alibaba/
 database/recipients/
 database/new_list.txt
+/senders_checker
+bots/settings.json
+/bots/settings

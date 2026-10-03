@@ -166,44 +166,45 @@ if SERVER_IP in [
 else:
     MAX_CONCURRENT_ACCOUNTS = 2
 
-SAMPLE_RECIPIENT_EMAIL = []
+
+SAMPLE_RECIPIENT_EMAIL = ["smtp1@affworker.com", "smtp2@affworker.com"]
 
 
 if SERVER_IP in ["51.91.59.107"]:
-    SAMPLE_RECIPIENT_EMAIL = [
+    SAMPLE_RECIPIENT_EMAIL += [
         "mitestingacc.01@gmail.com",
     ]
 
 elif SERVER_IP in ["162.19.229.114"]:
-    SAMPLE_RECIPIENT_EMAIL = ["mitestingacc.02@gmail.com", "stacho1988@gmail.com"]
+    SAMPLE_RECIPIENT_EMAIL += ["mitestingacc.02@gmail.com", "stacho1988@gmail.com"]
 
 elif SERVER_IP in ["57.129.48.113"]:
-    SAMPLE_RECIPIENT_EMAIL = [
+    SAMPLE_RECIPIENT_EMAIL += [
         "mitestingacc.03@gmail.com",
         "stacash.affiliate@gmail.com",
     ]
 
 elif SERVER_IP in ["164.132.105.244"]:
-    SAMPLE_RECIPIENT_EMAIL = ["andrewsetup17@gmail.com"]
+    SAMPLE_RECIPIENT_EMAIL += ["andrewsetup17@gmail.com"]
 
 elif SERVER_IP in ["51.161.34.220"]:
-    SAMPLE_RECIPIENT_EMAIL = ["durwoodstacks100@gmail.com"]
+    SAMPLE_RECIPIENT_EMAIL += ["durwoodstacks100@gmail.com"]
 
 ###
 elif SERVER_IP in ["162.19.26.217"]:
-    SAMPLE_RECIPIENT_EMAIL = [
+    SAMPLE_RECIPIENT_EMAIL += [
         "marcusfrancis0227@gmail.com",
         "mitestingacc.04@gmail.com",
     ]
 
 elif SERVER_IP in ["162.19.27.8"]:
-    SAMPLE_RECIPIENT_EMAIL = ["wrochna1988@gmail.com", "dover.miranach@gmail.com"]
+    SAMPLE_RECIPIENT_EMAIL += ["wrochna1988@gmail.com", "dover.miranach@gmail.com"]
 
 elif SERVER_IP in ["146.59.196.225"]:
-    SAMPLE_RECIPIENT_EMAIL = ["aidanmotthews986@gmail.com", "bradley.konsa@gmail.com"]
+    SAMPLE_RECIPIENT_EMAIL += ["aidanmotthews986@gmail.com", "bradley.konsa@gmail.com"]
 
 else:
-    SAMPLE_RECIPIENT_EMAIL = []
+    SAMPLE_RECIPIENT_EMAIL = ["smtp1@affworker.com", "smtp2@affworker.com"]
 
 
 VPN_COUNTRY = {
