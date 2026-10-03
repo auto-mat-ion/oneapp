@@ -2599,7 +2599,7 @@ def run_smtp_bot(app_choice: int = 1):
 
                 signal_time = datetime.now(UTC)
                 break
-            if SERVER_IP == "51.91.59.107":
+            if SERVER_IP == "51.91.59.107__":
                 update_schedule_smtp_1()
             time.sleep(60 * 1)
             # update()
