@@ -2368,7 +2368,7 @@ def main_batches(
     # return True
     # if not load_cache():
     #     return
-    SERVER_IP = "51.77.216.17"
+    # SERVER_IP = "51.77.216.17"
 
     if not load_cache_local(os.path.join(utils_dir, "cache.bin")):
         return
