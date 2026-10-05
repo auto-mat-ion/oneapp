@@ -9771,6 +9771,8 @@ def remove_family(new_profile_data):
 
         if len(removed_emails) == 0:
             print(f"{email_address} : No family members to remove")
+            return False, "No family members to remove", driver
+
         else:
             print(f"{email_address} : Removed {len(removed_emails)} emails from family")
 
