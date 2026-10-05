@@ -806,3 +806,18 @@ CREATE TABLE
     action VARCHAR(255) NULL,
     status VARCHAR(255) NULL
   ) ENGINE = InnoDB;
+
+CREATE TABLE
+  IF NOT EXISTS valid_senders (
+    email_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    email_acc VARCHAR(255) NULL,
+  ) ENGINE = InnoDB;
+
+CREATE TABLE
+  IF NOT EXISTS familybot_removed_family_members (
+    id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    server_ip VARCHAR(45) NULL,
+    bot_type VARCHAR(50) NULL,
+    date_time DATETIME NULL,
+    email VARCHAR(255) NULL
+  ) ENGINE = InnoDB;

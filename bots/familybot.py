@@ -320,6 +320,7 @@ AUTO_PAUSE_INTERVAL_SECONDS = 60 * 60
 AUTO_PAUSE_STOP = threading.Event()
 AUTO_PAUSE_THREAD = None
 ACTIVE_DRIVERS = weakref.WeakSet()
+VALID_EMAILS = []
 
 
 def _track_driver(driver):
@@ -740,6 +741,12 @@ def keep_alive(retries=5, delay=3, current_action=None):
                     (server_ip,),
                 )
                 existing_row = cursor.fetchone()
+                if not current_action:
+                    current_action = (
+                        "Running family extractor"
+                        if BOT_TYPE == "family_link_extractor"
+                        else f"running familybot: {PREFERRED_SMS_COUNTRY}"
+                    )
 
                 if existing_row:
                     cursor.execute(
@@ -1509,6 +1516,185 @@ def click_stop_sharing_button(driver, new_profile_data):
         return True
     except:
         return False
+
+
+def get_email_name_pair(driver):
+    """
+    Clicks the start sharing button
+    """
+    try:
+        SHARED_DIV = (By.CSS_SELECTOR, 'div[tabindex="-1"]')
+        ROWS_DIV = (
+            By.CSS_SELECTOR,
+            'div[data-automationid="ListCell"][class="ms-List-cell"][role="presentation"]',
+        )
+        total_shared_div_elements = WebDriverWait(driver, wait_time).until(
+            EC.visibility_of_all_elements_located(SHARED_DIV)
+        )
+
+        subscription_management_element_sibling = total_shared_div_elements[
+            [
+                "manage microsoft family members and safety" in i.text.lower()
+                for i in total_shared_div_elements
+            ].index(True)
+        ]
+        subscription_management_element = (
+            subscription_management_element_sibling.find_element(
+                By.XPATH, "following-sibling::div[1]"
+            )
+        )
+
+        names = [
+            {"name": i.text.split("\n")[1], "email": i.text.split("\n")[2]}
+            for i in subscription_management_element.find_elements(*ROWS_DIV)
+        ]
+
+        return names
+    except:
+        return []
+
+
+def emails_in_family_sub(driver):
+    """
+    Removes members from the family page
+    """
+    try:
+        driver.get("https://account.microsoft.com/family/home/settings")
+
+        OPTION_ELEMET = By.CSS_SELECTOR, 'div[data-bi-id="family-group-list-item"]'
+
+        try:
+            total_start_sharing_buttons = WebDriverWait(driver, wait_time).until(
+                EC.visibility_of_all_elements_located(OPTION_ELEMET)
+            )
+
+            emails = [i.text.split("\n")[3] for i in total_start_sharing_buttons]
+            return True, "Members found that need start sharing", emails
+
+        except Exception as e:
+            return False, f"Exception1 occurred: {str(e)}", []
+    except Exception as e:
+        return False, f"Exception occurred: {str(e)}", []
+
+
+def remove_from_family_page_pro(driver, remove_email):
+    """
+    Removes members from the family page
+    """
+    try:
+        driver.get("https://account.microsoft.com/family/home/settings")
+
+        OPTION_ELEMET = By.CSS_SELECTOR, 'div[data-bi-id="family-group-list-item"]'
+        REMOVE_BTN = (
+            By.CSS_SELECTOR,
+            'button[data-bi-id="member-remove"]',
+        )
+        CONFIM_REMOVE = By.CSS_SELECTOR, 'button[data-bi-id="remove-member-submit"]'
+        REMOVE_DIALOG = By.CSS_SELECTOR, 'div[id*="ModalFocusTrapZone"]'
+
+        try:
+            total_start_sharing_buttons = WebDriverWait(driver, wait_time).until(
+                EC.visibility_of_all_elements_located(OPTION_ELEMET)
+            )
+
+            btn_element = total_start_sharing_buttons[
+                [
+                    i.text.split("\n")[3].lower() == remove_email.lower()
+                    for i in total_start_sharing_buttons
+                ].index(True)
+            ]
+
+            btn_element.click()
+
+        except Exception as e:
+            return False, f"Error clicking member section element: {str(e)}"
+
+        try:
+            remove_from_family_button = WebDriverWait(driver, wait_time).until(
+                EC.element_to_be_clickable(REMOVE_BTN)
+            )
+            time.sleep(1)
+            remove_from_family_button.click()
+            time.sleep(2)
+
+            confirm_remove_button = WebDriverWait(driver, wait_time).until(
+                EC.element_to_be_clickable(CONFIM_REMOVE)
+            )
+            time.sleep(1.5)
+            confirm_remove_button.click()
+            time.sleep(1.5)
+
+            retries = 0
+            while retries < 5:
+                try:
+                    remove_dialog = WebDriverWait(driver, 3).until(
+                        EC.visibility_of_element_located(REMOVE_DIALOG)
+                    )
+                    time.sleep(1)
+                    if remove_dialog.is_displayed():
+                        time.sleep(2)
+
+                    else:
+                        break
+                except:
+                    break
+                retries += 1
+
+        except Exception as e:
+            return False, f"Error clicking remove button for email: {str(e)}"
+
+        return True, "Member removed successfully"
+    except Exception as e:
+        return False, f"Exception occurred: {str(e)}"
+
+
+def handle_remove(driver, new_profile_data):
+    try:
+        global VALID_EMAILS
+        retries = 0
+        while retries < 5:
+            _check_shutdown_requested()
+            status, err, emails = emails_in_family_sub(driver)
+            if status:
+                break
+            else:
+                print(
+                    f"{new_profile_data.get('email')} : Error getting emails in family sub: {err}. Retrying..."
+                )
+            retries += 1
+
+        emails_to_remove = [
+            email
+            for email in emails
+            if email.lower()
+            not in VALID_EMAILS + [new_profile_data.get("email").lower()]
+        ]
+
+        print(f"Removing {len(emails_to_remove)} emails from family subscription")
+
+        successfully_removed_emails = []
+        for email_to_remove in emails_to_remove:
+            retries = 0
+            while retries < 3:
+                _check_shutdown_requested()
+                status, error = remove_from_family_page_pro(driver, email_to_remove)
+                if status:
+                    print(
+                        f"{new_profile_data.get('email')} : Successfully removed {email_to_remove} from family page"
+                    )
+                    successfully_removed_emails.append(email_to_remove)
+                    break
+                else:
+                    print(
+                        f"{new_profile_data.get('email')} : Error removing {email_to_remove} from family page: {error}. Retrying..."
+                    )
+        return True, successfully_removed_emails
+
+    except Exception as e:
+        print(
+            f"{new_profile_data.get('email')} : Exception occurred while removing members: {str(e)}"
+        )
+        return False, 0
 
 
 def remove_from_family_page(driver, new_profile_data):
@@ -5796,7 +5982,7 @@ def mark_card_failed_old(card_details):
             else:
                 failure_reason = "failed on third attempt"
         elif uses == 3:
-            failure_reason = "failed after 4 times"
+            failure_reason = "failed on fourth attempt"
         elif uses == 4:
             if timestamps:
                 elapsed_hrs = (
@@ -5806,9 +5992,9 @@ def mark_card_failed_old(card_details):
                     f"failed on fifth attempt after waiting {elapsed_hrs:.1f} hrs"
                 )
             else:
-                failure_reason = "failed after 4 times"
+                failure_reason = "failed on fifth attempt"
         else:
-            failure_reason = f"failed after {uses + 1} attempts"
+            failure_reason = f"failed on {uses + 1} attempts"
     except:
         failure_reason = "failed"
 
@@ -6539,11 +6725,13 @@ def store_extracted_link(new_profile_data, link, card_details_dict):
         print(f"Error storing extracted link for {email}. Link: {link}\nError: {E}")
 
 
-def store_re_extracted_link(new_profile_data, link):
+def store_re_extracted_link(new_profile_data, link, removed_emails):
     def db_action():
         email = new_profile_data.get("email")
         recovery_email = new_profile_data.get("recovery")
         password = new_profile_data.get("pass")
+
+        times_used = 5 - len(removed_emails)
 
         conn = mysql.connector.connect(
             host=DB_HOST,
@@ -6575,6 +6763,12 @@ def store_re_extracted_link(new_profile_data, link):
             PREFERRED_SMS_COUNTRY,
             "re_extracted",
         )
+
+        insert_removed_members_values = [
+            (SERVER_IP, BOT_TYPE, datetime.now(tz=timezone.utc), i)
+            for i in removed_emails
+        ]
+
         # DELETE RECORDS OF THIS LINK IF EXISTS IN familybot_extracted_family_links AND LINK_STATS TABLES
         cursor.execute(
             "DELETE FROM familybot_extracted_family_links WHERE link = %s",
@@ -6591,11 +6785,19 @@ def store_re_extracted_link(new_profile_data, link):
         #     f"Deleted records for link: {link} from familybot_extracted_family_links_history"
         # )
         cursor.execute("DELETE FROM link_stats WHERE link = %s", (link,))
-        # print(f"Deleted records for link: {link} from link_stats")
+        # print(f"Deleted record for link_stats table: {link}")
+
+        cursor.execute(
+            "INSERT INTO link_stats(server_ip, bot_type, date_time, link, times_used) VALUES(%s,%s,%s,%s,%s)",
+            (SERVER_IP, BOT_TYPE, datetime.now(tz=timezone.utc), link, times_used),
+        )
+
+        # print(f"Inserted records into link-stats: {link} - times-used:{times_used}")
         cursor.execute(
             "INSERT INTO familybot_extracted_family_links (server_ip, bot_type, date_time, email, pass, recovery, link, country) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
             insert_values,
         )
+
         # print(f"Inserted record for link: {link} into familybot_extracted_family_links")
         cursor.execute(
             "INSERT INTO familybot_extracted_family_links_history (server_ip, bot_type, date_time, email, pass, recovery, link, country, card_number) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
@@ -6604,13 +6806,18 @@ def store_re_extracted_link(new_profile_data, link):
         # print(
         #     f"Inserted record for link: {link} into familybot_extracted_family_links_history"
         # )
-        conn.commit()
-        # print(f"Committed changes for link: {link} into DB")
-        if conn is not None:
-            # print(f"Closing DB connection for link: {link}")
-            conn.close()
 
-        # print(f"DB connection closed for link: {link}")
+        for i in insert_removed_members_values:
+            cursor.execute(
+                "INSERT INTO familybot_removed_family_members (server_ip, bot_type, date_time, email) VALUES (%s, %s, %s, %s)",
+                i,
+            )
+            # print(f"Inserted record for insert_removed_members_values: {i[-1]}")
+        conn.commit()
+        print(f"{email} : Committed changes for link: {link} into DB")
+
+        if conn is not None:
+            conn.close()
 
         return True
 
@@ -9430,22 +9637,25 @@ def remove_family(new_profile_data):
         )
         global PREFERRED_SMS_COUNTRY
         PREFERRED_SMS_COUNTRY = new_profile_data.get("country").strip()
-
+        _check_shutdown_requested()
         connect_new_random()
 
         email_address = new_profile_data.get("email").strip()
         password = new_profile_data.get("pass").strip()
         recovery = new_profile_data.get("recovery").strip()
 
+        _check_shutdown_requested()
         MICROSOFT_PREMIUM_URL = (
             "https://account.microsoft.com/services/microsoft365/details"
         )
 
+        _check_shutdown_requested()
         retries = 0
         driver_success = False
         print(f"{email_address} : Initializing browser driver")
         while (retries < 3) and (not driver_success):
             try:
+                _check_shutdown_requested()
                 status, driverdata, error = initialize_new_profile_driver()
                 if status:
                     driver, user_path, proxy = driverdata.values()
@@ -9461,6 +9671,7 @@ def remove_family(new_profile_data):
                 retries += 1
 
         if not driver_success:
+            _check_shutdown_requested()
             print(f"{email_address} : Error initializing new browser driver")
             new_profile_logger(
                 email_address,
@@ -9469,12 +9680,14 @@ def remove_family(new_profile_data):
             )
             return False, "Error initializing new browser driver instance"
         if not enter_email(driver=driver, email_address=email_address):
+            _check_shutdown_requested()
             print(f"{email_address} : Error entering email")
             new_profile_logger(email_address, "FAIL", "Error loading login page")
             return False, "Error loading login page"
 
         time.sleep(1)
         if not click_next_button(driver=driver):
+            _check_shutdown_requested()
             print(f"{email_address} : Error clicking next button after entering email")
             new_profile_logger(
                 email_address, "FAIL", "Error clicking next button after entering email"
@@ -9483,6 +9696,7 @@ def remove_family(new_profile_data):
         time.sleep(1)
 
         if not enter_recovery_email_2(driver=driver, recovery_email=recovery):
+            _check_shutdown_requested()
             print(f"{email_address} : Error entering recovery email")
             new_profile_logger(
                 email_address,
@@ -9494,6 +9708,7 @@ def remove_family(new_profile_data):
         bring_to_front(driver)
         time.sleep(1)
 
+        _check_shutdown_requested()
         sss = click_password_next_button(driver)
         if not sss:
             os.makedirs("screenshots", exist_ok=True)
@@ -9508,8 +9723,10 @@ def remove_family(new_profile_data):
             )
             return False, "Error clicking next after entering recovery email"
 
+        _check_shutdown_requested()
         status, code = wait_for_code_by_recovery_mail(recovery)
         time.sleep(3)
+        _check_shutdown_requested()
         if not status:
             print(f"{email_address} : Error getting code from tempmail")
             new_profile_logger(
@@ -9521,6 +9738,7 @@ def remove_family(new_profile_data):
         else:
             print(f"{email_address} : Code received from tempmail: {code}")
 
+        _check_shutdown_requested()
         if not enter_code_and_click_next_after_pass_change(driver, code):
             print(f"{email_address} : Error entering email verification code")
             new_profile_logger(
@@ -9530,29 +9748,43 @@ def remove_family(new_profile_data):
             )
             return False, "Error entering email verification code"
 
+        _check_shutdown_requested()
         print(f"{email_address} : Finalizing signin")
         close_other_tabs(driver)
+        _check_shutdown_requested()
+        click_next_if_is_updating_terms_page(driver)
         click_stay_signed_in_button(driver)
 
+        _check_shutdown_requested()
         driver.get(MICROSOFT_PREMIUM_URL)
         time.sleep(1)
         # return driver
-        if click_share_dropdown_button(driver):
-            print(f"{email_address} : Clicked share dropdown button")
+        # if click_share_dropdown_button(driver):
+        #     print(f"{email_address} : Clicked share dropdown button")
 
-        if not remove_from_family_page(driver, new_profile_data):
+        _check_shutdown_requested()
+        status, removed_emails = handle_remove(driver, new_profile_data)
+
+        if not status:
+            print(f"{email_address} : Unable to remove family members")
             return False, "Error clicking remove from family button", driver
 
-        print(f"{email_address} : Clicked remove from family button for all members")
+        if len(removed_emails) == 0:
+            print(f"{email_address} : No family members to remove")
+        else:
+            print(f"{email_address} : Removed {len(removed_emails)} emails from family")
 
+        _check_shutdown_requested()
         status, link = get_share_link(driver, new_profile_data)
+        _check_shutdown_requested()
         if status:
             print(f"{email_address} : Share link retrieved successfully: {link}")
         else:
             print(f"{email_address} : Error retrieving share link: {link}")
             return False, "Error retrieving share link", driver
 
-        if not store_re_extracted_link(new_profile_data, link):
+        _check_shutdown_requested()
+        if not store_re_extracted_link(new_profile_data, link, removed_emails):
             print(f"{email_address} : Error updating removal status in database")
             return False, "Error updating removal status in database", driver
         else:
@@ -9566,7 +9798,6 @@ def remove_family(new_profile_data):
         try:
             driver.quit()
             processed_extractor_email(new_profile_data)
-            # print("=" * 50)
             pass
         except:
             pass
@@ -9624,6 +9855,29 @@ def get_new_family_extractor_data():
             "recovery": recovery,
             "country": country,
         }
+
+    return execute_db_action(
+        action=extract_email_from_db,
+        retries=5,
+        delay=5,
+    )
+
+
+def load_valid_senders_list():
+    def extract_email_from_db():
+        global VALID_EMAILS
+        conn = mysql.connector.connect(
+            host=DB_HOST, user=DB_USER, password=DB_PASSWORD, database=DB_NAME
+        )
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT email FROM oneapp.valid_senders;",
+        )
+        row = cursor.fetchall()
+
+        VALID_EMAILS = [i[0].lower() for i in row]
+        conn.close()
+        return True
 
     return execute_db_action(
         action=extract_email_from_db,
@@ -10221,6 +10475,7 @@ def run_familybot_share():
     print(f"Starting Sharebot for country: {PREFERRED_SMS_COUNTRY} and IP: {SERVER_IP}")
     while True:
         status, new_profile_data = get_new_profile_data_from_history()
+        keep_alive()
         if status:
             d = share_premium(new_profile_data)
             # time.sleep(30)
@@ -10236,10 +10491,29 @@ def run_family_link_extractor():
     global BOT_TYPE
     BOT_TYPE = "family_link_extractor"
     print(f"Starting Family extractor for IP: {SERVER_IP}")
+    if not load_valid_senders_list():
+        print("Failed to load valid senders list.")
+        return
+
     while True:
+        if SHUTDOWN_REQUESTED:
+            return True
         status, new_profile_data = get_new_family_extractor_data()
         if status:
             d = remove_family(new_profile_data)
         else:
             print("No unshared family acc in database...")
             break
+
+
+# details = (
+#     "MichaelHaleF297497@outlook.com	nbukwc66854	ekmkxid441@mailkrank.com	italy"
+# )
+# new_profile_data = {
+#     "email": details.split("\t")[0],
+#     "pass": details.split("\t")[1],
+#     "recovery": details.split("\t")[2],
+#     "country": details.split("\t")[3],
+# }
+
+# remove_family(new_profile_data)

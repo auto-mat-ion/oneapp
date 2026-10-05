@@ -6841,6 +6841,7 @@ def main():
                             "shutdown",
                             "run familybot",
                             "run hotmailbot",
+                            "run family extractor",
                             "update",
                         ],
                         key="fhm_preset_action_sel",
@@ -6853,6 +6854,7 @@ def main():
                         "pause",
                         "resume",
                         "shutdown",
+                        "run family extractor",
                         "update",
                     }:
                         preset_country = st.selectbox(
@@ -6915,7 +6917,13 @@ def main():
                             preset_checked
                             and st.session_state.fhm_preset_action != "—"
                             and st.session_state.fhm_preset_action
-                            not in {"pause", "resume", "shutdown", "update"}
+                            not in {
+                                "pause",
+                                "resume",
+                                "shutdown",
+                                "run family extractor",
+                                "update",
+                            }
                         ):
                             st.write(
                                 st.session_state.fhm_preset_country
@@ -6956,7 +6964,13 @@ def main():
 
                             if (
                                 action_value
-                                not in {"pause", "resume", "shutdown", "update"}
+                                not in {
+                                    "pause",
+                                    "resume",
+                                    "shutdown",
+                                    "run family extractor",
+                                    "update",
+                                }
                                 and st.session_state.fhm_preset_country != "—"
                             ):
                                 country_value = st.session_state.fhm_preset_country
@@ -6978,6 +6992,8 @@ def main():
                                     formatted_action = f"run_familybot"
                                 elif action_value == "run hotmailbot":
                                     formatted_action = f"run_hotmailbot"
+                                elif action_value == "run family extractor":
+                                    formatted_action = "run_familyextractor"
                                 else:
                                     continue
 

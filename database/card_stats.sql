@@ -21,3 +21,22 @@ WHERE
     country = 'poland2'
 GROUP BY
     1;
+
+-- CREATE VIEW `familybot_failed_cards_stats_poland` AS
+-- SELECT
+--     CASE
+--         WHEN reason_for_fail LIKE '%failed on fifth attempt%' 
+--         OR reason_for_fail LIKE '%failed after 4 times%' THEN '5th'
+--         WHEN reason_for_fail LIKE '%failed on fourth%' THEN '4th'
+--         WHEN reason_for_fail LIKE '%failed on third attempt %' THEN '3th'
+--         WHEN reason_for_fail LIKE '%failed on second attempt%' THEN '2th'
+--         WHEN reason_for_fail LIKE '%failed on first attempt%' THEN '1th'
+--         ELSE 'Undefined attempt'
+--     END AS attempt,
+--     COUNT(*)
+-- FROM
+--     oneapp.familybot_failed_cards
+-- WHERE
+--     country = 'poland'
+-- GROUP BY
+--     1;

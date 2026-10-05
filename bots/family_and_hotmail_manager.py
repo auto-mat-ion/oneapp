@@ -248,7 +248,7 @@ def keep_alive(retries=5, delay=3, current_action="waiting for signal"):
 
 def runner():
     """Poll for a server action and run the requested bot."""
-    from bots.familybot import run_familybot
+    from bots.familybot import run_familybot, run_family_link_extractor
     from bots.hotmailbot import run_hotmailbot
 
     print(
@@ -282,6 +282,23 @@ def runner():
             keep_alive(current_action=current_action)
             print(
                 f"Familybot finished for country: {country}\n ============================================================================="
+            )
+            print(
+                "\n\n============================================================================\nWaiting for a signal..."
+            )
+        if status and action == "run_familyextractor":
+            print(
+                f"Signal received: {action}\n ============================================================================="
+            )
+            result = run_family_link_extractor()
+            current_action = (
+                "No available cards: waiting for signal"
+                if result == "NO_CARDS"
+                else "waiting for signal"
+            )
+            keep_alive(current_action=current_action)
+            print(
+                f"Family extractor finished for country: {country}\n ============================================================================="
             )
             print(
                 "\n\n============================================================================\nWaiting for a signal..."
