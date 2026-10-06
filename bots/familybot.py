@@ -10390,7 +10390,11 @@ def run_familybot(country=None, concurrent=1):
         CONCURRENT_WINDOWS, \
         initialize_barrier, \
         save_click_barrier, \
-        get_premium_start_barrier
+        get_premium_start_barrier, \
+        BOT_TYPE
+
+    BOT_TYPE = "familybot"
+
     if country:
         PREFERRED_SMS_COUNTRY = str(country).lower()
         CHANGE_COUNTRY = (
