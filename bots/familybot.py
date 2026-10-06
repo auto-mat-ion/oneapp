@@ -10512,7 +10512,7 @@ def run_family_link_extractor():
     SHUTDOWN_REQUESTED = False
     PAUSE_REQUESTED = False
     _start_shutdown_watcher()
-    _start_auto_pause_timer()
+    # _start_auto_pause_timer()
 
     global BOT_TYPE
     BOT_TYPE = "family_link_extractor"
