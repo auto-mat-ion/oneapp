@@ -1564,11 +1564,13 @@ def emails_in_family_sub(driver):
         OPTION_ELEMET = By.CSS_SELECTOR, 'div[data-bi-id="family-group-list-item"]'
 
         try:
-            total_start_sharing_buttons = WebDriverWait(driver, wait_time).until(
+            total_start_sharing_buttons = WebDriverWait(driver, wait_time * 3).until(
                 EC.visibility_of_all_elements_located(OPTION_ELEMET)
             )
+            time.sleep(2)
 
             emails = [i.text.split("\n")[3] for i in total_start_sharing_buttons]
+
             return True, "Members found that need start sharing", emails
 
         except Exception as e:
