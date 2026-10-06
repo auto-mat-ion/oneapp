@@ -1656,6 +1656,10 @@ def handle_remove(driver, new_profile_data):
             _check_shutdown_requested()
             status, err, emails = emails_in_family_sub(driver)
             if status:
+                print(
+                    f"{new_profile_data.get('email')} : Found {len(emails)} emails in family sub"
+                )
+
                 break
             else:
                 print(
@@ -1670,7 +1674,9 @@ def handle_remove(driver, new_profile_data):
             not in VALID_EMAILS + [new_profile_data.get("email").lower()]
         ]
 
-        print(f"Removing {len(emails_to_remove)} emails from family subscription")
+        print(
+            f"Found {len(emails_to_remove)} unsuccessfull family members that can be removed. Removing..."
+        )
 
         successfully_removed_emails = []
         for email_to_remove in emails_to_remove:
@@ -9525,7 +9531,7 @@ def share_premium(new_profile_data):
             new_profile_logger(
                 email_address,
                 "FAIL",
-                "Error getting code from tempmail. Timed out without receiving code",
+                "Sharing-premium Error. Error getting code from tempmail. Timed out without receiving code",
             )
             return False, "Error getting code from tempmail. Timeout"
         else:
@@ -9732,7 +9738,7 @@ def remove_family(new_profile_data):
             new_profile_logger(
                 email_address,
                 "FAIL",
-                "Error getting code from tempmail. Timed out without receiving code",
+                "Remove_family_error: Error getting code from tempmail. Timed out without receiving code",
             )
             return False, "Error getting code from tempmail. Timeout"
         else:
@@ -10486,10 +10492,26 @@ def run_familybot_share():
             break
 
 
+@_run_lifecycle
 def run_family_link_extractor():
     """
     Creates threads and signs in simultaneously
     """
+    global \
+        PREFERRED_SMS_COUNTRY, \
+        SHUTDOWN_REQUESTED, \
+        PAUSE_REQUESTED, \
+        CHANGE_COUNTRY, \
+        CONCURRENT_WINDOWS, \
+        initialize_barrier, \
+        save_click_barrier, \
+        get_premium_start_barrier
+
+    SHUTDOWN_REQUESTED = False
+    PAUSE_REQUESTED = False
+    _start_shutdown_watcher()
+    _start_auto_pause_timer()
+
     global BOT_TYPE
     BOT_TYPE = "family_link_extractor"
     print(f"Starting Family extractor for IP: {SERVER_IP}")
@@ -10506,16 +10528,3 @@ def run_family_link_extractor():
         else:
             print("No unshared family acc in database...")
             break
-
-
-# details = (
-#     "MichaelHaleF297497@outlook.com	nbukwc66854	ekmkxid441@mailkrank.com	italy"
-# )
-# new_profile_data = {
-#     "email": details.split("\t")[0],
-#     "pass": details.split("\t")[1],
-#     "recovery": details.split("\t")[2],
-#     "country": details.split("\t")[3],
-# }
-
-# remove_family(new_profile_data)
