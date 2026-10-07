@@ -2879,6 +2879,8 @@ def get_undistributed_sender_accounts():
         exclude_tables=[
             "sender_input_accounts",
             "sender_failed_accounts",
+            "familybot_removed_family_members",
+            "invalid_senders",
             # "sender2_failed_accounts",
             # "manualbot_sender_emails",
         ]
