@@ -821,3 +821,9 @@ CREATE TABLE
     date_time DATETIME NULL,
     email VARCHAR(255) NULL
   ) ENGINE = InnoDB;
+
+  CREATE TABLE
+  IF NOT EXISTS invalid_senders (
+    email_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    email VARCHAR(255) NULL,
+  ) ENGINE = InnoDB;

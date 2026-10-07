@@ -2917,6 +2917,10 @@ def count_unassigned_sender_accounts(return_country_distribution=False):
         assigned_emails = {row[0] for row in cursor.fetchall() if row and row[0]}
         cursor.execute("SELECT LOWER(email) FROM sender_failed_accounts")
         failed_emails = {row[0] for row in cursor.fetchall() if row and row[0]}
+        cursor.execute("SELECT LOWER(email) FROM invalid_senders")
+        failed_emails_ = {row[0] for row in cursor.fetchall() if row and row[0]}
+        cursor.execute("SELECT LOWER(email) FROM familybot_removed_family_members")
+        failed_emails__ = {row[0] for row in cursor.fetchall() if row and row[0]}
 
         available_emails = [
             email
@@ -2924,6 +2928,8 @@ def count_unassigned_sender_accounts(return_country_distribution=False):
             if email
             and email.lower() not in assigned_emails
             and email.lower() not in failed_emails
+            and email.lower() not in failed_emails_
+            and email.lower() not in failed_emails__
         ]
         unassigned_count = len(available_emails)
 
