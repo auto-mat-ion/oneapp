@@ -10340,6 +10340,8 @@ def initialize(new_profile_data):
             "Poland",
             "poland2",
             "Poland2",
+            "cyprus",
+            "Cyprus",
         ]:
             status, error = get__premium_italy(driver, new_profile_data)
         else:
