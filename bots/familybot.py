@@ -6072,7 +6072,7 @@ def mark_card_failed(card_details):
                     else:
                         failure_reason = "failed on third attempt"
                 elif uses == 3:
-                    failure_reason = "failed after 4 times"
+                    failure_reason = "failed on fourth attempt"
                 elif uses == 4:
                     if timestamps:
                         elapsed_hrs = (
@@ -6080,7 +6080,7 @@ def mark_card_failed(card_details):
                         ).total_seconds() / 3600.0
                         failure_reason = f"failed on fifth attempt after waiting {elapsed_hrs:.1f} hrs"
                     else:
-                        failure_reason = "failed after 4 times"
+                        failure_reason = "failed on fifth attempt"
                 else:
                     failure_reason = f"failed after {uses + 1} attempts"
             except:
