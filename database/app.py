@@ -3237,7 +3237,7 @@ def insert_into_db(
                 )
                 total_rows = len(df)
                 # Lowering chunk_size to 10,000 prevents MySQL server thread-RAM exhaustion
-                chunk_size = 100000
+                chunk_size = 10000
 
                 if total_rows > 0:
                     # Initialize Streamlit UI components
@@ -3267,11 +3267,11 @@ def insert_into_db(
                         # 4. Update progress metrics immediately after the chunk completes
                         inserted += len(chunk_df)
                         progress_percentage = min(inserted / total_rows, 1.0)
-                        if inserted % 500000 == 0:
-                            status_text.text(
-                                f"Gotta breathe for a minute... Uploaded {inserted:,}"
-                            )
-                            time.sleep(30)
+                        # if inserted % 500000 == 0:
+                        #     status_text.text(
+                        #         f"Gotta breathe for a minute... Uploaded {inserted:,}"
+                        #     )
+                        #     time.sleep(30)
 
                         progress_bar.progress(progress_percentage)
                         status_text.text(
@@ -4719,6 +4719,7 @@ def load_familybot_return_preview(country):
         return [], "Unable to connect to database."
 
     cursor = None
+
     try:
         cursor = conn.cursor()
         cursor.execute(
@@ -4731,21 +4732,34 @@ def load_familybot_return_preview(country):
             return [], None
 
         row_count = len(source_rows)
+        # name_country = country
+        # if country == "cyprus":
+        #     name_country = "united states"
+        country = "italy"
+        country = "cyprus"
+
         name_and_address_country = (
             "poland" if country.lower() == "poland2" else country.lower()
+        )
+        name_country = (
+            "poland"
+            if country.lower() == "poland2"
+            else "united states"
+            if country.lower() == "cyprus"
+            else country.lower()
         )
         cursor.execute(
             "SELECT firstnames FROM oneapp.familybot_first_names "
             "WHERE country = %s AND firstnames IS NOT NULL AND TRIM(firstnames) <> '' "
             "ORDER BY RAND() LIMIT %s",
-            (name_and_address_country, row_count),
+            (name_country, row_count),
         )
         first_names = [row[0] for row in cursor.fetchall()]
         cursor.execute(
             "SELECT surnames FROM oneapp.familybot_surnames "
             "WHERE country = %s AND surnames IS NOT NULL AND TRIM(surnames) <> '' "
             "ORDER BY RAND() LIMIT %s",
-            (name_and_address_country, row_count),
+            (name_country, row_count),
         )
         surnames = [row[0] for row in cursor.fetchall()]
 
