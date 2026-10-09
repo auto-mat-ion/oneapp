@@ -3452,6 +3452,7 @@ def general_uploader():
         "Sweden",
         "United Kingdom",
         "Italy",
+        "Cyprus",
     ]
     if table_name == "familybot_card_details":
         country_options = [
@@ -3461,6 +3462,7 @@ def general_uploader():
             "Sweden",
             "United Kingdom",
             "Italy",
+            "Cyprus",
         ]
 
     selected_country = None
@@ -3612,6 +3614,7 @@ def email_sender_uploader():
         "Sweden",
         "United Kingdom",
         "Italy",
+        "Cyprus",
     ]
 
     # Initialize session state keys at function start
@@ -4905,6 +4908,7 @@ def render_familybot_return_section():
         "Poland",
         "Poland2",
         "Italy",
+        "Cyprus",
         "Sweden",
         "United Kingdom",
         "United States",
@@ -6867,7 +6871,7 @@ def main():
                     }:
                         preset_country = st.selectbox(
                             "Preset Country",
-                            ["—", "poland", "poland2", "sweden", "italy"],
+                            ["—", "poland", "poland2", "sweden", "italy", "Cyprus"],
                             key="fhm_preset_country_sel",
                             label_visibility="collapsed",
                         )
