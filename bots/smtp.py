@@ -1405,7 +1405,7 @@ class RecipientManager:
                     "SELECT recipient_email FROM sender_recipients "
                     "WHERE server_ip = %s AND COALESCE(country, '') = %s "
                     "ORDER BY recipient_email "
-                    "LIMIT 1000000 offset 100000"
+                    "LIMIT 1000000 offset 0"
                 )
                 params = [SERVER_IP, COUNTRY]
 
