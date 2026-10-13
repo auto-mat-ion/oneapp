@@ -2817,7 +2817,7 @@ def main_batches(
             if (
                 round_idx < SUBSEQUENT_BATCHES
                 and BATCH_WAIT_TIME > 0
-                and round_idx % 3 == 0
+                and (round_idx + 1) % 3 == 0
                 and round_idx > 0
             ):
                 log(f"Waiting {BATCH_WAIT_TIME:.1f} minutes before next batch...")
