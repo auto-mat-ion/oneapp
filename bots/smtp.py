@@ -1210,11 +1210,12 @@ def Content_updator():
         hyperlink_groups = _split_content_evenly(hyperlinks, len(links))
         subject_groups = _split_content_evenly(subjects, len(links))
         text_groups = _split_content_evenly(texts, len(links))
-
+        first_run = True
         for index, link in enumerate(links):
-            if index == 0:
+            if index < 2 and first_run:
                 continue  # Skip the first link to avoid overwriting existing content in the database
 
+            first_run = False
             tracker_content = {
                 "link": link,
                 "hyperlinks": hyperlink_groups[index],
@@ -1278,7 +1279,7 @@ def content_syncer():
                 "WHERE date_time >= %s AND date_time <= %s "
                 "ORDER BY date_time DESC, action_id DESC LIMIT 1",
                 (
-                    now_utc - timedelta(minutes=2),
+                    now_utc - timedelta(minutes=10),
                     now_utc,
                 ),
             )
@@ -1840,8 +1841,6 @@ def process_account_batch_looper(
 
         if result.get("sent"):
             total_sent += result["sent"]
-
-        time.sleep(random.uniform(1, 2))
 
     return result
 
@@ -2707,7 +2706,6 @@ def main_batches(
     ]
 
     round_idx = 0
-    batch_wait_time = 30
     while round_idx <= SUBSEQUENT_BATCHES:
         if _shutdown.is_set() and _shutdown_reason:
             log("Shutdown: stopping batch rounds. Reason: " + _shutdown_reason)
@@ -2748,7 +2746,7 @@ def main_batches(
                     break
                 futures[
                     executor.submit(
-                        process_account_batch_looper,
+                        process_account_batch,
                         state,
                         recipients,
                         content,
@@ -2816,11 +2814,17 @@ def main_batches(
                 log("No recipients left after batch round.")
                 break
 
-            if round_idx < SUBSEQUENT_BATCHES and BATCH_WAIT_TIME > 0:
+            if (
+                round_idx < SUBSEQUENT_BATCHES
+                and BATCH_WAIT_TIME > 0
+                and round_idx % 3 == 0
+                and round_idx > 0
+            ):
                 log(f"Waiting {BATCH_WAIT_TIME:.1f} minutes before next batch...")
                 _shutdown.wait(BATCH_WAIT_TIME * 60)
                 if _shutdown.is_set():
                     log("Shutdown: stopping batch rounds. Reason: " + _shutdown_reason)
+
                     continue
 
         round_idx += 1
@@ -2913,4 +2917,4 @@ def run_smtp_bot(app_choice: int = 1):
 # content_manager = ContentManager()
 
 # SERVER_IP = "1.1.10.10"
-main_batches()
+# main_batches()
