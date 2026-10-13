@@ -2549,10 +2549,10 @@ def main_batches(
         SUBSEQUENT_BATCHES, \
         SERVER_IP
     SENDER_APP = app_choice
-    print(f"Selected {'New' if SENDER_APP == 2 else 'Old'} app.")
+    log(f"Selected {'New' if SENDER_APP == 2 else 'Old'} app.")
 
     BATCH_NUMBER = str(batch_number)
-    print(f"Selected batch: {BATCH_NUMBER}")
+    log(f"Selected batch: {BATCH_NUMBER}")
     SUBSEQUENT_BATCHES = 125
 
     time.sleep(5)
@@ -2592,7 +2592,7 @@ def main_batches(
     # if not load_cache():
     #     return
     # SERVER_IP = "51.77.216.17"
-    print("Loading cache from local file...")
+    log("Loading cache from local file...")
     if not load_cache_local(os.path.join(utils_dir, "cache.bin")):
         return
 
@@ -2600,8 +2600,8 @@ def main_batches(
     content = ContentManager()
     start_content_runtime_updator(content)
     while content.links == []:
-        print("Waiting for content sync")
-        time.sleep(20)
+        log("Waiting for content sync")
+        time.sleep(10)
 
     # get_token(accounts.accounts[211]["email"])
 
