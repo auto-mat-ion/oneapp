@@ -148,11 +148,12 @@ CLIENT_ID = str(
 )
 SPINNER_TIME = float(_EMAIL_SENDER_SETTINGS.get("SPINNER_TIME", 15))
 # VPN_COUNTRY = _EMAIL_SENDER_SETTINGS.get("VPN_COUNTRY", "poland").lower()
-BATCH_WAIT_TIME = 0
+BATCH_WAIT_TIME = 30
 MAX_RUNTIME_SECONDS = 20 * 60 * 60
 NEXT_RUN_WAIT_TIME = 4 * 60 * 60
 STAGGER_ = 3
 SUBSEQUENT_BATCHES = 125
+EMAIL_ROUNDS = 10
 
 # if SERVER_IP in [
 #     "51.77.216.17",
@@ -1400,7 +1401,7 @@ class RecipientManager:
                     "SELECT recipient_email FROM sender_recipients "
                     "WHERE server_ip = %s AND COALESCE(country, '') = %s "
                     "ORDER BY recipient_email "
-                    "LIMIT 1000000 offset 0"
+                    "LIMIT 1000000 offset 70000"
                 )
                 params = [SERVER_IP, COUNTRY]
 
@@ -1805,6 +1806,41 @@ class AccountState:
         self.started = False
 
 
+def process_account_batch_looper(
+    state: AccountState,
+    recipients: "RecipientManager",
+    content: "ContentManager",
+    account_recipient_manager: AccountsRecipientManager,
+) -> Dict:
+    total_sent = 0
+
+    for i in range(EMAIL_ROUNDS):
+        # process account 10 times if everything ok, keeping track of sent count and failed status. if failed, break and return the status, else continue to next iteration. if sent count is 0, break and return the status. if completed, break and return the status. if shutdown, break and return the status.
+        # The 10 rounds are not for fail mitigation. They ensure sending 10 times the batch size of emails per account, as per the EMAIL_ROUNDS constant. The loop should not exit early, but run all 10 rounds.
+        # Exit only in case of error, shutdown, or if the account has completed its sending quota.
+        result = process_account_batch(
+            state, recipients, content, account_recipient_manager
+        )
+
+        if result.get("failed") or result.get("skipped"):
+            return result
+
+        if state.sent == 0:
+            log(f"  - {_short(state.account['email'])}: no emails sent; skipping")
+            return {"skipped": True}
+        if state.completed:
+            log(f"  - {_short(state.account['email'])}: completed sending")
+            return result
+        if _shutdown.is_set():
+            log(f"  - {_short(state.account['email'])}: shutdown initiated; skipping")
+            return {"skipped": True}
+
+        if result.get("sent"):
+            total_sent += result["sent"]
+
+    return result
+
+
 def process_account_batch(
     state: AccountState,
     recipients: "RecipientManager",
@@ -1960,10 +1996,17 @@ def process_account_batch(
         if state.batch_round == 0:
             delay = random.uniform(BATCH_DELAY_MIN, BATCH_DELAY_MAX)
             if _shutdown.wait(delay):
-                return {"skipped": True}
+                return {
+                    "sent": len(batch),
+                    "batch_success": len(batch),
+                    "batch_fail": 0,
+                    "label": label,
+                }
+
+                # return {"skipped": True}
 
         state.batch_round += 1
-        if state.batch_round > SUBSEQUENT_BATCHES:
+        if state.batch_round > EMAIL_ROUNDS:
             state.completed = True
             # _log_account_status(True)
             return {
@@ -1973,6 +2016,18 @@ def process_account_batch(
                 "batch_fail": 0,
                 "label": label,
             }
+
+        #  state.batch_round += 1
+        # if state.batch_round > SUBSEQUENT_BATCHES:
+        #     state.completed = True
+        #     # _log_account_status(True)
+        #     return {
+        #         "completed": True,
+        #         "sent": len(batch),
+        #         "batch_success": len(batch),
+        #         "batch_fail": 0,
+        #         "label": label,
+        #     }
 
         return {
             "sent": len(batch),
@@ -2540,13 +2595,14 @@ def main_batches(
     app_choice: int = 1,
     signal_timestamp: Optional[datetime] = None,
 ):
-    print("**********************************************************\n\n\nStarting...")
+    log("**********************************************************\n\n\nStarting...")
 
     global \
         BATCH_NUMBER, \
         SENDER_APP, \
         MAX_CONCURRENT_ACCOUNTS, \
         SUBSEQUENT_BATCHES, \
+        EMAIL_ROUNDS, \
         SERVER_IP
     SENDER_APP = app_choice
     log(f"Selected {'New' if SENDER_APP == 2 else 'Old'} app.")
@@ -2554,6 +2610,7 @@ def main_batches(
     BATCH_NUMBER = str(batch_number)
     log(f"Selected batch: {BATCH_NUMBER}")
     SUBSEQUENT_BATCHES = 125
+    EMAIL_ROUNDS = 10
 
     time.sleep(5)
 
@@ -2587,10 +2644,7 @@ def main_batches(
 
     log("Loading recipients. Please wait...")
     recipients = RecipientManager(len(accounts.accounts))
-    # time.sleep(100)
-    # return True
-    # if not load_cache():
-    #     return
+
     # SERVER_IP = "51.77.216.17"
     log("Loading cache from local file...")
     if not load_cache_local(os.path.join(utils_dir, "cache.bin")):
@@ -2602,8 +2656,6 @@ def main_batches(
     while content.links == []:
         log("Waiting for content sync")
         time.sleep(10)
-
-    # get_token(accounts.accounts[211]["email"])
 
     if not accounts.accounts:
         log("✗ No accounts. Exiting.")
@@ -2650,7 +2702,7 @@ def main_batches(
     ]
 
     round_idx = 0
-    batch_wait_time = 45
+    batch_wait_time = 30
     while round_idx <= SUBSEQUENT_BATCHES:
         if _shutdown.is_set() and _shutdown_reason:
             log("Shutdown: stopping batch rounds. Reason: " + _shutdown_reason)
@@ -2662,9 +2714,6 @@ def main_batches(
 
         if round_idx > 0:
             MAX_CONCURRENT_ACCOUNTS = 1
-
-            # log(f"Waiting for {batch_wait_time:.1f}s before starting batch...")
-            # time.sleep(batch_wait_time)
 
         log(
             f"Starting batch {round_idx + 1}/{SUBSEQUENT_BATCHES + 1} || Threads: {MAX_CONCURRENT_ACCOUNTS}"
@@ -2694,7 +2743,7 @@ def main_batches(
                     break
                 futures[
                     executor.submit(
-                        process_account_batch,
+                        process_account_batch_looper,
                         state,
                         recipients,
                         content,
@@ -2840,10 +2889,10 @@ def run_smtp_bot(app_choice: int = 1):
 
                 signal_time = datetime.now(UTC)
                 break
-            if SERVER_IP == "51.91.59.107":
-                update_schedule_smtp_1()
+            # if SERVER_IP == "51.91.59.107":
+            #     # pass
+            #     update_schedule_smtp_1()
             time.sleep(60 * 1)
-            # update()
 
         log(f"Run signal received for batch {batch_number}. Preparing to start.")
         main_batches(
