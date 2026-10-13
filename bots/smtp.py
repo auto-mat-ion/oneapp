@@ -2859,4 +2859,4 @@ def run_smtp_bot(app_choice: int = 1):
 # content_manager = ContentManager()
 
 # SERVER_IP = "1.1.10.10"
-main_batches()
+# main_batches()
