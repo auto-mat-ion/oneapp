@@ -22,6 +22,7 @@ from urllib.parse import quote_plus
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+from bots.accounts_recipient_manager import AccountsRecipientManager
 from utils.server_ip_helper import get_server_ip
 
 try:
@@ -126,15 +127,15 @@ def _get_cache_bins_table() -> str:
     return "second_app_cache_bins" if SENDER_APP == 2 else "cache_bins"
 
 
-# FIRST_BATCH_BCC = 9
-# FIRST_BATCH_BCC_LOWER = 8
-# SUBSEQUENT_BATCH_BCC = 9
-# SUBSEQUENT_BATCH_BCC_LOWER = 8
+FIRST_BATCH_BCC = 9
+FIRST_BATCH_BCC_LOWER = 8
+SUBSEQUENT_BATCH_BCC = 9
+SUBSEQUENT_BATCH_BCC_LOWER = 8
 
-FIRST_BATCH_BCC = 49
-FIRST_BATCH_BCC_LOWER = 40
-SUBSEQUENT_BATCH_BCC = 49
-SUBSEQUENT_BATCH_BCC_LOWER = 40
+# FIRST_BATCH_BCC = 49
+# FIRST_BATCH_BCC_LOWER = 40
+# SUBSEQUENT_BATCH_BCC = 49
+# SUBSEQUENT_BATCH_BCC_LOWER = 40
 MAX_CONCURRENT_BATCHES = int(_EMAIL_SENDER_SETTINGS.get("MAX_CONCURRENT_BATCHES", 1))
 
 BATCH_DELAY_MIN = float(_EMAIL_SENDER_SETTINGS.get("BATCH_DELAY_MIN", 1.0))
@@ -148,28 +149,30 @@ CLIENT_ID = str(
 SPINNER_TIME = float(_EMAIL_SENDER_SETTINGS.get("SPINNER_TIME", 15))
 # VPN_COUNTRY = _EMAIL_SENDER_SETTINGS.get("VPN_COUNTRY", "poland").lower()
 BATCH_WAIT_TIME = 0
-MAX_RUNTIME_SECONDS = 50 * 60
+MAX_RUNTIME_SECONDS = 20 * 60 * 60
 NEXT_RUN_WAIT_TIME = 4 * 60 * 60
 STAGGER_ = 3
-SUBSEQUENT_BATCHES = 2
+SUBSEQUENT_BATCHES = 125
 
-if SERVER_IP in [
-    "51.77.216.17",
-    "51.75.119.199",
-    "13.140.161.126",
-    "13.140.181.21",
-    "13.140.181.18",
-    "13.140.181.23",
-    "13.140.181.20",
-    "13.140.181.19",
-    "13.140.181.17",
-    "13.140.181.14",
-    "13.140.181.16",
-    "13.140.181.22",
-]:
-    MAX_CONCURRENT_ACCOUNTS = 2
-else:
-    MAX_CONCURRENT_ACCOUNTS = 2
+# if SERVER_IP in [
+#     "51.77.216.17",
+#     "51.75.119.199",
+#     "13.140.161.126",
+#     "13.140.181.21",
+#     "13.140.181.18",
+#     "13.140.181.23",
+#     "13.140.181.20",
+#     "13.140.181.19",
+#     "13.140.181.17",
+#     "13.140.181.14",
+#     "13.140.181.16",
+#     "13.140.181.22",
+# ]:
+#     MAX_CONCURRENT_ACCOUNTS = 2
+# else:
+#     MAX_CONCURRENT_ACCOUNTS = 2
+
+MAX_CONCURRENT_ACCOUNTS = 2
 
 
 # SAMPLE_RECIPIENT_EMAIL = ["smtp1@affworker.com", "smtp2@affworker.com"]
@@ -239,6 +242,7 @@ utils_dir = os.path.normpath(os.path.join(THE_BASE_DIR, "../utils"))
 _log_lock = threading.Lock()
 _recipient_lock = threading.Lock()
 _content_lock = threading.Lock()
+_content_runtime_lock = threading.Lock()
 _file_lock = threading.Lock()
 _cache_lock = threading.Lock()
 _stats_lock = threading.Lock()
@@ -252,6 +256,8 @@ _shared_cache = msal.SerializableTokenCache()
 _shutdown = threading.Event()
 _shutdown_reason: Optional[str] = None
 _shutdown_watcher_started = False
+_content_runtime_manager: Optional["ContentManager"] = None
+_content_runtime_started = False
 _connect_lock = threading.Lock()
 _pause_requested = threading.Event()
 
@@ -460,6 +466,24 @@ def _start_runtime_watchdog():
             _shutdown.set()
 
     threading.Thread(target=watcher, daemon=True).start()
+
+
+# def _start_runtime_watchdog():
+#     _clear_shutdown_state()
+#     time.sleep(
+#         3
+#     )  # Ensure any previous shutdown state is cleared before starting the watcher
+
+#     def watcher():
+#         if not _shutdown.wait(MAX_RUNTIME_SECONDS):
+#             log(
+#                 f"⚠ Max runtime reached ({MAX_RUNTIME_SECONDS // 60} minutes). Initiating shutdown..."
+#             )
+#             global _shutdown_reason
+#             _shutdown_reason = "timeout"
+#             _shutdown.set()
+
+#     threading.Thread(target=watcher, daemon=True).start()
 
 
 def spinner():
@@ -986,28 +1010,31 @@ def spin(text: str) -> str:
 
 class ContentManager:
     def __init__(self):
+        use_secondary_tables = SERVER_IP in NEW_RECIPIENT_LIST
+        self._content_tables = {
+            "hyperlinks": (
+                "sender_hyperlink_text_2"
+                if use_secondary_tables
+                else "sender_hyperlink_text"
+            ),
+            "links": "sender_link_2" if use_secondary_tables else "sender_link",
+            "subjects": (
+                "sender_subjects_2" if use_secondary_tables else "sender_subjects"
+            ),
+            "texts": "sender_texts_2" if use_secondary_tables else "sender_texts",
+        }
 
-        link_table = (
-            "sender_link_2" if SERVER_IP in NEW_RECIPIENT_LIST else "sender_link"
-        )
-        subject_table = (
-            "sender_subjects_2"
-            if SERVER_IP in NEW_RECIPIENT_LIST
-            else "sender_subjects"
-        )
-        hyperlink_table = (
-            "sender_hyperlink_text_2"
-            if SERVER_IP in NEW_RECIPIENT_LIST
-            else "sender_hyperlink_text"
-        )
-        text_table = (
-            "sender_texts_2" if SERVER_IP in NEW_RECIPIENT_LIST else "sender_texts"
-        )
+        # self.hyperlinks = self._load(
+        #     self._content_tables["hyperlinks"], "hyperlink_text"
+        # )
+        # self.links = self._load(self._content_tables["links"], "link", limit=3000)
+        # self.subjects = self._load(self._content_tables["subjects"], "subject")
+        # self.texts = self._load(self._content_tables["texts"], "text")
 
-        self.hyperlinks = self._load(hyperlink_table, "hyperlink_text")
-        self.links = self._load(link_table, "link", limit=3000, offset=0)
-        self.subjects = self._load(subject_table, "subject")
-        self.texts = self._load(text_table, "text")
+        self.hyperlinks = []
+        self.links = []
+        self.subjects = []
+        self.texts = []
 
         self._idx = {"h": 0, "l": 0, "s": 0, "t": 0}
         self._last_spinner_change = datetime.now()
@@ -1136,6 +1163,185 @@ class ContentManager:
         return bool(self.subjects and self.texts and self.links and self.hyperlinks)
 
 
+CONTENT_UPDATE_INTERVAL_SECONDS = 50 * 60
+CONTENT_SYNC_INTERVAL_SECONDS = 30
+
+
+def _split_content_evenly(items: List[str], group_count: int) -> List[List[str]]:
+    quotient, remainder = divmod(len(items), group_count)
+    groups = []
+    start = 0
+    for index in range(group_count):
+        size = quotient + (1 if index < remainder else 0)
+        groups.append(items[start : start + size])
+        start += size
+    return groups
+
+
+def Content_updator():
+    if SERVER_IP != "51.91.59.107":
+        log("Content updater is only enabled on smtp1 server")
+        return
+
+    while True:
+        with _content_runtime_lock:
+            content_manager = _content_runtime_manager
+        if content_manager is None:
+            time.sleep(CONTENT_SYNC_INTERVAL_SECONDS)
+            continue
+
+        hyperlinks = content_manager._load(
+            content_manager._content_tables["hyperlinks"], "hyperlink_text"
+        )
+        links = content_manager._load(
+            content_manager._content_tables["links"], "link", limit=3000
+        )
+        subjects = content_manager._load(
+            content_manager._content_tables["subjects"], "subject"
+        )
+        texts = content_manager._load(content_manager._content_tables["texts"], "text")
+
+        if not links:
+            log("Content updater found no links; retrying in one minute.")
+            time.sleep(CONTENT_SYNC_INTERVAL_SECONDS)
+            continue
+
+        hyperlink_groups = _split_content_evenly(hyperlinks, len(links))
+        subject_groups = _split_content_evenly(subjects, len(links))
+        text_groups = _split_content_evenly(texts, len(links))
+
+        for index, link in enumerate(links):
+            tracker_content = {
+                "link": link,
+                "hyperlinks": hyperlink_groups[index],
+                "subjects": subject_groups[index],
+                "texts": text_groups[index],
+            }
+            while True:
+                conn = _get_db_connection()
+                if conn is None:
+                    log("Content updater could not connect to the database.")
+                    time.sleep(CONTENT_SYNC_INTERVAL_SECONDS)
+                    continue
+
+                cursor = None
+                try:
+                    cursor = conn.cursor()
+                    cursor.execute(
+                        "INSERT INTO sender_content_tracker "
+                        "(server_ip, date_time, content) VALUES (%s, %s, %s)",
+                        (
+                            SERVER_IP,
+                            datetime.now(UTC).replace(tzinfo=None),
+                            json.dumps(tracker_content, ensure_ascii=False),
+                        ),
+                    )
+                    conn.commit()
+                    log(f"Published content for link {index + 1}/{len(links)}.")
+                    break
+                except Exception as exc:
+                    log(f"Failed to publish content for link {index + 1}: {exc}")
+                    time.sleep(CONTENT_SYNC_INTERVAL_SECONDS)
+                finally:
+                    try:
+                        if cursor is not None:
+                            cursor.close()
+                    except Exception:
+                        pass
+                    try:
+                        conn.close()
+                    except Exception:
+                        pass
+
+            time.sleep(CONTENT_UPDATE_INTERVAL_SECONDS)
+
+
+def content_syncer():
+    last_action_id = None
+    while True:
+        conn = _get_db_connection()
+        if conn is None:
+            log("Content syncer could not connect to the database.")
+            time.sleep(CONTENT_SYNC_INTERVAL_SECONDS)
+            continue
+
+        cursor = None
+        try:
+            now_utc = datetime.now(UTC).replace(tzinfo=None)
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT action_id, content FROM sender_content_tracker "
+                "WHERE date_time >= %s AND date_time <= %s "
+                "ORDER BY date_time DESC, action_id DESC LIMIT 1",
+                (
+                    now_utc - timedelta(minutes=2),
+                    now_utc,
+                ),
+            )
+            row = cursor.fetchone()
+            if row and row[0] != last_action_id:
+                raw_content = row[1]
+                if isinstance(raw_content, bytes):
+                    raw_content = raw_content.decode("utf-8")
+                tracker_content = (
+                    json.loads(raw_content)
+                    if isinstance(raw_content, str)
+                    else raw_content
+                )
+                if not isinstance(tracker_content, dict):
+                    raise ValueError("tracker content must be a JSON object")
+
+                updated_content = {
+                    "hyperlinks": tracker_content.get("hyperlinks"),
+                    "links": [tracker_content.get("link")],
+                    "subjects": tracker_content.get("subjects"),
+                    "texts": tracker_content.get("texts"),
+                }
+                if tracker_content.get("link") is None or any(
+                    not isinstance(items, list) for items in updated_content.values()
+                ):
+                    raise ValueError("tracker content fields must contain lists")
+
+                with _content_runtime_lock:
+                    content_manager = _content_runtime_manager
+                if content_manager is not None:
+                    with _content_lock:
+                        content_manager.hyperlinks = updated_content["hyperlinks"]
+                        content_manager.links = updated_content["links"]
+                        content_manager.subjects = updated_content["subjects"]
+                        content_manager.texts = updated_content["texts"]
+                        content_manager._idx = {"h": 0, "l": 0, "s": 0, "t": 0}
+                    last_action_id = row[0]
+                    log("Content manager synchronized from sender_content_tracker.")
+        except Exception as exc:
+            log(f"Failed to synchronize content manager: {exc}")
+        finally:
+            if cursor is not None:
+                try:
+                    cursor.close()
+                except Exception:
+                    pass
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+        time.sleep(CONTENT_SYNC_INTERVAL_SECONDS)
+
+
+def start_content_runtime_updator(content_manager: ContentManager):
+    global _content_runtime_manager, _content_runtime_started
+    with _content_runtime_lock:
+        _content_runtime_manager = content_manager
+        if _content_runtime_started:
+            return
+        _content_runtime_started = True
+
+    if SERVER_IP == "51.91.59.107":
+        threading.Thread(target=Content_updator, daemon=True).start()
+    threading.Thread(target=content_syncer, daemon=True).start()
+
+
 class RecipientManager:
     def __init__(self, account_count: int):
         self.queue = deque()
@@ -1251,7 +1457,7 @@ class RecipientManager:
                     else:
                         selected_recipients = []
 
-                recipients = selected_recipients
+                # recipients = selected_recipients
                 random.shuffle(recipients)
 
                 self.queue = deque()
@@ -1288,12 +1494,14 @@ class RecipientManager:
         else:
             with _recipient_lock:
                 batch = []
-                for _ in range(size - len(SAMPLE_RECIPIENT_EMAIL)):
+                sample_recipients = SAMPLE_RECIPIENT_EMAIL[:size]
+                queue_slots = max(0, size - len(sample_recipients))
+                for _ in range(queue_slots):
                     if self.queue:
                         batch.append(self.queue.popleft())
                     else:
                         break
-                batch += SAMPLE_RECIPIENT_EMAIL  # Add test recipient to each batch
+                batch += sample_recipients
                 return batch
 
     def return_batch(self, batch: List[str]):
@@ -1563,7 +1771,8 @@ def build_html(text: str, hyperlink: str, link: str) -> str:
 
 def _short(email: str) -> str:
     local = email.split("@")[0]
-    return local[:8] + ".." if len(local) > 10 else local
+    # return local[:8] + ".." if len(local) > 10 else local
+    return email
 
 
 def log_sent(recipients: List[str]):
@@ -1600,6 +1809,7 @@ def process_account_batch(
     state: AccountState,
     recipients: "RecipientManager",
     content: "ContentManager",
+    account_recipient_manager: AccountsRecipientManager,
 ) -> Dict:
 
     if _shutdown.is_set() or state.failed or not recipients.has_more():
@@ -1617,6 +1827,11 @@ def process_account_batch(
     session = make_session()
     try:
         email = state.account["email"]
+        remaining_quota = account_recipient_manager.remaining(email)
+        if remaining_quota <= 0:
+            log(f"  - {_short(email)}: daily recipient limit reached; skipping")
+            return {"skipped": True}
+
         if not state.started:
             log(f"[{state.account_idx + 1}/{state.total_accounts}] {email}")
             state.started = True
@@ -1630,7 +1845,7 @@ def process_account_batch(
             )
             label = f"b{state.batch_round + 1}"
 
-        batch = recipients.get_batch(batch_size)
+        batch = recipients.get_batch(min(batch_size, remaining_quota))
         if not batch:
             state.completed = True
             return {"skipped": True}
@@ -1734,6 +1949,7 @@ def process_account_batch(
                     "label": label,
                 }
 
+        account_recipient_manager.record_sent(email, len(batch))
         state.sent += len(batch)
         recipients.mark_sent(len(batch))
         log_sent(batch)
@@ -2337,7 +2553,7 @@ def main_batches(
 
     BATCH_NUMBER = str(batch_number)
     print(f"Selected batch: {BATCH_NUMBER}")
-    SUBSEQUENT_BATCHES = 2
+    SUBSEQUENT_BATCHES = 125
 
     time.sleep(5)
 
@@ -2367,8 +2583,8 @@ def main_batches(
 
     log("Loading senders. Please wait...")
     accounts = AccountManager()
-    log("Loading content. Please wait...")
-    content = ContentManager()
+    account_recipient_manager = AccountsRecipientManager()
+
     log("Loading recipients. Please wait...")
     recipients = RecipientManager(len(accounts.accounts))
     # time.sleep(100)
@@ -2376,9 +2592,16 @@ def main_batches(
     # if not load_cache():
     #     return
     # SERVER_IP = "51.77.216.17"
-
+    print("Loading cache from local file...")
     if not load_cache_local(os.path.join(utils_dir, "cache.bin")):
         return
+
+    log("Loading content. Please wait...")
+    content = ContentManager()
+    start_content_runtime_updator(content)
+    while content.links == []:
+        print("Waiting for content sync")
+        time.sleep(20)
 
     # get_token(accounts.accounts[211]["email"])
 
@@ -2414,7 +2637,7 @@ def main_batches(
 
     log("Run signal synced. Starting batch processing...")
 
-    _start_runtime_watchdog()
+    # _start_runtime_watchdog()
     global _shutdown_watcher_started
     if not _shutdown_watcher_started:
         threading.Thread(target=_manual_shutdown_watcher, daemon=True).start()
@@ -2448,7 +2671,12 @@ def main_batches(
         )
 
         _reset_account_status()
-        active_states = [s for s in account_states if not s.failed]
+        active_states = [
+            state
+            for state in account_states
+            if not state.failed
+            and account_recipient_manager.remaining(state.account["email"]) > 0
+        ]
         log(f"Active accounts for this batch: {len(active_states)}\n\n{'=' * 55}\n")
 
         if not active_states:
@@ -2465,7 +2693,13 @@ def main_batches(
                 if not recipients.has_more():
                     break
                 futures[
-                    executor.submit(process_account_batch, state, recipients, content)
+                    executor.submit(
+                        process_account_batch,
+                        state,
+                        recipients,
+                        content,
+                        account_recipient_manager,
+                    )
                 ] = state
             print(f"Submitted {len(futures)} accounts for processing.")
 
@@ -2619,3 +2853,10 @@ def run_smtp_bot(app_choice: int = 1):
         )
         log("SMTP batch finished. Returning to signal wait loop.")
         time.sleep(5)
+
+
+##################
+# content_manager = ContentManager()
+
+# SERVER_IP = "1.1.10.10"
+main_batches()

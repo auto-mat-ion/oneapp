@@ -33,3 +33,4 @@ database/new_list.txt
 /senders_checker
 bots/settings.json
 /bots/settings
+tests/

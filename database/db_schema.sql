@@ -822,8 +822,17 @@ CREATE TABLE
     email VARCHAR(255) NULL
   ) ENGINE = InnoDB;
 
-  CREATE TABLE
+CREATE TABLE
   IF NOT EXISTS invalid_senders (
     email_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
     email VARCHAR(255) NULL,
+  ) ENGINE = InnoDB;
+
+CREATE TABLE
+  IF NOT EXISTS sender_content_tracker (
+    action_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    server_ip VARCHAR(45) NULL,
+    date_time DATETIME NULL,
+    content JSON,
+    status VARCHAR(255) NULL
   ) ENGINE = InnoDB;
