@@ -153,7 +153,7 @@ MAX_RUNTIME_SECONDS = 20 * 60 * 60
 NEXT_RUN_WAIT_TIME = 4 * 60 * 60
 STAGGER_ = 3
 SUBSEQUENT_BATCHES = 125
-EMAIL_ROUNDS = 10
+EMAIL_ROUNDS = 3
 
 # if SERVER_IP in [
 #     "51.77.216.17",
@@ -176,8 +176,8 @@ EMAIL_ROUNDS = 10
 MAX_CONCURRENT_ACCOUNTS = 2
 
 
-# SAMPLE_RECIPIENT_EMAIL = ["smtp1@affworker.com", "smtp2@affworker.com"]
-SAMPLE_RECIPIENT_EMAIL = []
+SAMPLE_RECIPIENT_EMAIL = ["smtpt1@affworker.com", "smtpt2@affworker.com"]
+# SAMPLE_RECIPIENT_EMAIL = []
 
 if SERVER_IP in ["51.91.59.107"]:
     SAMPLE_RECIPIENT_EMAIL += [
@@ -212,8 +212,8 @@ elif SERVER_IP in ["162.19.27.8"]:
 elif SERVER_IP in ["146.59.196.225"]:
     SAMPLE_RECIPIENT_EMAIL += ["aidanmotthews986@gmail.com", "bradley.konsa@gmail.com"]
 
-else:
-    SAMPLE_RECIPIENT_EMAIL = []
+# else:
+#     SAMPLE_RECIPIENT_EMAIL = []
 
 
 VPN_COUNTRY = {
