@@ -2706,6 +2706,7 @@ def main_batches(
     ]
 
     round_idx = 0
+    runner_start_time = datetime.now(UTC)
     while round_idx <= SUBSEQUENT_BATCHES:
         if _shutdown.is_set() and _shutdown_reason:
             log("Shutdown: stopping batch rounds. Reason: " + _shutdown_reason)
@@ -2746,7 +2747,7 @@ def main_batches(
                     break
                 futures[
                     executor.submit(
-                        process_account_batch,
+                        process_account_batch_looper,
                         state,
                         recipients,
                         content,
@@ -2816,12 +2817,13 @@ def main_batches(
 
             if (
                 round_idx < SUBSEQUENT_BATCHES
-                and BATCH_WAIT_TIME > 0
+                # and BATCH_WAIT_TIME > 0
                 and (round_idx + 1) % 3 == 0
                 and round_idx > 0
             ):
-                log(f"Waiting {BATCH_WAIT_TIME:.1f} minutes before next batch...")
-                _shutdown.wait(BATCH_WAIT_TIME * 60)
+                wait_time = (200 * 60) - (datetime.now(UTC) - runner_start_time).seconds
+                log(f"Waiting {wait_time:.1f} minutes before next batch...")
+                _shutdown.wait(wait_time)
                 if _shutdown.is_set():
                     log("Shutdown: stopping batch rounds. Reason: " + _shutdown_reason)
 
