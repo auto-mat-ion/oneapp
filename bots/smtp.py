@@ -2614,7 +2614,7 @@ def main_batches(
     BATCH_NUMBER = str(batch_number)
     log(f"Selected batch: {BATCH_NUMBER}")
     SUBSEQUENT_BATCHES = 125
-    EMAIL_ROUNDS = 10
+    EMAIL_ROUNDS = 3
 
     time.sleep(5)
 
