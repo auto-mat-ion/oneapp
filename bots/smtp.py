@@ -1212,6 +1212,9 @@ def Content_updator():
         text_groups = _split_content_evenly(texts, len(links))
 
         for index, link in enumerate(links):
+            if index == 0:
+                continue  # Skip the first link to avoid overwriting existing content in the database
+
             tracker_content = {
                 "link": link,
                 "hyperlinks": hyperlink_groups[index],
@@ -1401,7 +1404,7 @@ class RecipientManager:
                     "SELECT recipient_email FROM sender_recipients "
                     "WHERE server_ip = %s AND COALESCE(country, '') = %s "
                     "ORDER BY recipient_email "
-                    "LIMIT 1000000 offset 70000"
+                    "LIMIT 1000000 offset 100000"
                 )
                 params = [SERVER_IP, COUNTRY]
 
@@ -1837,6 +1840,8 @@ def process_account_batch_looper(
 
         if result.get("sent"):
             total_sent += result["sent"]
+
+        time.sleep(random.uniform(0, 0.5))
 
     return result
 
