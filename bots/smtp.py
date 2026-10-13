@@ -2010,7 +2010,7 @@ def process_account_batch(
                 # return {"skipped": True}
 
         state.batch_round += 1
-        if state.batch_round > EMAIL_ROUNDS:
+        if state.batch_round > SUBSEQUENT_BATCHES:
             state.completed = True
             # _log_account_status(True)
             return {
