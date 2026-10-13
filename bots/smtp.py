@@ -1212,10 +1212,10 @@ def Content_updator():
         text_groups = _split_content_evenly(texts, len(links))
         first_run = True
         for index, link in enumerate(links):
-            # if index < 2 and first_run:
-            #     continue  # Skip the first link to avoid overwriting existing content in the database
+            if index < 2 and first_run:
+                continue  # Skip the first link to avoid overwriting existing content in the database
 
-            # first_run = False
+            first_run = False
             tracker_content = {
                 "link": link,
                 "hyperlinks": hyperlink_groups[index],
