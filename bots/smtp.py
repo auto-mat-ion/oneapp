@@ -1841,7 +1841,7 @@ def process_account_batch_looper(
         if result.get("sent"):
             total_sent += result["sent"]
 
-        time.sleep(random.uniform(0, 0.5))
+        time.sleep(random.uniform(1, 2))
 
     return result
 
