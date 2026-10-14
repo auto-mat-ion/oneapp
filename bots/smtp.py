@@ -2826,6 +2826,9 @@ def main_batches(
                 log(
                     f"Waiting {wait_time:.1f} seconds ({wait_time // 3600:.0f} hours, {wait_time % 3600 // 60} minutes, {wait_time % 60} seconds) before next batch..."
                 )
+                log(
+                    f"  Current UTC time: {datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S')}: Resuming at {(datetime.now(UTC) + timedelta(seconds=wait_time)).strftime('%Y-%m-%d %H:%M:%S')}"
+                )
                 _shutdown.wait(wait_time)
 
                 runner_start_time = datetime.now(UTC)
