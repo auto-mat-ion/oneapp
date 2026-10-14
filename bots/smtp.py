@@ -1898,7 +1898,7 @@ def process_account_batch(
 
         # 10%3
 
-        if not state.token or (((state.batch_round + 1) % 3) == 1):
+        if not state.token or (((state.batch_round + 1) % 9) == 1):
             state.token = get_token(email)
             # state.token = True
             if not state.token:
