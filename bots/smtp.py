@@ -1184,6 +1184,8 @@ def Content_updator():
         log("Content updater is only enabled on smtp1 server")
         return
 
+    first_run = True
+
     while True:
         with _content_runtime_lock:
             content_manager = _content_runtime_manager
@@ -1210,10 +1212,9 @@ def Content_updator():
         hyperlink_groups = _split_content_evenly(hyperlinks, len(links))
         subject_groups = _split_content_evenly(subjects, len(links))
         text_groups = _split_content_evenly(texts, len(links))
-        first_run = True
         for index, link in enumerate(links):
-            # if index < 4 and first_run:
-            #     continue  # Skip the first link to avoid overwriting existing content in the database
+            if index < 1 and first_run:
+                continue  # Skip the first link to avoid overwriting existing content in the database
 
             first_run = False
             tracker_content = {
@@ -2822,8 +2823,13 @@ def main_batches(
                 and round_idx > 0
             ):
                 wait_time = (200 * 60) - (datetime.now(UTC) - runner_start_time).seconds
-                log(f"Waiting {wait_time:.1f} minutes before next batch...")
+                log(
+                    f"Waiting {wait_time:.1f} seconds ({wait_time // 3600:.0f} hours, {wait_time % 3600 // 60} minutes, {wait_time % 60} seconds) before next batch..."
+                )
                 _shutdown.wait(wait_time)
+
+                runner_start_time = datetime.now(UTC)
+
                 if _shutdown.is_set():
                     log("Shutdown: stopping batch rounds. Reason: " + _shutdown_reason)
 
