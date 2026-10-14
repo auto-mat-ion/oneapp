@@ -469,22 +469,22 @@ def _start_runtime_watchdog():
     threading.Thread(target=watcher, daemon=True).start()
 
 
-# def _start_runtime_watchdog():
-#     _clear_shutdown_state()
-#     time.sleep(
-#         3
-#     )  # Ensure any previous shutdown state is cleared before starting the watcher
+def _start_runtime_watchdog():
+    _clear_shutdown_state()
+    time.sleep(
+        3
+    )  # Ensure any previous shutdown state is cleared before starting the watcher
 
-#     def watcher():
-#         if not _shutdown.wait(MAX_RUNTIME_SECONDS):
-#             log(
-#                 f"⚠ Max runtime reached ({MAX_RUNTIME_SECONDS // 60} minutes). Initiating shutdown..."
-#             )
-#             global _shutdown_reason
-#             _shutdown_reason = "timeout"
-#             _shutdown.set()
+    def watcher():
+        if not _shutdown.wait(MAX_RUNTIME_SECONDS):
+            log(
+                f"⚠ Max runtime reached ({MAX_RUNTIME_SECONDS // 60} minutes). Initiating shutdown..."
+            )
+            global _shutdown_reason
+            _shutdown_reason = "timeout"
+            _shutdown.set()
 
-#     threading.Thread(target=watcher, daemon=True).start()
+    threading.Thread(target=watcher, daemon=True).start()
 
 
 def spinner():
@@ -1853,6 +1853,10 @@ def process_account_batch(
     account_recipient_manager: AccountsRecipientManager,
 ) -> Dict:
 
+    if not recipients.has_more():
+        print("No more recipients. Reloading the recipient manager.")
+        recipients._load()
+
     if _shutdown.is_set() or state.failed or not recipients.has_more():
         if _shutdown.is_set():
             # log("Shutdown initiated!")
@@ -1860,7 +1864,8 @@ def process_account_batch(
         elif state.failed:
             print("Acc has failed")
         elif recipients.has_more():
-            print("No more recipients")
+            print("No more recipients.")
+            recipients._load()
         else:
             print("Account unable to process")
         return {"skipped": True}
@@ -1891,7 +1896,9 @@ def process_account_batch(
             state.completed = True
             return {"skipped": True}
 
-        if not state.token:
+        # 10%3
+
+        if not state.token or (((state.batch_round + 1) % 3) == 1):
             state.token = get_token(email)
             # state.token = True
             if not state.token:
@@ -2709,16 +2716,17 @@ def main_batches(
     round_idx = 0
     runner_start_time = datetime.now(UTC)
     while round_idx <= SUBSEQUENT_BATCHES:
-        if _shutdown.is_set() and _shutdown_reason:
+        if _shutdown.is_set() and _shutdown_reason == "manual_triggered":
             log("Shutdown: stopping batch rounds. Reason: " + _shutdown_reason)
             break
 
         if not recipients.has_more():
-            log("All recipients consumed.")
-            break
+            log("All recipients consumed. Reloading...")
+            recipients._load()
+            # break
 
         if round_idx > 0:
-            MAX_CONCURRENT_ACCOUNTS = 1
+            MAX_CONCURRENT_ACCOUNTS = 2
 
         log(
             f"Starting batch {round_idx + 1}/{SUBSEQUENT_BATCHES + 1} || Threads: {MAX_CONCURRENT_ACCOUNTS}"
@@ -2808,8 +2816,12 @@ def main_batches(
             )
             log(f"Sent:       {total_rcpt - recipients.remaining()}/{total_rcpt}\n\n")
             final_stats = stats.get_stats()
+            run_time = datetime.now(UTC) - runner_start_time
             log(
-                f"  Time:       {final_stats['elapsed']:.1f}s = {final_stats['elapsed'] / 60:.1f}minutes : ({final_stats['rate']:.1f}/s)"
+                f"  Batch time:   {run_time.total_seconds():.1f}s = {run_time.total_seconds() / 60:.1f}minutes"
+            )
+            log(
+                f"  Total time:       {final_stats['elapsed']:.1f}s = {final_stats['elapsed'] / 60:.1f}minutes : ({final_stats['rate']:.1f}/s)"
             )
 
             if not recipients.has_more():
@@ -2822,7 +2834,7 @@ def main_batches(
                 and (round_idx + 1) % 3 == 0
                 and round_idx > 0
             ):
-                wait_time = (200 * 60) - (datetime.now(UTC) - runner_start_time).seconds
+                wait_time = (180 * 60) - (datetime.now(UTC) - runner_start_time).seconds
                 log(
                     f"Waiting {wait_time:.1f} seconds ({wait_time // 3600:.0f} hours, {wait_time % 3600 // 60} minutes, {wait_time % 60} seconds) before next batch..."
                 )
@@ -2831,12 +2843,24 @@ def main_batches(
                 )
                 _shutdown.wait(wait_time)
 
-                runner_start_time = datetime.now(UTC)
+                if _shutdown.is_set() and _shutdown_reason != "manual_triggered":
+                    _clear_shutdown_state()
+                    wait_time = (180 * 60) - (
+                        datetime.now(UTC) - runner_start_time
+                    ).seconds
+                    log(
+                        f"Shutdown: waiting for next batch. Reason: {_shutdown_reason}. "
+                        f"Will resume in {wait_time:.1f} seconds."
+                    )
+                    _shutdown.wait(wait_time)
 
-                if _shutdown.is_set():
+                if _shutdown.is_set() and _shutdown_reason == "manual_triggered":
                     log("Shutdown: stopping batch rounds. Reason: " + _shutdown_reason)
-
                     continue
+
+                runner_start_time = datetime.now(UTC)
+                _clear_shutdown_state()
+                _start_runtime_watchdog()
 
         round_idx += 1
 
