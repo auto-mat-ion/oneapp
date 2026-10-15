@@ -2118,7 +2118,7 @@ def get_due_smtp_schedule() -> dict:
 
         # rows = [(f"batch_{i}", datetime.now(UTC) + timedelta(minutes=i * 55)) for i in range(5)]  # Mock data for testing
         now_utc = datetime.now(UTC)
-        window = timedelta(minutes=1)
+        window = timedelta(minutes=3)
 
         for schedule_batch, schedule_time in rows:
             try:
@@ -2706,6 +2706,7 @@ def run_smtp_bot(app_choice: int = 1):
                 signal_time = datetime.now(UTC)
                 break
 
+            time.sleep(30 * 1)
             scheduler_signal = get_due_smtp_schedule_1hr()
             if scheduler_signal.get("status"):
                 # batch_number = int(scheduler_signal.get("batch", 1))
@@ -2716,7 +2717,7 @@ def run_smtp_bot(app_choice: int = 1):
 
             if SERVER_IP == "51.91.59.107":
                 update_schedule_smtp_1()
-            time.sleep(60 * 1)
+            time.sleep(30 * 1)
 
         log(f"Run signal received for batch {batch_number}. Preparing to start.")
         main_batches(
