@@ -1111,15 +1111,15 @@ class ContentManager:
         # connect_new_random(VPN_COUNTRY)
         time.sleep(5)
 
-    def _next(self, items: List[str], key: str) -> str:
-        if not items:
-            return ""
-        idx = self._idx[key]
-        self._idx[key] = (idx + 1) % len(items)
-        return items[idx]
-
     # def _next(self, items: List[str], key: str) -> str:
-    #     return random.choice(items) if items else ""
+    #     if not items:
+    #         return ""
+    #     idx = self._idx[key]
+    #     self._idx[key] = (idx + 1) % len(items)
+    #     return items[idx]
+
+    def _next(self, items: List[str], key: str) -> str:
+        return random.choice(items) if items else ""
 
     def is_valid(self) -> bool:
         return bool(self.subjects and self.texts and self.links and self.hyperlinks)
