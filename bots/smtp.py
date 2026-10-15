@@ -255,7 +255,7 @@ _BASIC_RE = re.compile(r".+@.+\..+")
 LOAD_RETRY_ATTEMPTS = 7
 LOAD_RETRY_DELAY_SECONDS = 5.0
 CACHE_LOAD_RETRIES = 10
-EMAIL_ROUNDS = 3
+EMAIL_ROUNDS = 5
 
 # NEW_RECIPIENT_LIST = [
 #     "144.217.85.183",
@@ -1118,20 +1118,32 @@ class ContentManager:
         self._idx[key] = (idx + 1) % len(items)
         return items[idx]
 
+    # def _next(self, items: List[str], key: str) -> str:
+    #     return random.choice(items) if items else ""
+
     def is_valid(self) -> bool:
         return bool(self.subjects and self.texts and self.links and self.hyperlinks)
 
 
 class RecipientManager:
+    import math
+
     def __init__(self, account_count: int):
         self.queue = deque()
         self._sent_count = 0
         self._total_loaded = 0
         self.account_count = max(0, account_count)
-        self.recipients_needed = (
+        # self.recipients_needed = round(
+        #     self.account_count
+        #     * (SUBSEQUENT_BATCHES + 1)
+        #     * SUBSEQUENT_BATCH_BCC
+        #     * EMAIL_ROUNDS
+        # )
+        self.recipients_needed = round(
             self.account_count
             * (SUBSEQUENT_BATCHES + 1)
-            * SUBSEQUENT_BATCH_BCC
+            * sum([SUBSEQUENT_BATCH_BCC, SUBSEQUENT_BATCH_BCC_LOWER])
+            / len([SUBSEQUENT_BATCH_BCC, SUBSEQUENT_BATCH_BCC_LOWER])
             * EMAIL_ROUNDS
         )
 
@@ -1643,8 +1655,9 @@ def process_account_batch(
     session = make_session()
     try:
         email = state.account["email"]
+
+        log(f"[{state.account_idx + 1}/{state.total_accounts}] {email}")
         if not state.started:
-            log(f"[{state.account_idx + 1}/{state.total_accounts}] {email}")
             state.started = True
 
         if state.batch_round == 0:
@@ -2428,7 +2441,7 @@ def main_batches(
     BATCH_NUMBER = str(batch_number)
     print(f"Selected batch: {BATCH_NUMBER}")
     SUBSEQUENT_BATCHES = 2
-    EMAIL_ROUNDS = 3
+    EMAIL_ROUNDS = 5
     time.sleep(5)
 
     log("Current settings:")
@@ -2457,17 +2470,19 @@ def main_batches(
     log(f"PART: {part} | EMAIL_ROUNDS: {EMAIL_ROUNDS}")
 
     log("Loading senders. Please wait...")
-    # part = 2
+    # part = 1
+    # SERVER_IP = "51.77.216.17"
+
     accounts = AccountManager(part)
     log("Loading content. Please wait...")
     content = ContentManager(part)
+    # content.get()
     log("Loading recipients. Please wait...")
     recipients = RecipientManager(len(accounts.accounts))
     # time.sleep(100)
     # return True
     # if not load_cache():
     #     return
-    # SERVER_IP = "51.77.216.17"
     # accounts.accounts
     # content.get()
 
