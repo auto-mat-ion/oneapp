@@ -1126,8 +1126,6 @@ class ContentManager:
 
 
 class RecipientManager:
-    import math
-
     def __init__(self, account_count: int):
         self.queue = deque()
         self._sent_count = 0
