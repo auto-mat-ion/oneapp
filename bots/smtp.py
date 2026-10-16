@@ -2507,12 +2507,12 @@ def content_syncer(content_object):
             cursor = conn.cursor()
             cursor.execute(
                 "SELECT action_id, content FROM sender_content_tracker "
-                "WHERE date_time >= %s AND date_time <= %s "
+                # "WHERE date_time >= %s AND date_time <= %s "
                 "ORDER BY date_time DESC, action_id DESC LIMIT 1",
-                (
-                    now_utc - timedelta(minutes=5),
-                    now_utc,
-                ),
+                # (
+                #     now_utc - timedelta(minutes=5),
+                #     now_utc,
+                # ),
             )
             row = cursor.fetchone()
             if row:
