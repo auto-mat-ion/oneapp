@@ -142,7 +142,7 @@ CLIENT_ID = str(
 )
 SPINNER_TIME = float(_EMAIL_SENDER_SETTINGS.get("SPINNER_TIME", 15))
 # VPN_COUNTRY = _EMAIL_SENDER_SETTINGS.get("VPN_COUNTRY", "poland").lower()
-BATCH_WAIT_TIME = 0
+BATCH_WAIT_TIME = 10
 MAX_RUNTIME_SECONDS = 50000 * 60
 NEXT_RUN_WAIT_TIME = 4 * 60 * 60
 STAGGER_ = 3
@@ -2791,6 +2791,7 @@ def main_batches(
                 log("No recipients left after batch round.")
                 break
 
+            BATCH_WAIT_TIME = 10
             if round_idx < SUBSEQUENT_BATCHES and BATCH_WAIT_TIME > 0:
                 remaining_time = (15 * 60) - (
                     datetime.now(UTC) - batch_start_time
