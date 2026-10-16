@@ -1134,7 +1134,7 @@ def smart_content_splitter() -> str:
 
     with _content_lock:
         part_num = globals().setdefault("part_num", 2)
-        content_sync_num = globals().setdefault("content_sync_num", 2)
+        content_sync_num = globals().setdefault("content_sync_num", 3)
         db_part = 2 if part_num == 1 else 1
         content_manager = ContentManager(db_part)
         first_half = content_sync_num % 2 == 1
@@ -2507,12 +2507,12 @@ def content_syncer(content_object):
             cursor = conn.cursor()
             cursor.execute(
                 "SELECT action_id, content FROM sender_content_tracker "
-                # "WHERE date_time >= %s AND date_time <= %s "
+                "WHERE date_time >= %s AND date_time <= %s "
                 "ORDER BY date_time DESC, action_id DESC LIMIT 1",
-                # (
-                #     now_utc - timedelta(minutes=5),
-                #     now_utc,
-                # ),
+                (
+                    now_utc - timedelta(minutes=15),
+                    now_utc,
+                ),
             )
             row = cursor.fetchone()
             if row:
@@ -2796,6 +2796,9 @@ def main_batches(
                 remaining_time = (15 * 60) - (
                     datetime.now(UTC) - batch_start_time
                 ).total_seconds()
+                log(
+                    f"Time used for batch: {(datetime.now(UTC) - batch_start_time).total_seconds() / 60:.1f} minutes"
+                )
                 log(f"Waiting {remaining_time:.1f} seconds before next batch...")
                 _shutdown.wait(remaining_time)
                 # Resuming
