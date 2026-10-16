@@ -1133,8 +1133,8 @@ def smart_content_splitter() -> str:
     global part_num, content_sync_num
 
     with _content_lock:
-        part_num = globals().setdefault("part_num", 2)
-        content_sync_num = globals().setdefault("content_sync_num", 3)
+        part_num = globals().setdefault("part_num", 1)
+        content_sync_num = globals().setdefault("content_sync_num", 1)
         db_part = 2 if part_num == 1 else 1
         content_manager = ContentManager(db_part)
         first_half = content_sync_num % 2 == 1
