@@ -836,3 +836,35 @@ CREATE TABLE
     content JSON,
     status VARCHAR(255) NULL
   ) ENGINE = InnoDB;
+
+CREATE TABLE
+  IF NOT EXISTS sender_content_hyperlink_text_3 (
+    text_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    hyperlink_text TEXT NULL,
+    country VARCHAR(255) NULL,
+    part VARCHAR(255) NULL
+  ) ENGINE = InnoDB;
+
+CREATE TABLE
+  IF NOT EXISTS sender_content_subjects_3 (
+    subject_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    subject VARCHAR(255) NULL,
+    country VARCHAR(255) NULL,
+    part VARCHAR(255) NULL
+  ) ENGINE = InnoDB;
+
+CREATE TABLE
+  IF NOT EXISTS sender_content_texts_3 (
+    text_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    text TEXT NULL,
+    country VARCHAR(255) NULL,
+    part VARCHAR(255) NULL
+  ) ENGINE = InnoDB;
+
+CREATE TABLE
+  IF NOT EXISTS sender_content_links_3 (
+    link_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    link VARCHAR(255) NULL,
+    country VARCHAR(255) NULL,
+    part VARCHAR(255) NULL
+  ) ENGINE = InnoDB;

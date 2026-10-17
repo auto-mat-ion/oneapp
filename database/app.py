@@ -4539,6 +4539,69 @@ def email_sender_uploader():
                     st.error(result_message)
 
 
+def email_sender_content_uploader():
+    content_tables = {
+        "sender_content_hyperlink_text_3": ("Hyperlink Text", "hyperlink_text"),
+        "sender_content_subjects_3": ("Subjects", "subject"),
+        "sender_content_texts_3": ("Text", "text"),
+        "sender_content_links_3": ("Links", "link"),
+    }
+
+    table_name = st.selectbox(
+        "Content table",
+        list(content_tables),
+        key="email_sender_content_table",
+    )
+    label, column_name = content_tables[table_name]
+    st.subheader(label)
+
+    part = st.selectbox(
+        "Part",
+        [1, 2, 3],
+        key="email_sender_content_part",
+    )
+    country = st.selectbox(
+        "Country",
+        [
+            "All",
+            "Netherlands",
+            "United States",
+            "Poland",
+            "Sweden",
+            "United Kingdom",
+            "Italy",
+            "Cyprus",
+        ],
+        key="email_sender_content_country",
+    )
+    uploaded_file = st.file_uploader(
+        f"Upload {label} file",
+        type=["txt", "csv"],
+        key=f"email_sender_content_file_{table_name}",
+    )
+
+    if uploaded_file is None:
+        return
+
+    df = parse_text_list(uploaded_file, column_name)
+    if df.empty:
+        st.warning(f"No {label.lower()} values found in the uploaded file.")
+        return
+
+    df["part"] = str(part)
+    df["country"] = None if country == "All" else country
+    st.dataframe(df.head(10), width="stretch")
+    st.write(f"Rows found: {len(df)}")
+
+    if st.button(f"Upload {label}", key=f"email_sender_content_upload_{table_name}"):
+        with st.spinner(f"Uploading {label.lower()}..."):
+            success, message = insert_into_db(table_name, df)
+        if success:
+            st.success(message)
+        else:
+            st.error(message)
+
+
 def db_count(table, where_clause=None, params=None):
     conn = get_db_connection()
     if conn is None:
@@ -6276,6 +6339,10 @@ def main():
     ):
         st.session_state.selected_page = "General Upload"
     if st.sidebar.button(
+        "Email Sender", width="stretch", key="sidebar_page_email_sender"
+    ):
+        st.session_state.selected_page = "Email Sender"
+    if st.sidebar.button(
         "Email Sender Upload",
         width="stretch",
         key="sidebar_page_email_sender_upload",
@@ -6517,6 +6584,8 @@ def main():
             bot_settings()
         elif st.session_state.selected_page == "General Upload":
             general_uploader()
+        elif st.session_state.selected_page == "Email Sender":
+            email_sender_content_uploader()
         elif st.session_state.selected_page == "Email Sender Upload":
             email_sender_uploader()
         elif st.session_state.selected_page == "Stats":
