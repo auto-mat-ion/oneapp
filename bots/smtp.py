@@ -2693,7 +2693,7 @@ def main_batches(
                 f"Batch {round_idx + 1} ran for : {batch_elapsed.total_seconds():.1f}s = {batch_elapsed.total_seconds() / 60:.1f} minutes"
             )
             batch_wait_time = (5 * 60) - batch_elapsed.total_seconds()
-            if batch_wait_time > 0:
+            if batch_wait_time > 0 and round_idx < SUBSEQUENT_BATCHES:
                 log(
                     f"Waiting {batch_wait_time:.1f}s = {batch_wait_time / 60:.1f} minutes before next batch..."
                 )
