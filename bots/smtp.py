@@ -2489,7 +2489,7 @@ def main_batches(
     signal_timestamp: Optional[datetime] = None,
     part: int = 1,
 ):
-    print("**********************************************************\n\n\nStarting...")
+    print("***********************Starting***********************************\n\n")
 
     global \
         BATCH_NUMBER, \
@@ -2503,7 +2503,7 @@ def main_batches(
 
     BATCH_NUMBER = str(batch_number)
     print(f"Selected batch: {BATCH_NUMBER}")
-    SUBSEQUENT_BATCHES = 10
+    SUBSEQUENT_BATCHES = 9
     EMAIL_ROUNDS = 1
     time.sleep(5)
 
@@ -2533,13 +2533,10 @@ def main_batches(
     log(f"PART: {part} | EMAIL_ROUNDS: {EMAIL_ROUNDS}")
 
     log("Loading senders. Please wait...")
-    # part = 4
-    # SERVER_IP = "51.77.216.17"
 
     accounts = AccountManager(part)
     log("Loading content. Please wait...")
     content = ContentManager(part)
-
     log("Loading recipients. Please wait...")
     recipients = RecipientManager(len(accounts.accounts))
 
