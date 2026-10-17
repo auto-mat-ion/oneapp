@@ -2793,7 +2793,6 @@ def run_smtp_bot(app_choice: int = 1):
             time.sleep(20 * 1)
             scheduler_signal = get_due_smtp_schedule_2hr()
             if scheduler_signal.get("status"):
-                # batch_number = int(scheduler_signal.get("batch", 1))
                 batch_number = 1
                 part = 3
                 signal_time = datetime.now(UTC)
@@ -2814,4 +2813,4 @@ def run_smtp_bot(app_choice: int = 1):
         time.sleep(5)
 
 
-SERVER_IP = "51.77.216.17"
+# SERVER_IP = "51.77.216.17"
