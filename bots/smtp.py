@@ -2769,6 +2769,7 @@ def run_smtp_bot(app_choice: int = 1):
                         except Exception:
                             batch_number = 1
                 signal_time = datetime.now(UTC)
+                part = 1
                 if batch_number > 1:
                     batch_number = 1
                     part = 2
