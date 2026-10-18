@@ -2856,9 +2856,9 @@ def run_smtp_bot(app_choice: int = 1):
         time.sleep(5)
 
 
-# main_batches(
-#     batch_number=1,
-#     app_choice=1,
-#     signal_timestamp=datetime.now(UTC),
-#     part=2,
-# )
+main_batches(
+    batch_number=1,
+    app_choice=1,
+    signal_timestamp=datetime.now(UTC),
+    part=2,
+)
