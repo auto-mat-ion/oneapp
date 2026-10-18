@@ -1148,6 +1148,7 @@ class RecipientManager:
         # )
         self.recipients_needed = round(
             self.account_count
+            # 500
             * (SUBSEQUENT_BATCHES + 1)
             * (
                 sum([FIRST_BATCH_BCC, FIRST_BATCH_BCC_LOWER])
@@ -1155,7 +1156,7 @@ class RecipientManager:
                 + sum([SUBSEQUENT_BATCH_BCC, SUBSEQUENT_BATCH_BCC_LOWER])
                 / len([SUBSEQUENT_BATCH_BCC, SUBSEQUENT_BATCH_BCC_LOWER])
             )
-            * EMAIL_ROUNDS
+            # * EMAIL_ROUNDS
         )
 
         self._load()
@@ -2855,9 +2856,9 @@ def run_smtp_bot(app_choice: int = 1):
         time.sleep(5)
 
 
-main_batches(
-    batch_number=1,
-    app_choice=1,
-    signal_timestamp=datetime.now(UTC),
-    part=2,
-)
+# main_batches(
+#     batch_number=1,
+#     app_choice=1,
+#     signal_timestamp=datetime.now(UTC),
+#     part=2,
+# )
