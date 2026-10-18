@@ -188,7 +188,10 @@ elif SERVER_IP in ["164.132.105.244"]:
     SAMPLE_RECIPIENT_EMAIL += ["andrewsetup17@gmail.com"]
 
 elif SERVER_IP in ["51.161.34.220"]:
-    SAMPLE_RECIPIENT_EMAIL += ["durwoodstacks100@gmail.com"]
+    SAMPLE_RECIPIENT_EMAIL += [
+        "durwoodstacks100@gmail.com",
+        "mitestingacc.05@gmail.com",
+    ]
 
 ###
 elif SERVER_IP in ["162.19.26.217"]:
@@ -2808,6 +2811,3 @@ def run_smtp_bot(app_choice: int = 1):
         )
         log("SMTP batch finished. Returning to signal wait loop.")
         time.sleep(5)
-
-
-# SERVER_IP = "51.77.216.17"
