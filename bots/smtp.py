@@ -1146,18 +1146,19 @@ class RecipientManager:
         #     * SUBSEQUENT_BATCH_BCC
         #     * EMAIL_ROUNDS
         # )
-        self.recipients_needed = round(
-            self.account_count
-            # 500
-            * (SUBSEQUENT_BATCHES + 1)
-            * (
-                sum([FIRST_BATCH_BCC, FIRST_BATCH_BCC_LOWER])
-                / len([FIRST_BATCH_BCC, FIRST_BATCH_BCC_LOWER])
-                + sum([SUBSEQUENT_BATCH_BCC, SUBSEQUENT_BATCH_BCC_LOWER])
-                / len([SUBSEQUENT_BATCH_BCC, SUBSEQUENT_BATCH_BCC_LOWER])
-            )
-            # * EMAIL_ROUNDS
-        )
+        # self.recipients_needed = round(
+        #     self.account_count
+        #     # 30
+        #     * (SUBSEQUENT_BATCHES + 1)
+        #     * (
+        #         sum([FIRST_BATCH_BCC, FIRST_BATCH_BCC_LOWER])
+        #         / len([FIRST_BATCH_BCC, FIRST_BATCH_BCC_LOWER])
+        #         + sum([SUBSEQUENT_BATCH_BCC, SUBSEQUENT_BATCH_BCC_LOWER])
+        #         / len([SUBSEQUENT_BATCH_BCC, SUBSEQUENT_BATCH_BCC_LOWER])
+        #     )
+        #     # * EMAIL_ROUNDS
+        #     )
+        self.recipients_needed = 10000
 
         self._load()
 
