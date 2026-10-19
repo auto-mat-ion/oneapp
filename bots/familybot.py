@@ -9664,6 +9664,7 @@ def remove_family(new_profile_data):
         while (retries < 3) and (not driver_success):
             try:
                 _check_shutdown_requested()
+                # https://outlook.live.com/
                 status, driverdata, error = initialize_new_profile_driver()
                 if status:
                     driver, user_path, proxy = driverdata.values()
