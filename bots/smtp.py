@@ -1622,6 +1622,11 @@ def process_account_batch_looper(
     total_sent = 0
 
     for i in range(EMAIL_ROUNDS):
+        if i == 0:
+            disconnect_vpn()
+
+        else:
+            connect_new_random("poland")
         # process account 10 times if everything ok, keeping track of sent count and failed status. if failed, break and return the status, else continue to next iteration. if sent count is 0, break and return the status. if completed, break and return the status. if shutdown, break and return the status.
         # The 10 rounds are not for fail mitigation. They ensure sending 10 times the batch size of emails per account, as per the EMAIL_ROUNDS constant. The loop should not exit early, but run all 10 rounds.
         # Exit only in case of error, shutdown, or if the account has completed its sending quota.
