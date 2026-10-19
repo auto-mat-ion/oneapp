@@ -2545,6 +2545,7 @@ def main_batches(
 
     BATCH_NUMBER = str(batch_number)
     print(f"Selected batch: {BATCH_NUMBER}")
+    MAX_CONCURRENT_ACCOUNTS = 1
     SUBSEQUENT_BATCHES = 0
     EMAIL_ROUNDS = 4
     time.sleep(5)
