@@ -4557,7 +4557,7 @@ def email_sender_content_uploader():
 
     part = st.selectbox(
         "Part",
-        [1, 2, 3],
+        [1, 2, 3, 4],
         key="email_sender_content_part",
     )
     country = st.selectbox(

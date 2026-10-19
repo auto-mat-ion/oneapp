@@ -2810,10 +2810,10 @@ def run_smtp_bot(app_choice: int = 1):
                         except Exception:
                             batch_number = 1
                 signal_time = datetime.now(UTC)
-                part = 3
+                part = 4
                 if batch_number > 1:
                     # part = batch_number
-                    part = 3
+                    part = 4
                     batch_number = 1
                 break
 
