@@ -11,3 +11,4 @@ email_validator
 SQLAlchemy
 pymysql
 inputimeout
+wonderwords
