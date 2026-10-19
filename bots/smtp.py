@@ -258,7 +258,7 @@ _BASIC_RE = re.compile(r".+@.+\..+")
 LOAD_RETRY_ATTEMPTS = 7
 LOAD_RETRY_DELAY_SECONDS = 5.0
 CACHE_LOAD_RETRIES = 10
-EMAIL_ROUNDS = 2
+EMAIL_ROUNDS = 4
 
 # NEW_RECIPIENT_LIST = [
 #     "144.217.85.183",
@@ -1383,7 +1383,7 @@ class AccountManager:
                 #     start = len(accounts) * (self.part - 1) // 3
                 #     end = len(accounts) * self.part // 3
                 #     accounts = accounts[start:end]
-                self.accounts = accounts
+                self.accounts = accounts[:30]
                 log(f"Accounts: {len(self.accounts)}")
             except Exception as exc:
                 raise RuntimeError(
@@ -2544,7 +2544,7 @@ def main_batches(
     BATCH_NUMBER = str(batch_number)
     print(f"Selected batch: {BATCH_NUMBER}")
     SUBSEQUENT_BATCHES = 2
-    EMAIL_ROUNDS = 2
+    EMAIL_ROUNDS = 4
     time.sleep(5)
 
     log("Current settings:")
@@ -2810,10 +2810,10 @@ def run_smtp_bot(app_choice: int = 1):
                         except Exception:
                             batch_number = 1
                 signal_time = datetime.now(UTC)
-                part = 4
+                part = 1
                 if batch_number > 1:
                     # part = batch_number
-                    part = 4
+                    part = 1
                     batch_number = 1
                 break
 
