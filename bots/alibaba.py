@@ -2002,8 +2002,7 @@ def run_process_first_pending_url(max_retries=5, server_ip=SERVER_IP):
         daemon=True,
     )
     shutdown_watcher.start()
-    global SERVER_IP
-    SERVER_IP = server_ip
+    connect_vpn(country=VPN_COUNTRY)
 
     try:
         while failed_attempts < max_retries and not ALIBABA_SHUTDOWN_REQUESTED.is_set():
