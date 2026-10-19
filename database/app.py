@@ -6937,6 +6937,7 @@ def main():
                             "run familybot",
                             "run hotmailbot",
                             "run family extractor",
+                            "run alibaba",
                             "update",
                         ],
                         key="fhm_preset_action_sel",
@@ -6950,6 +6951,7 @@ def main():
                         "resume",
                         "shutdown",
                         "run family extractor",
+                        "run alibaba",
                         "update",
                     }:
                         preset_country = st.selectbox(
@@ -7017,6 +7019,7 @@ def main():
                                 "resume",
                                 "shutdown",
                                 "run family extractor",
+                                "run alibaba",
                                 "update",
                             }
                         ):
@@ -7089,6 +7092,8 @@ def main():
                                     formatted_action = f"run_hotmailbot"
                                 elif action_value == "run family extractor":
                                     formatted_action = "run_familyextractor"
+                                elif action_value == "run alibaba":
+                                    formatted_action = "run_alibaba"
                                 else:
                                     continue
 

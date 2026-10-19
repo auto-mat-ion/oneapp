@@ -7,6 +7,10 @@ from datetime import datetime, timedelta, timezone
 
 import mysql.connector
 
+import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
 from utils.server_ip_helper import get_server_ip
 
 
@@ -250,11 +254,13 @@ def runner():
     """Poll for a server action and run the requested bot."""
     from bots.familybot import run_familybot, run_family_link_extractor
     from bots.hotmailbot import run_hotmailbot
+    from bots.alibaba import run_process_first_pending_url
 
     print(
         "\n\n============================================================================\nWaiting for a signal..."
     )
     result = "None"
+    alibaba_signal_handled = False
     while True:
         current_action = (
             "No available cards: waiting for signal"
@@ -267,7 +273,10 @@ def runner():
         )
         keep_alive(current_action=current_action)
         # keep_alive()
+        # SERVER_IP = "51.38.232.192"
         status, action, country = get_signal_from_db()
+        if action != "run_alibaba":
+            alibaba_signal_handled = False
 
         if status and action == "run_familybot":
             print(
@@ -317,6 +326,22 @@ def runner():
             keep_alive(current_action=current_action)
             print(
                 f"Hotmailbot finished for country: {country}\n ============================================================================="
+            )
+            print(
+                "\n\n============================================================================\nWaiting for a signal..."
+            )
+
+        if status and action == "run_alibaba" and not alibaba_signal_handled:
+            alibaba_signal_handled = True
+            print(
+                f"Signal received: {action}\n ============================================================================="
+            )
+            keep_alive(current_action="Alibaba scraper running")
+
+            result = run_process_first_pending_url(server_ip=SERVER_IP)
+            keep_alive(current_action="waiting for signal")
+            print(
+                f"Alibaba scraper finished: {result or 'no result'}\n ============================================================================="
             )
             print(
                 "\n\n============================================================================\nWaiting for a signal..."

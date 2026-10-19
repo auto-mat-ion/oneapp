@@ -1,0 +1,2833 @@
+import time
+from datetime import datetime, timedelta, timezone
+import os
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import Select
+from selenium.webdriver.support.wait import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.common.action_chains import ActionChains
+from selenium.webdriver.common.keys import Keys
+
+
+from urllib.parse import urlparse
+
+from seleniumbase import Driver
+import pandas as pd
+import requests
+import threading
+from concurrent.futures import ThreadPoolExecutor
+import re
+import json
+import subprocess
+import bs4
+import csv
+from pathlib import Path
+import mysql.connector
+
+import random
+from inputimeout import inputimeout, TimeoutOccurred
+
+
+## read settings.json
+with open("utils/settings.json", "r") as f:
+    settings = json.load(f)
+
+EXPRESSVPN_CMD = settings.get("EXPRESSVPN_CMD", "expressvpn")
+VPN_COUNTRY = settings.get("VPN_COUNTRY", "Netherlands").lower()
+NUMBER_OF_THREADS = int(settings.get("NUMBER_OF_THREADS", 1))
+VPN_RECONNECT_INTERVAL = int(
+    settings.get("VPN_RECONNECT_INTERVAL", 5)
+)  # Reconnect every N items
+TRACKING_CSV_PATH = os.path.abspath("./utils/scrape_tracking.csv")
+DATABASE_SETTINGS = settings.get("DATABASE", {})
+DB_RETRY_ATTEMPTS = 5
+DB_RETRY_DELAY_SECONDS = 1
+DB_TRANSIENT_ERROR_CODES = {1205, 1213}
+SCRAPE_WATCHDOG_TIMEOUT_SECONDS = 15 * 60
+ALIBABA_SHUTDOWN_POLL_SECONDS = 5
+ALIBABA_SHUTDOWN_REQUESTED = threading.Event()
+ALIBABA_SHUTDOWN_WATCHER_STOP = threading.Event()
+SERVER_FILE_PATH = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "utils", "server.txt"
+)
+
+
+# VPN continent rotation list for handling shipping region errors
+VPN_CONTINENTS = [
+    "Australia",
+    "UK",
+    "Canada",
+    "Indonesia",
+    "Kenya",
+    "Colombia",
+    "France",
+]
+
+# Global counters for VPN reconnection
+items_processed_counter = 0
+vpn_counter_lock = threading.Lock()
+
+
+def get_server_ip(path=SERVER_FILE_PATH):
+    """Load the server IP from utils/server.txt, prompting when it is missing."""
+    server_path = Path(path)
+    server_ip = ""
+
+    try:
+        server_ip = server_path.read_text(encoding="utf-8").strip()
+    except FileNotFoundError:
+        pass
+
+    while not server_ip:
+        server_ip = input("Enter server IP: ").strip()
+        if not server_ip:
+            print("Server IP cannot be blank.")
+
+    server_path.parent.mkdir(parents=True, exist_ok=True)
+    server_path.write_text(server_ip + "\n", encoding="utf-8")
+    return server_ip
+
+
+SERVER_IP = get_server_ip()
+VPN_CONNECTION_STATUS = "none"
+VPN_CONNECTION_WATCHDOG = None
+VPN_CONNECTION_WATCHDOG_STOP = threading.Event()
+
+
+def _load_telegram_chat_ids():
+    file_path = os.path.join(os.path.dirname(__file__), "utils/chat_ids.txt")
+    chat_ids = set()
+    try:
+        with open(file_path, "r", encoding="utf-8") as handle:
+            for line in handle:
+                value = line.strip()
+                if value:
+                    chat_ids.add(value)
+    except FileNotFoundError:
+        pass
+    return file_path, sorted(chat_ids)
+
+
+def _sync_telegram_chat_ids(bot_token):
+    file_path, existing_ids = _load_telegram_chat_ids()
+    existing_set = set(existing_ids)
+
+    try:
+        response = requests.get(
+            f"https://api.telegram.org/bot{bot_token}/getUpdates", timeout=15
+        )
+        response.raise_for_status()
+        for update in (response.json() or {}).get("result", []):
+            chat = (
+                (update.get("message") or {}).get("chat")
+                or (update.get("edited_message") or {}).get("chat")
+                or {}
+            )
+            chat_id = chat.get("id")
+            if chat_id is not None:
+                existing_set.add(str(chat_id))
+    except Exception as exc:
+        print(f"Telegram update sync failed: {exc}")
+
+    if existing_set:
+        with open(file_path, "w", encoding="utf-8") as handle:
+            handle.write("\n".join(sorted(existing_set)) + "\n")
+    return sorted(existing_set)
+
+
+def _get_server_name(server_ip=SERVER_IP):
+    connection = None
+    cursor = None
+    try:
+        connection = connect_db()
+        cursor = connection.cursor()
+        cursor.execute(
+            """
+            SELECT server_name
+            FROM server_details
+            WHERE server_ip = %s
+              AND server_name IS NOT NULL
+              AND TRIM(server_name) <> ''
+            ORDER BY id ASC
+            LIMIT 1
+            """,
+            (server_ip,),
+        )
+        row = cursor.fetchone()
+        return str(row[0]).strip() if row and row[0] else None
+    except Exception as exc:
+        print(f"Server name lookup failed: {exc}")
+        return None
+    finally:
+        if cursor is not None:
+            cursor.close()
+        if connection is not None:
+            connection.close()
+
+
+def _send_telegram_message(message=None):
+    bot_token = settings.get("TELEGRAM_BOT_TOKEN")
+    if not bot_token:
+        print("Telegram bot token not configured. Skipping VPN alert.")
+        return
+
+    chat_ids = _sync_telegram_chat_ids(bot_token)
+    if not chat_ids:
+        return
+
+    url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+    server_name = _get_server_name()
+
+    message_head = f"Server {SERVER_IP}: {server_name or 'unknown name server'} \n"
+    message = message_head + (message or "has issue with vpn connection.")
+
+    if message is None:
+        message = "has issue with vpn connection."
+    for chat_id in chat_ids:
+        try:
+            response = requests.post(
+                url, data={"chat_id": chat_id, "text": message}, timeout=15
+            )
+            response.raise_for_status()
+        except Exception as exc:
+            print(f"Telegram message failed for chat_id {chat_id}: {exc}")
+
+
+def _watch_scrape_duration(stop_event):
+    """Alert once when an item scrape exceeds the watchdog timeout."""
+    if stop_event.wait(SCRAPE_WATCHDOG_TIMEOUT_SECONDS):
+        return
+
+    _send_telegram_message(
+        "This server is offline: scraping item exceeded 15 minutes. "
+    )
+
+
+def _watch_vpn_connection_status():
+    global VPN_CONNECTION_STATUS, VPN_CONNECTION_WATCHDOG
+
+    deadline = time.time() + 5 * 60
+    while time.time() < deadline:
+        if VPN_CONNECTION_WATCHDOG_STOP.is_set():
+            VPN_CONNECTION_WATCHDOG = None
+            return
+        if VPN_CONNECTION_STATUS == "connected":
+            VPN_CONNECTION_WATCHDOG = None
+            return
+        time.sleep(1)
+
+    if VPN_CONNECTION_STATUS == "connecting":
+        _send_telegram_message()
+        VPN_CONNECTION_STATUS = "none"
+
+    VPN_CONNECTION_WATCHDOG = None
+    VPN_CONNECTION_WATCHDOG_STOP.clear()
+
+
+def connect_vpn(country=VPN_COUNTRY):
+    global VPN_CONNECTION_STATUS, VPN_CONNECTION_WATCHDOG, VPN_CONNECTION_WATCHDOG_STOP
+
+    try:
+        VPN_CONNECTION_STATUS = "connecting"
+        VPN_CONNECTION_WATCHDOG_STOP.clear()
+        if VPN_CONNECTION_WATCHDOG is not None and VPN_CONNECTION_WATCHDOG.is_alive():
+            VPN_CONNECTION_WATCHDOG_STOP.set()
+        VPN_CONNECTION_WATCHDOG = threading.Thread(
+            target=_watch_vpn_connection_status, daemon=True
+        )
+        VPN_CONNECTION_WATCHDOG.start()
+
+        def run_cmd(args):
+            result = subprocess.run(
+                [EXPRESSVPN_CMD] + args,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            return result.stdout.strip(), result.stderr.strip()
+
+        def connect(location=None):
+            if location:
+                out, err = run_cmd(["connect", location])
+            else:
+                out, err = run_cmd(["connect"])
+            print(f"Express vpn: {out or err}")
+
+        def disconnect():
+            out, err = run_cmd(["disconnect"])
+            print(f"Express vpn: {out or err}")
+
+        def try_int(x):
+            try:
+                int(x[-1])
+
+                return True
+            except:
+                return False
+
+        def parse_country(x):
+            try:
+                d = x.split(" ")
+                return x.replace(d[-1], ""), d[-1]
+            except:
+                return "DADADADAD", "101"
+
+        def get_locations():
+            try:
+                out, err = run_cmd(["list"])
+                [i.strip() for i in out.split("\n") if try_int(i)]
+
+                return pd.DataFrame(
+                    [parse_country(i.strip()) for i in out.split("\n") if try_int(i)],
+                    columns=["country", "id"],
+                )
+            except:
+                print("Error getting country list")
+                return False
+
+        disconnect()
+        time.sleep(1)
+        try:
+            df = pd.read_csv("utils/express_countries_all.csv")
+            df = get_locations()
+
+            rand_locations = df[
+                df.country.apply(lambda x: x.lower().startswith(country.lower()))
+            ].id.to_list()
+
+            random_location = str(random.choice(rand_locations))
+            print(f"Connecting to : {country}")
+
+        except:
+            try:
+                random_location = str(
+                    random.choice(
+                        pd.read_csv("utils/express_countries.csv").id.to_list()
+                    )
+                )
+                print(f"No {country} server found. Connecting to Netherlands server")
+            except:
+                locations = "93,208,156,209,81,162,219,192,193,194,175,238,160,114,63,152,112,80,57,224,223,133,195,174,111,137,196,197,113,198,164,190,107,154,37,58,199,108,101,128,117,88,115,243,232,91,163,45,79,169,181,245,125,131,100,246,240,144,141,247,241,132,20,142,242,244,140,95,271,19,283,288,270,276,265,273,17,302,299,304,292,306,9,294,18,172,278,284,293,275,165,277,286,290,161,272,6,70,74,71,280,291,54,202,305,285,301,26,155,168,281,75,295,289,297,94,282,296,298,204,1,207,2,300,287,166,303,25,279,274,143,126,184,185,21,307,186,85,147,110,118,124,56,78,130,34,150,153,104,8,103,136,7,92,210,102,99,106,33,129,182,157,29,188,122,119,36,12,134,120,187,189,4,16,212,146,96,32,31,86,145,127,121,211,35,22,23,203,11,201,89,53,178,5,15,263,90,87,139,84,239,105,176,248,249,109,264".split(
+                    ","
+                )
+                random_location = str(random.choice(locations))
+                print("Connecting to Random server")
+
+        connect(random_location)
+        time.sleep(2)
+        VPN_CONNECTION_STATUS = "connected"
+        VPN_CONNECTION_WATCHDOG_STOP.set()
+        time.sleep(3)
+        return True
+    except:
+        VPN_CONNECTION_STATUS = "none"
+        VPN_CONNECTION_WATCHDOG_STOP.set()
+        time.sleep(3)
+
+        return False
+
+
+def connect_db():
+    db_settings = DATABASE_SETTINGS
+    return mysql.connector.connect(
+        host=db_settings.get("DB_HOST", "localhost"),
+        user=db_settings.get("DB_USER", "root"),
+        password=db_settings.get("DB_PASSWORD", ""),
+        database=db_settings.get("DB_NAME", "oneapp"),
+    )
+
+
+def update_server_status(server_action, server_action_details, server_ip=SERVER_IP):
+    """Update an existing server status or create one for a new server."""
+
+    def save_status_action():
+        connection = connect_db()
+        cursor = None
+        try:
+            cursor = connection.cursor()
+            cursor.execute(
+                """
+                UPDATE server_status
+                SET server_action = %s,
+                    server_action_details = %s,
+                    date_time = UTC_TIMESTAMP()
+                WHERE server_ip = %s
+                """,
+                (server_action, server_action_details, server_ip),
+            )
+
+            if cursor.rowcount == 0:
+                cursor.execute(
+                    """
+                    INSERT INTO server_status
+                        (server_ip, server_action, server_action_details)
+                    VALUES (%s, %s, %s)
+                    """,
+                    (server_ip, server_action, server_action_details),
+                )
+
+            connection.commit()
+            return True
+        except Exception:
+            connection.rollback()
+            raise
+        finally:
+            if cursor is not None:
+                cursor.close()
+            connection.close()
+
+    return execute_db_with_retry(save_status_action)
+
+
+def get_first_pending_url(server_ip=SERVER_IP):
+    """Atomically claim and return the first available item URL for a server."""
+
+    def get_url_action():
+        connection = connect_db()
+        cursor = None
+        try:
+            connection.start_transaction()
+            cursor = connection.cursor()
+            cursor.execute(
+                """
+                                SELECT tracking.id,
+                                             tracking.item_url,
+                                             tracking.item_name,
+                                             companies.company_name
+                                FROM scrape_tracking AS tracking
+                                LEFT JOIN companies
+                                    ON companies.company_url = tracking.company_url
+                                WHERE tracking.scrape_status = 'pending'
+                                    AND tracking.server_ip = %s
+                                ORDER BY tracking.id ASC
+                LIMIT 1
+                FOR UPDATE SKIP LOCKED
+                """,
+                (server_ip,),
+            )
+            row = cursor.fetchone()
+
+            resumed = row is not None
+            if row is None:
+                cursor.execute(
+                    """
+                                        SELECT tracking.id,
+                                                     tracking.item_url,
+                                                     tracking.item_name,
+                                                     companies.company_name
+                                        FROM scrape_tracking AS tracking
+                                        LEFT JOIN companies
+                                            ON companies.company_url = tracking.company_url
+                                        WHERE tracking.scrape_status = 'none'
+                                        ORDER BY tracking.id ASC
+                    LIMIT 1
+                    FOR UPDATE SKIP LOCKED
+                    """
+                )
+                row = cursor.fetchone()
+
+            if row is None:
+                connection.commit()
+                return {"status": False, "item_url": None}
+
+            record_id, item_url, item_name, company_name = row
+            if not resumed:
+                cursor.execute(
+                    """
+                    UPDATE scrape_tracking
+                    SET scrape_status = 'pending',
+                        server_ip = %s,
+                        date_time = UTC_TIMESTAMP()
+                    WHERE id = %s AND scrape_status = 'none'
+                    """,
+                    (server_ip, record_id),
+                )
+                if cursor.rowcount != 1:
+                    connection.rollback()
+                    return {"status": False, "item_url": None}
+            connection.commit()
+            return {
+                "status": True,
+                "tracking_id": record_id,
+                "company_name": company_name,
+                "item_url": item_url,
+                "item_name": item_name,
+            }
+        except Exception:
+            connection.rollback()
+            raise
+        finally:
+            if cursor is not None:
+                cursor.close()
+            connection.close()
+
+    for attempt in range(3):
+        result = execute_db_with_retry(get_url_action)
+        if result.get("status"):
+            return result
+        if attempt < 2:
+            time.sleep(DB_RETRY_DELAY_SECONDS)
+
+    return result
+
+
+def execute_db_with_retry(db_action, *args, **kwargs):
+    """Execute a database action, retrying the complete action on failure."""
+    last_error = None
+    for attempt in range(1, DB_RETRY_ATTEMPTS + 1):
+        try:
+            return db_action(*args, **kwargs)
+        except Exception as exc:
+            last_error = exc
+            print(
+                f"Database action attempt {attempt}/{DB_RETRY_ATTEMPTS} failed: {exc}"
+            )
+            if attempt < DB_RETRY_ATTEMPTS:
+                error_code = getattr(exc, "errno", None)
+                delay = DB_RETRY_DELAY_SECONDS * (2 ** (attempt - 1))
+                if error_code in DB_TRANSIENT_ERROR_CODES:
+                    delay += random.uniform(0, DB_RETRY_DELAY_SECONDS)
+                time.sleep(delay)
+
+    raise last_error
+
+
+def init_tracking_csv(path=TRACKING_CSV_PATH):
+    path = Path(path)
+    if not path.exists():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(
+                [
+                    "company_url",
+                    "item_name",
+                    "category",
+                    "item_url",
+                    "scrape_status",
+                    "error",
+                    "scrape_result",
+                ]
+            )
+    return path
+
+
+def load_tracking_df(path=TRACKING_CSV_PATH):
+    path = init_tracking_csv(path)
+    # Read CSV then normalize required columns and boolean flags
+    try:
+        df = pd.read_csv(path, dtype=str)
+    except Exception:
+        df = pd.DataFrame()
+
+    required_cols = [
+        "company_url",
+        "item_name",
+        "category",
+        "item_url",
+        "scrape_status",
+        "error",
+        "scrape_result",
+    ]
+    for col in required_cols:
+        if col not in df.columns:
+            df[col] = "" if col not in ("scrape_status", "error") else False
+
+    def _to_bool(v):
+        if isinstance(v, bool):
+            return v
+        s = str(v).strip().lower()
+        return True if s in ("true", "1", "t", "yes") else False
+
+    # Normalize boolean-like columns
+    df["scrape_status"] = df["scrape_status"].apply(_to_bool)
+    df["error"] = df["error"].apply(_to_bool)
+
+    return df
+
+
+def save_tracking_df(df, path=TRACKING_CSV_PATH):
+    path = init_tracking_csv(path)
+    df.to_csv(path, index=False, encoding="utf-8")
+
+
+def add_category_entries(
+    company_url, company_name, category, item_urls, path=TRACKING_CSV_PATH
+):
+    """Save category items to the database without duplicating item URLs."""
+    items = []
+    for item in item_urls:
+        if isinstance(item, dict):
+            item_url = item.get("item_url") or item.get("url")
+            item_name = item.get("item_name") or item.get("name") or ""
+        else:
+            item_url = item
+            item_name = ""
+
+        normalized_item_url = str(item_url or "").strip()
+        if normalized_item_url:
+            items.append(
+                {
+                    "item_url": normalized_item_url,
+                    "item_name": str(item_name or "").strip(),
+                }
+            )
+
+    def save_entries_action():
+        connection = connect_db()
+        cursor = None
+        try:
+            connection.start_transaction()
+            cursor = connection.cursor()
+
+            if company_name is not None:
+                cursor.execute(
+                    "UPDATE companies SET company_name = %s WHERE company_url = %s",
+                    (company_name, company_url),
+                )
+
+            if items:
+                item_urls = list(dict.fromkeys(item["item_url"] for item in items))
+                placeholders = ", ".join(["%s"] * len(item_urls))
+                cursor.execute(
+                    f"SELECT item_url FROM scrape_tracking WHERE item_url IN ({placeholders})",
+                    item_urls,
+                )
+                existing_item_urls = {row[0] for row in cursor.fetchall()}
+                new_items = []
+                seen_item_urls = set(existing_item_urls)
+                for item in items:
+                    if item["item_url"] not in seen_item_urls:
+                        new_items.append(item)
+                        seen_item_urls.add(item["item_url"])
+
+                if new_items:
+                    cursor.executemany(
+                        """
+                        INSERT INTO scrape_tracking
+                            (company_url, item_name, item_url, category)
+                        VALUES (%s, %s, %s, %s)
+                        """,
+                        [
+                            (
+                                company_url,
+                                item["item_name"],
+                                item["item_url"],
+                                category,
+                            )
+                            for item in new_items
+                        ],
+                    )
+
+            connection.commit()
+            return True
+        except Exception:
+            connection.rollback()
+            raise
+        finally:
+            if cursor is not None:
+                cursor.close()
+            connection.close()
+
+    result = execute_db_with_retry(save_entries_action)
+    try:
+        update_server_status(
+            "scraping company items",
+            f"{company_name or 'Unknown company'} : {category}",
+        )
+    except Exception as exc:
+        print(f"Warning: failed to update server status for category {category}: {exc}")
+    return result
+
+
+def update_item_status(
+    company_url,
+    item_url,
+    scraped=True,
+    error=False,
+    scrape_result="",
+    path=TRACKING_CSV_PATH,
+):
+    """Update a single item's scrape status and metadata."""
+    df = load_tracking_df(path)
+    mask = (df["company_url"] == company_url) & (df["item_url"] == item_url)
+    if mask.any():
+        df.loc[mask, "scrape_status"] = bool(scraped)
+        df.loc[mask, "error"] = bool(error)
+        df.loc[mask, "scrape_result"] = scrape_result
+        save_tracking_df(df, path)
+        return True
+    else:
+        # If the item isn't present yet, append it with provided status
+        row = {
+            "company_url": company_url,
+            "item_name": "",
+            "category": "",
+            "item_url": item_url,
+            "scrape_status": bool(scraped),
+            "error": bool(error),
+            "scrape_result": scrape_result,
+        }
+        df = pd.concat([df, pd.DataFrame([row])], ignore_index=True)
+        save_tracking_df(df, path)
+        return True
+
+
+def get_pending_items_for_company(company_url, path=TRACKING_CSV_PATH):
+    """Return list of dict rows where scrape_status is False for given company_url."""
+    df = load_tracking_df(path)
+    if "scrape_status" not in df.columns:
+        return []
+    pending = df[(df["company_url"] == company_url) & (~df["scrape_status"])].copy()
+    return pending.to_dict(orient="records")
+
+
+def has_items_for_company(company_url, path=TRACKING_CSV_PATH):
+    df = load_tracking_df(path)
+    return (df["company_url"] == company_url).any()
+
+
+def create_driver():
+    """Create and return a maximized SeleniumBase Driver."""
+    driver = Driver()
+    driver.maximize_window()
+    return driver
+
+
+def normalize_image_url(url):
+    if not url:
+        return url
+    url = url.strip()
+    if url.startswith("//"):
+        return "https:" + url
+    return url
+
+
+def extract_result_items_from_soup(page_soup):
+    """Extract product item elements from a page soup.
+
+    Returns:
+        dict: {status: bool, data: list, error: str}
+    """
+    try:
+        items = page_soup.select(
+            'div.component-product-list div[class*=" product-item"]'
+        )
+        return {
+            "status": True,
+            "data": items,
+            "error": "none",
+        }
+    except Exception as exc:
+        return {
+            "status": False,
+            "data": [],
+            "error": f"extract_result_items_from_soup: {str(exc)}",
+        }
+
+
+def extract_data_from_result_page_item(element):
+    """Extract item data from a result page item element."""
+    try:
+        if element is None:
+            return {
+                "status": False,
+                "data": {},
+                "error": "extract_data_from_result_page_item: Element is None",
+            }
+
+        ITEM_NAME_SELECTOR = "span.title-con"
+        ITEM_URL_SELECTOR = 'a[class*="title-link"]'
+        PRICE_SELECTOR = "div.price"
+
+        item_name_element = element.select_one(ITEM_NAME_SELECTOR)
+        item_url_element = element.select_one(ITEM_URL_SELECTOR)
+        price_element = element.select_one(PRICE_SELECTOR)
+
+        data = {
+            "item_name": item_name_element.get_text(strip=True)
+            if item_name_element
+            else None,
+            "item_url": item_url_element.get("href") if item_url_element else None,
+            "price": price_element.get_text(strip=True) if price_element else None,
+        }
+
+        return {
+            "status": True,
+            "data": data,
+            "error": "none",
+        }
+    except Exception as exc:
+        return {
+            "status": False,
+            "data": {},
+            "error": f"extract_data_from_result_page_item: {str(exc)}",
+        }
+
+
+def shipping_region_error(page_soup):
+    PRODUCT_TITLE_ELEMENT = 'div[class="unsafe-title"]'
+    try:
+        element = page_soup.select_one(PRODUCT_TITLE_ELEMENT)
+        if element.text.lower().startswith(
+            "sorry, this product  can't  be shipped to your region"
+        ):
+            return {
+                "status": True,
+                "data": element.get_text(strip=True) if element else None,
+                "error": "Shipping region error",
+            }
+        else:
+            return {
+                "status": False,
+                "data": None,
+                "error": "none",
+            }
+    except Exception as exc:
+        return {
+            "status": False,
+            "data": None,
+            "error": f"shipping_region_error: {str(exc)}",
+        }
+
+
+def extract_product_title(page_soup):
+    PRODUCT_TITLE_ELEMENT = 'div[class="product-title-container"] h1'
+    try:
+        element = page_soup.select_one(PRODUCT_TITLE_ELEMENT)
+        return {
+            "status": True,
+            "data": element.get_text(strip=True) if element else None,
+            "error": "none",
+        }
+    except Exception as exc:
+        return {
+            "status": False,
+            "data": None,
+            "error": f"extract_product_title: {str(exc)}",
+        }
+
+
+def extract_product_company_name(page_soup):
+    PRODUCT_COMPANY_NAME_ELEMENT = (
+        'div[data-module-name="module_unifed_company_card"] a[class*="id-underline"]'
+    )
+    try:
+        element = page_soup.select_one(PRODUCT_COMPANY_NAME_ELEMENT)
+        return {
+            "status": True,
+            "data": element.get_text(strip=True) if element else None,
+            "error": "none",
+        }
+    except Exception as exc:
+        return {
+            "status": False,
+            "data": None,
+            "error": f"extract_product_company_name: {str(exc)}",
+        }
+
+
+def extract_product_images(page_soup):
+    PRODUCT_IMAGES_ELEMENT = 'div[data-testid="media-image"] img'
+    try:
+        images = page_soup.select(PRODUCT_IMAGES_ELEMENT)
+        urls = [normalize_image_url(img.get("src")) for img in images if img.get("src")]
+        return {
+            "status": True,
+            "data": urls,
+            "error": "none",
+        }
+    except Exception as exc:
+        return {
+            "status": False,
+            "data": [],
+            "error": f"extract_product_images: {str(exc)}",
+        }
+
+
+def extract_product_video(page_soup):
+    PRODUCT_VIDEOS_ELEMENT = 'div[class="detail-video-container"] video'
+    try:
+        videos = page_soup.select(PRODUCT_VIDEOS_ELEMENT)
+        urls = [
+            normalize_image_url(video.get("src"))
+            for video in videos
+            if video.get("src")
+        ]
+        return {
+            "status": True,
+            "data": urls,
+            "error": "none",
+        }
+    except Exception as exc:
+        return {
+            "status": False,
+            "data": [],
+            "error": f"extract_product_video: {str(exc)}",
+        }
+
+
+def extract_product_pricing_options_old(page_soup):
+    PRICING_OPTIONS_ELEMENT = 'div[class="price-item"]'
+    PRICING_OPTIONS_ELEMENT2 = 'div[data-testid="pc-purchase-price"] > div'
+    PRICING_OPTION_ELEMENT = 'div[data-testid="ladder-price"]'
+    PRICING_RANGE_ELEMENT = 'div[data-testid="range-price"]'
+
+    SHILLING_ELEMENT = 'span[class*="id-font-bold"]'
+    CENTS_ELEMENT = 'span[class*="id-font-semibold"]'
+
+    PRICE_TIER = 'div[data-testid="pc-purchase-price-tiers"]'
+    PRICING_TIER_OPTION = 'div[data-testid="pc-purchase-price-tier"]'
+
+    try:
+        option_element = page_soup.select_one(PRICING_OPTION_ELEMENT)
+        if option_element:
+            pricing_elements = option_element.select(PRICING_OPTIONS_ELEMENT)
+        else:
+            pricing_elements = page_soup.select(PRICING_OPTIONS_ELEMENT)
+
+        if not pricing_elements:
+            pricing_elements = page_soup.select(PRICING_OPTIONS_ELEMENT2)
+
+        pricing_options = []
+        for element in pricing_elements:
+            div_children = [child for child in element.find_all("div", recursive=False)]
+
+            styled_price_element = (
+                div_children[0].select(SHILLING_ELEMENT)
+                if len(div_children) > 0
+                else []
+            )
+            if styled_price_element:
+                shillings = (
+                    div_children[0].select(SHILLING_ELEMENT)[0].get_text(strip=True)
+                )
+                cents = div_children[0].select(CENTS_ELEMENT)[-1].get_text(strip=True)
+                price = f"${shillings}.{cents}"
+            else:
+                price = (
+                    div_children[0].get_text(strip=True)
+                    if len(div_children) > 0
+                    else None
+                )
+            num_pieces = (
+                div_children[1].get_text(strip=True) if len(div_children) > 1 else None
+            )
+            pricing_options.append(
+                {
+                    "num_pieces": num_pieces,
+                    "price": price,
+                }
+            )
+
+        if not pricing_options:
+            tier_element = page_soup.select_one(PRICE_TIER)
+            if tier_element:
+                options = tier_element.select(PRICING_TIER_OPTION)
+                pricing_options = [
+                    {
+                        "num_pieces": option.select("div")[1].get_text(strip=True),
+                        "price": option.select("div")[0].get_text(strip=True),
+                    }
+                    for option in options
+                    if option.select("div")
+                ]
+
+                # Extract pricing tiers from the price tier element
+                pass
+
+        if not pricing_options:
+            range_element = page_soup.select_one(PRICING_RANGE_ELEMENT)
+
+            if range_element:
+                # price is in the first span, quantity = element text - price text
+                price_span = range_element.select_one("span")
+                price = price_span.get_text(strip=True) if price_span else None
+                quantity_text = range_element.get_text(strip=True)
+
+                num_pieces = quantity_text.replace(price, "").strip()
+                pricing_options.append(
+                    {
+                        "num_pieces": num_pieces,
+                        "price": price,
+                    }
+                )
+
+        return {
+            "status": True,
+            "data": pricing_options,
+            "error": "none",
+        }
+    except Exception as exc:
+        return {
+            "status": False,
+            "data": [],
+            "error": f"extract_product_pricing_options: {str(exc)}",
+        }
+
+
+# page_source = driver.page_source
+# page_soup = bs4.BeautifulSoup(page_source, "html.parser")
+
+# extract_product_pricing_options(page_soup)
+
+
+def extract_product_pricing_options(page_soup):
+    PRICING_OPTIONS_ELEMENT = 'div[data-testid="pc-purchase-price-tiers"]'
+    PRICING_OPTIONS_ELEMENT2 = 'div[data-testid="pc-purchase-price"] > div'
+
+    PRICING_TIER_OPTION = 'div[data-testid="pc-purchase-price-tier"]'
+
+    PRICING_OPTION_ELEMENT = 'div[data-testid="ladder-price"]'
+    PRICING_RANGE_ELEMENT = 'div[data-testid="range-price"]'
+
+    SHILLING_ELEMENT = 'span[class*="id-font-bold"]'
+    CENTS_ELEMENT = 'span[class*="id-font-semibold"]'
+
+    PURCHASE_PRICE_ELEMENT = 'div[data-testid="pc-purchase-price"] div[data-testid="pc-purchase-current-price"]'
+    PURCHASE_PRICE_ELEMENT2 = 'div[data-testid="pc-purchase-price"] span[data-testid="pc-purchase-current-price"]'
+    MOQ_ELEMENT = 'div[data-testid="pc-purchase-price"] div[data-testid="pc-purchase-effective-moq"]'
+
+    try:
+        pricing_main_element = page_soup.select_one(PRICING_OPTIONS_ELEMENT)
+
+        if not pricing_main_element:
+            pricing_main_element = page_soup.select_one(PRICING_OPTIONS_ELEMENT2)
+
+        if pricing_main_element:
+            pricing_elements = pricing_main_element.select(PRICING_TIER_OPTION)
+        else:
+            pricing_elements = []
+
+            # if not pricing_elements:
+            #     pricing_elements = [pricing_main_element]
+
+        pricing_options = []
+        for element in pricing_elements:
+            div_children = [child for child in element.find_all("div", recursive=False)]
+
+            styled_price_element = (
+                div_children[0].select(SHILLING_ELEMENT)
+                if len(div_children) > 0
+                else []
+            )
+            if styled_price_element:
+                shillings = (
+                    div_children[0].select(SHILLING_ELEMENT)[0].get_text(strip=True)
+                )
+                cents = (
+                    div_children[0]
+                    .select(CENTS_ELEMENT)[-1]
+                    .get_text(strip=True)
+                    .replace(".", "")
+                    .replace("$", "")
+                )
+                cents = 0 if not cents else cents
+                price = f"${shillings}.{cents}"
+            else:
+                price = (
+                    div_children[0].get_text(strip=True)
+                    if len(div_children) > 0
+                    else None
+                )
+            num_pieces = (
+                div_children[1].get_text(strip=True) if len(div_children) > 1 else None
+            )
+            pricing_options.append(
+                {
+                    "num_pieces": num_pieces,
+                    "price": price,
+                }
+            )
+
+        if not pricing_options:
+            tier_element = page_soup.select_one(PURCHASE_PRICE_ELEMENT)
+            styled_price_element = (
+                tier_element.select(SHILLING_ELEMENT) if tier_element else []
+            )
+
+            try:
+                shillings = [
+                    x.get_text(strip=True)
+                    for x in tier_element.select(SHILLING_ELEMENT)
+                ]
+                cents = [
+                    x.get_text(strip=True)
+                    for x in tier_element.select(CENTS_ELEMENT)
+                    if x.get_text(strip=True) not in [".", "$"]
+                ]
+
+                if len(shillings) - len(cents) > 0:
+                    cents = ["0"] * (len(shillings) - len(cents)) + cents
+
+                raw_price = "-".join(
+                    [".".join(list(x)) for x in list(zip(shillings, cents))]
+                )
+                price = f"${raw_price}"
+            except:
+                price = page_soup.select_one(PURCHASE_PRICE_ELEMENT2).get_text(
+                    strip=True
+                )
+
+            moq_element = page_soup.select_one(MOQ_ELEMENT)
+
+            num_pieces = moq_element.get_text(strip=True)
+
+            pricing_options.append(
+                {
+                    "num_pieces": num_pieces,
+                    "price": price,
+                }
+            )
+
+            # if tier_element:
+            #     options = tier_element.select(PRICING_TIER_OPTION)
+            #     pricing_options = [
+            #         {
+            #             "num_pieces": option.select("div")[1].get_text(strip=True),
+            #             "price": option.select("div")[0].get_text(strip=True),
+            #         }
+            #         for option in options
+            #         if option.select("div")
+            #     ]
+
+            #     # Extract pricing tiers from the price tier element
+            #     pass
+
+        if not pricing_options:
+            range_element = page_soup.select_one(PRICING_OPTIONS_ELEMENT2)
+
+            if range_element:
+                # price is in the first span, quantity = element text - price text
+                price_span = range_element.select_one("span")
+                price = price_span.get_text(strip=True) if price_span else None
+                quantity_text = range_element.get_text(strip=True)
+
+                num_pieces = quantity_text.replace(price, "").strip()
+                pricing_options.append(
+                    {
+                        "num_pieces": num_pieces,
+                        "price": price,
+                    }
+                )
+
+        return {
+            "status": True,
+            "data": pricing_options,
+            "error": "none",
+        }
+    except Exception as exc:
+        return {
+            "status": False,
+            "data": [],
+            "error": f"extract_product_pricing_options: {str(exc)}",
+        }
+
+
+def extract_product_shipping_fee(page_soup):
+    SHIPPING_FEE_ELEMENT = 'div[data-testid="logistics-total-price"]'
+    SHIPPING_FEE_ELEMENT2 = 'div[data-testid*="purchase-logistics-fee"]'
+    try:
+        element = page_soup.select_one(SHIPPING_FEE_ELEMENT)
+        if element:
+            for struck in element.select("s"):
+                struck.extract()
+            shipping_fee = element.get_text(separator=" ", strip=True)
+        else:
+            element = page_soup.select_one(SHIPPING_FEE_ELEMENT2)
+            if element:
+                shipping_fee = (
+                    element.get_text(separator=" ", strip=True) if element else ""
+                )
+            else:
+                shipping_fee = None
+        return {
+            "status": True,
+            "data": shipping_fee,
+            "error": "none",
+        }
+    except Exception as exc:
+        return {
+            "status": False,
+            "data": None,
+            "error": f"extract_product_shipping_fee: {str(exc)}",
+        }
+
+
+def extract_product_attributes(page_soup):
+    PRODUCT_ATTRIBUTES_ELEMENT = 'div[data-testid="module-attribute-row"]'
+    try:
+        rows = page_soup.select(PRODUCT_ATTRIBUTES_ELEMENT)
+        attributes = {}
+        for row in rows:
+            div_children = [child for child in row.find_all("div", recursive=False)]
+            if len(div_children) >= 2:
+                attribute_name = div_children[0].get_text(strip=True)
+                attribute_value = div_children[1].get_text(strip=True)
+                if attribute_name:
+                    attributes[attribute_name] = attribute_value
+        return {
+            "status": True,
+            "data": attributes,
+            "error": "none",
+        }
+    except Exception as exc:
+        return {
+            "status": False,
+            "data": {},
+            "error": f"extract_product_attributes: {str(exc)}",
+        }
+
+
+def extract_product_description_old(page_soup):
+    PRODUCT_DESCRIPTION_ELEMENT = 'div[class="description-layout"]'
+    try:
+        element = page_soup.select_one(PRODUCT_DESCRIPTION_ELEMENT)
+        if element:
+            description_text = element.get_text(separator=" ", strip=True)
+            image_srcs = [
+                img.get("src") for img in element.select("img") if img.get("src")
+            ]
+        else:
+            description_text = None
+            image_srcs = []
+        return {
+            "status": True,
+            "data": {
+                "description_text": description_text,
+                "description_image": image_srcs,
+            },
+            "error": "none",
+        }
+    except Exception as exc:
+        return {
+            "status": False,
+            "data": {
+                "description_text": None,
+                "description_image": [],
+            },
+            "error": f"extract_product_description_old: {str(exc)}",
+        }
+
+
+def extract_product_description(page_soup, driver):
+    PRODUCT_DESCRIPTION_ELEMENT = 'div[class="description-layout"]'
+    PRODUCT_DESCRIPTION_ELEMENT2 = 'div[class="module_structure_description"]'
+    PRODUCT_DESCRIPTION_ELEMENT3 = 'div[class="module_description"]'
+
+    PRODUCT_DESCRIPTION_IFRAME_SELECTOR = 'div[class="description-layout"] iframe'
+    try:
+        element = page_soup.select_one(PRODUCT_DESCRIPTION_ELEMENT)
+        if not element:
+            element = page_soup.select_one(PRODUCT_DESCRIPTION_ELEMENT2)
+            PRODUCT_DESCRIPTION_IFRAME_SELECTOR = (
+                f"{PRODUCT_DESCRIPTION_ELEMENT2} iframe"
+            )
+        if not element:
+            element = page_soup.select_one(PRODUCT_DESCRIPTION_ELEMENT3)
+            PRODUCT_DESCRIPTION_IFRAME_SELECTOR = (
+                f"{PRODUCT_DESCRIPTION_ELEMENT3} iframe"
+            )
+        description_text = None
+        image_srcs = []
+
+        if element:
+            iframe_present = element.find("iframe") is not None
+            if iframe_present:
+                try:
+                    iframe_element = driver.find_element(
+                        By.CSS_SELECTOR, PRODUCT_DESCRIPTION_IFRAME_SELECTOR
+                    )
+                    driver.switch_to.frame(iframe_element)
+                    iframe_html = driver.page_source
+                    iframe_soup = bs4.BeautifulSoup(iframe_html, "html.parser")
+                    description_text = iframe_soup.get_text(separator="\n", strip=True)
+                    image_srcs = [
+                        normalize_image_url(img.get("src"))
+                        for img in iframe_soup.select("img")
+                        if img.get("src")
+                    ]
+                finally:
+                    driver.switch_to.default_content()
+            else:
+                description_text = element.get_text(separator="\n", strip=True)
+                image_srcs = [
+                    normalize_image_url(img.get("src"))
+                    for img in element.select("img")
+                    if img.get("src")
+                ]
+
+        return {
+            "status": True,
+            "data": {
+                "description_text": description_text,
+                "description_image": image_srcs,
+            },
+            "error": "none",
+        }
+    except Exception as exc:
+        try:
+            driver.switch_to.default_content()
+        except Exception:
+            pass
+        return {
+            "status": False,
+            "data": {
+                "description_text": None,
+                "description_image": [],
+            },
+            "error": f"extract_product_description: {str(exc)}",
+        }
+
+
+def get_faq_content(driver):
+    try:
+        status = False
+        error = "FAQ not available"
+        faq_data = None
+        FAQ_HEADER_ELEMENT = 'div[module-title="detailProductNavigation"]'
+        FAQ_HEADER_ELEMENT2 = 'div[data-testid="product-detail-title"]'
+
+        FAQ_DESCRIPTION_IFRAME_SELECTOR = (
+            'div[data-module-name="module_product_specification"] iframe'
+        )
+        FAQ_SECTION_ELEMENT = 'div[data-section-title="FAQ"]'
+
+        try:
+            iframe_element = driver.find_element(
+                By.CSS_SELECTOR, FAQ_DESCRIPTION_IFRAME_SELECTOR
+            )
+
+            driver.switch_to.frame(iframe_element)
+        except:
+            pass
+        iframe_html = driver.page_source
+
+        iframe_soup = bs4.BeautifulSoup(iframe_html, "html.parser")
+        faq_header_elements = iframe_soup.select(FAQ_HEADER_ELEMENT)
+        if not faq_header_elements:
+            faq_header_elements = iframe_soup.select(FAQ_HEADER_ELEMENT2)
+
+        faq_index = (
+            [i.get_text().lower() for i in faq_header_elements].index("faq")
+            if "faq" in [i.get_text().lower() for i in faq_header_elements]
+            else -1
+        )
+
+        if faq_index == -1:
+            faq_index = (
+                [i.get_text().lower() for i in faq_header_elements].index("faqs")
+                if "faqs" in [i.get_text().lower() for i in faq_header_elements]
+                else -1
+            )
+
+        if faq_index != -1:
+            faq_content = faq_header_elements[faq_index].find_next_siblings("div")
+
+            faq_data = "\n".join(
+                [
+                    faq_content_item.get_text(separator="\n", strip=True)
+                    for faq_content_item in faq_content
+                    if faq_content_item.get_text(separator="\n", strip=True)
+                ]
+            )
+
+            status = True
+            error = "none"
+        else:
+            faq_content = (
+                iframe_soup.select(FAQ_SECTION_ELEMENT)[0]
+                if iframe_soup.select(FAQ_SECTION_ELEMENT)
+                else None
+            )
+            if faq_content:
+                faq_data = faq_content.get_text(separator="\n", strip=True)
+                status = True
+                error = "none"
+
+        return {
+            "status": status,
+            "data": faq_data,
+            "error": error,
+        }
+    except Exception as exc:
+        faq_data = None
+        return {
+            "status": False,
+            "data": None,
+            "error": f"get_faq_content: {str(exc)}",
+        }
+    finally:
+        driver.switch_to.default_content()
+
+
+def extract_customization_options(driver):
+    CUSTOM_SECTION_ELEMENT = 'div[data-auto-exp="skuCustomizationChoices"]'
+    OPTION_GROUP_SELECTOR = 'div[class="id-mb-2"]'
+    OPTION_DATA_ELEMENT = (
+        'div[class*="id-overflow-hidden id-overflow-ellipsis id-whitespace-nowrap"]'
+    )
+    try:
+        wait = WebDriverWait(driver, 3)
+        custom_section = wait.until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, CUSTOM_SECTION_ELEMENT))
+        )
+
+        customization_options = {}
+        option_groups = custom_section.find_elements(
+            By.CSS_SELECTOR, OPTION_GROUP_SELECTOR
+        )
+        for group in option_groups:
+            group_data = {}
+            image_src = ""
+            group_name = group.text.strip()
+            if not group_name:
+                continue
+
+            # option_elements = all following sibling divs till one like option OPTION_GROUP_SELECTOR
+
+            option_elements = group.find_elements(
+                By.XPATH, "./following-sibling::div[1]"
+            )
+
+            option_element = option_elements[0]
+
+            option_image_element = option_element.find_element(By.CSS_SELECTOR, "img")
+            if option_image_element:
+                image_src = option_image_element.get_attribute("src")
+
+            group_data["image_url"] = image_src
+
+            option_data_element = option_element.find_elements(
+                By.CSS_SELECTOR, OPTION_DATA_ELEMENT
+            )
+
+            option_name = ""
+            option_details = ""
+            if option_data_element:
+                option_name = (
+                    option_data_element[0].text.strip() if option_data_element else None
+                )
+
+                if len(option_data_element) > 1:
+                    option_details = (
+                        option_data_element[1].text.strip()
+                        if len(option_data_element) > 1
+                        else None
+                    )
+
+            group_data["option_name"] = option_name
+            group_data["option_details"] = option_details
+
+            customization_options[group_name] = group_data
+        return {
+            "status": True,
+            "data": customization_options,
+            "error": "none",
+        }
+    except Exception as exc:
+        return {
+            "status": False,
+            "data": {},
+            "error": f"extract_customization_options: {str(exc)}",
+        }
+
+
+def extract_product_variation_func(driver):
+    VARIATIONS_BUTTON_SELECTOR = 'a[data-testid="sku-action"]'
+    VARIATIONS_BUTTON_SELECTOR2 = 'button[data-testid*="purchase-sku-edit"]'
+    VARIATIONS_DIALOG_SELECTOR = 'div[role="dialog"]'
+    VARIATION_GROUP_SELECTOR = 'div[data-testid="sku-panel-sku-group"]'
+    VARIATION_GROUP_SELECTOR2 = 'div[data-testid="pc-purchase-sku-matrix"] > div'
+
+    VARIATION_OPTION_SELECTOR = 'div[data-testid*="sku-item"]'
+    VARIATION_OPTION_SELECTOR2 = 'div[data-testid="pc-purchase-quantity-row"]'
+    VARIATION_OPTION_SELECTOR3 = 'button[data-testid="pc-purchase-sku-option"]'
+
+    VARIATIONS_DIALOG_CLOSE_SELECTOR = 'div[role="dialog"] > button'
+    # VARIATION_OPTION_NAME_SELECTOR = "div:nth-child(1) > div:nth-child(1) span"
+    VARIATION_OPTION_NAME_SELECTOR = 'div[data-testid="double-bordered-box"]'
+
+    try:
+        wait = WebDriverWait(driver, 5)
+        try:
+            open_button = wait.until(
+                EC.element_to_be_clickable(
+                    (By.CSS_SELECTOR, VARIATIONS_BUTTON_SELECTOR)
+                )
+            )
+        except:
+            open_button = wait.until(
+                EC.element_to_be_clickable(
+                    (By.CSS_SELECTOR, VARIATIONS_BUTTON_SELECTOR2)
+                )
+            )
+        # scroll to center
+        driver.execute_script(
+            "arguments[0].scrollIntoView({block: 'center', inline: 'center'});",
+            open_button,
+        )
+        open_button.click()
+        time.sleep(2)
+
+        wait.until(
+            EC.presence_of_element_located(
+                (By.CSS_SELECTOR, VARIATIONS_DIALOG_SELECTOR)
+            )
+        )
+
+        dialog = driver.find_element(By.CSS_SELECTOR, VARIATIONS_DIALOG_SELECTOR)
+        group_elements = dialog.find_elements(By.CSS_SELECTOR, VARIATION_GROUP_SELECTOR)
+
+        if not group_elements:
+            group_elements = dialog.find_elements(
+                By.CSS_SELECTOR, VARIATION_GROUP_SELECTOR2
+            )
+
+        # group = group_elements[0]
+
+        variations = {}
+        for group in group_elements:
+            try:
+                variation_name_element = group.find_element(By.CSS_SELECTOR, "h4")
+                variation_name = (
+                    variation_name_element.text.strip()
+                    if variation_name_element
+                    else None
+                )
+            except:
+                try:
+                    variation_name_element = group.find_element(
+                        By.CSS_SELECTOR, 'div[class*="id-text-base"]'
+                    )
+                    variation_name = (
+                        variation_name_element.text.strip()
+                        if variation_name_element
+                        else None
+                    )
+
+                    variation_name = variation_name.split(":")[0].strip()
+
+                except:
+                    variation_name = "Variation"
+
+            if not variation_name:
+                continue
+
+            option_elements = group.find_elements(
+                By.CSS_SELECTOR, VARIATION_OPTION_SELECTOR
+            )
+
+            if not option_elements:
+                option_elements = group.find_elements(
+                    By.CSS_SELECTOR, VARIATION_OPTION_SELECTOR2
+                )
+
+            if not option_elements:
+                option_elements = group.find_elements(
+                    By.CSS_SELECTOR, VARIATION_OPTION_SELECTOR3
+                )
+
+            option_map = {}
+
+            # i = 0
+            # option = option_elements[i]
+            for i, option in enumerate(option_elements):
+                # option_divs = option.find_elements(
+                #     By.CSS_SELECTOR, VARIATION_OPTION_NAME_SELECTOR
+                # )
+                # option_label = (
+                #     option_divs[0].text.strip()
+                #     if len(option_divs) > 0
+                #     else f"option_{i + 1}"
+                # )
+
+                option_divs = option.find_elements(
+                    By.CSS_SELECTOR, VARIATION_OPTION_SELECTOR3
+                )
+                if not option_divs:
+                    option_divs = option.find_elements(
+                        By.CSS_SELECTOR, VARIATION_OPTION_NAME_SELECTOR
+                    )
+                option_label = (
+                    option_divs[0].text.strip()
+                    if len(option_divs) > 0
+                    else f"option_{i + 1}"
+                )
+
+                price = None
+                try:
+                    image = option.find_element(By.TAG_NAME, "img")
+                    image_url = image.get_attribute("src") if image else None
+                except Exception:
+                    image_url = None
+                # print(f"Option Label: {option_label}, Image URL: {image_url}")
+                try:
+                    price_span = option.find_element(
+                        By.CSS_SELECTOR,
+                        'div:nth-child(2) span[data-testid="price"]',
+                    )
+                    price = price_span.text.strip()
+                except Exception:
+                    price_spans = option.find_elements(
+                        By.CSS_SELECTOR, 'span[data-testid="price"]'
+                    )
+                    if not price_spans:
+                        price_spans = option.find_elements(
+                            By.CSS_SELECTOR,
+                            'span[data-testid="pc-purchase-quantity-price"]',
+                        )
+
+                    if price_spans:
+                        price = price_spans[0].text.strip()
+
+                if option_label:
+                    option_map[option_label] = {
+                        "price": price,
+                        "image_url": image_url,
+                    }
+
+            variations[variation_name] = option_map
+
+        customization_result = extract_customization_options(driver)
+
+        close_button = dialog.find_element(
+            By.CSS_SELECTOR, VARIATIONS_DIALOG_CLOSE_SELECTOR
+        )
+        if close_button:
+            close_button.click()
+
+        time.sleep(1)
+        return_data = {}
+        return_data["variations"] = variations
+        if customization_result.get("status"):
+            return_data["customization_options"] = customization_result.get("data")
+
+        return {
+            "status": True,
+            "data": return_data,
+            "error": "none",
+        }
+    except Exception as exc:
+        return {
+            "status": False,
+            "data": {},
+            "error": f"extract_product_variations: {str(exc)}",
+        }
+
+
+def extract_product_variations(driver):
+    """Extract product variations and customization options from the product page."""
+    data = extract_product_variation_func(driver)
+    retries = 3
+    while not data.get("status") and retries > 0:
+        time.sleep(1)
+        driver.refresh()
+        time.sleep(2)
+        data = extract_product_variation_func(driver)
+        retries -= 1
+
+    return data
+
+
+def change_language_and_currency(driver, language="English", currency="USD"):
+    try:
+        SAVE_BUTTON_ELEMENT = 'div[class="tnh-button"]'
+        wait = WebDriverWait(driver, 10)
+        language_currency_button = wait.until(
+            EC.element_to_be_clickable((By.CSS_SELECTOR, 'div[data-tnhkey="Language"]'))
+        )
+        driver.execute_script(
+            "arguments[0].scrollIntoView({block: 'center', inline: 'center'});",
+            language_currency_button,
+        )
+        language_currency_button.click()
+        time.sleep(3)
+
+        action_chains = ActionChains(driver)
+
+        # Language.
+        # Enter language directly
+        action_chains.send_keys(language).perform()
+        time.sleep(1)
+        action_chains.send_keys(Keys.ENTER).perform()
+        time.sleep(1)
+        action_chains.send_keys(Keys.TAB).perform()
+        time.sleep(1)
+        action_chains.send_keys(currency).perform()
+        time.sleep(1)
+        action_chains.send_keys(Keys.ENTER).perform()
+        time.sleep(1)
+
+        # Save changes
+        save_button = wait.until(
+            EC.element_to_be_clickable((By.CSS_SELECTOR, SAVE_BUTTON_ELEMENT))
+        )
+        save_button.click()
+        time.sleep(1)
+        return {
+            "status": True,
+            "data": {},
+            "error": "none",
+        }
+    except Exception as exc:
+        return {
+            "status": False,
+            "data": {},
+            "error": f"change_language_and_currency: {str(exc)}",
+        }
+
+
+def accept_cookies(driver):
+    """Accept cookies if the cookie consent banner is present."""
+    try:
+        COOKIE_BUTTON_SELECTOR = 'div[class="gdpr-btn gdpr-agree-btn"]'
+        wait = WebDriverWait(driver, 15)
+        cookie_button = wait.until(
+            EC.element_to_be_clickable((By.CSS_SELECTOR, COOKIE_BUTTON_SELECTOR))
+        )
+        driver.execute_script(
+            "arguments[0].scrollIntoView({block: 'center', inline: 'center'});",
+            cookie_button,
+        )
+        cookie_button.click()
+        return {
+            "status": True,
+            "data": {},
+            "error": "none",
+        }
+    except Exception as exc:
+        return {
+            "status": False,
+            "data": {},
+            "error": f"accept_cookies: {str(exc)}",
+        }
+
+
+def extract_product_data(url):
+    """Load a product page and extract all product data with VPN rotation for shipping region errors."""
+    driver = None
+    original_vpn_country = VPN_COUNTRY
+    vpn_was_changed = False
+
+    try:
+        driver = create_driver()
+        driver.get(url)
+
+        # scroll_to_bottom
+        # accept cookies
+        accept_cookies(driver)
+
+        time.sleep(2)
+        driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+        time.sleep(1)
+        wait = WebDriverWait(driver, 10)
+        wait.until(
+            lambda d: d.execute_script("return document.readyState") == "complete"
+        )
+
+        page_source = driver.page_source
+        page_soup = bs4.BeautifulSoup(page_source, "html.parser")
+
+        # Check for shipping region error
+        shipping_region_result = shipping_region_error(page_soup)
+
+        if shipping_region_result.get("status"):
+            print("[SHIPPING_REGION_ERROR] Detected. Attempting VPN rotation...")
+            vpn_was_changed = True
+
+            # Try each continent in the rotation list
+            for continent_vpn in VPN_CONTINENTS:
+                print(f"[VPN_ROTATION] Trying continent: {continent_vpn}")
+
+                # Change VPN to the continent
+                vpn_success = connect_vpn(continent_vpn)
+                if not vpn_success:
+                    print(
+                        f"[VPN_ROTATION] Failed to connect to {continent_vpn}, skipping..."
+                    )
+                    continue
+
+                try:
+                    driver.quit()
+                except:
+                    pass
+
+                driver = create_driver()
+                driver.get(url)
+                time.sleep(1)
+
+                # Change language and currency
+                try:
+                    change_language_and_currency(
+                        driver, language="English", currency="USD"
+                    )
+                except Exception as e:
+                    print(f"[VPN_ROTATION] Failed to change language/currency: {e}")
+
+                # Reload the page
+                # driver.get(url)
+                time.sleep(2)
+                driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+                time.sleep(1)
+
+                page_source = driver.page_source
+                page_soup = bs4.BeautifulSoup(page_source, "html.parser")
+
+                # Check if we can extract the title successfully
+                title_result = extract_product_title(page_soup)
+                if title_result.get("status") and title_result.get("data"):
+                    print(
+                        f"[VPN_ROTATION] Success with {continent_vpn}! Product title extracted."
+                    )
+                    break
+                else:
+                    print(
+                        f"[VPN_ROTATION] Failed with {continent_vpn}. Trying next continent..."
+                    )
+        else:
+            # No shipping region error, proceed normally
+            title_result = extract_product_title(page_soup)
+
+        # Extract all data
+        # page_source = driver.page_source
+        # page_soup = bs4.BeautifulSoup(page_source, "html.parser")
+        # print("Extracted title")
+        company_result = extract_product_company_name(page_soup)
+        # print("Extracted company name")
+        images_result = extract_product_images(page_soup)
+        # print("Extracted images")
+        videos_result = extract_product_video(page_soup)
+        # print("Extracted videos")
+        pricing_result = extract_product_pricing_options(page_soup)
+        # print("Extracted pricing options")
+        shipping_result = extract_product_shipping_fee(page_soup)
+        # print("Extracted shipping fee")
+        attributes_result = extract_product_attributes(page_soup)
+        # print("Extracted attributes")
+        description_result = extract_product_description(page_soup, driver)
+        # print("Extracted description")
+
+        variations_result = extract_product_variations(driver)
+        # print("Extracted variations")
+        faq_result = get_faq_content(driver)
+        # print("Extracted FAQ content")
+
+        results = {
+            "product_url": url,
+            "product_title": title_result.get("data"),
+            "company_name": company_result.get("data"),
+            "product_images": images_result.get("data"),
+            "product_videos": videos_result.get("data"),
+            "pricing_options": pricing_result.get("data"),
+            "shipping_fee": shipping_result.get("data"),
+            "product_attributes": attributes_result.get("data"),
+            "product_description": description_result.get("data"),
+            "product_variations_and_customization": variations_result.get("data"),
+            "faq_content": faq_result.get("data"),
+        }
+        # print("Extracted all product data")
+
+        status = all(
+            result.get("status", False)
+            for result in [
+                title_result,
+                # company_result,
+                images_result,
+                pricing_result,
+                # shipping_result,
+                # attributes_result,
+                # description_result,
+                # variations_result,
+            ]
+        )
+
+        errors = [
+            result.get("error")
+            for result in [
+                title_result,
+                company_result,
+                images_result,
+                pricing_result,
+                shipping_result,
+                attributes_result,
+                description_result,
+                variations_result,
+            ]
+            if result.get("status") is False
+        ]
+
+        error = "; ".join(errors) if errors else "none"
+
+        return {
+            "status": status,
+            "data": results,
+            "error": error,
+        }
+    except Exception as exc:
+        return {
+            "status": False,
+            "data": {},
+            "error": f"extract_product_data: {str(exc)}",
+        }
+    finally:
+        # Reconnect to original VPN (US) if it was changed
+        if vpn_was_changed:
+            try:
+                print(
+                    f"[VPN_ROTATION] Reconnecting to original VPN: {original_vpn_country.upper()}"
+                )
+                connect_vpn(original_vpn_country)
+            except Exception as e:
+                print(f"[VPN_ROTATION] Failed to reconnect to original VPN: {e}")
+
+        if driver:
+            try:
+                driver.quit()
+            except Exception:
+                pass
+
+
+def process_first_pending_url(server_ip=SERVER_IP):
+    """Claim, extract, and persist the first available product URL."""
+    print(
+        "============================================================================================="
+    )
+    scrape_watchdog_stop = threading.Event()
+    scrape_watchdog = threading.Thread(
+        target=_watch_scrape_duration,
+        args=(scrape_watchdog_stop,),
+        daemon=True,
+    )
+    scrape_watchdog.start()
+
+    claim_result = get_first_pending_url(server_ip)
+    if not claim_result.get("status"):
+        return claim_result
+
+    item_url = claim_result["item_url"]
+    tracking_id = claim_result["tracking_id"]
+    company_name = claim_result.get("company_name") or "Unknown company"
+    item_name = claim_result.get("item_name") or item_url
+    print(
+        f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]: Item received from DB: {item_name}) : ({item_url})"
+    )
+
+    update_server_status("scraping", f"{company_name}: {item_name}")
+    print(
+        f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]: Scraping started: {item_name}"
+    )
+
+    try:
+        extraction_result = extract_product_data(item_url)
+    except Exception as exc:
+        extraction_result = {
+            "status": False,
+            "data": {},
+            "error": str(exc),
+        }
+    finally:
+        scrape_watchdog_stop.set()
+
+    if extraction_result.get("status"):
+        print(
+            f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] "
+            f"✅ Scraping succeeded: {item_name}"
+        )
+    else:
+        print(
+            f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] "
+            f"❌ Scraping failed: {item_name} ({item_url}) - "
+            f"{extraction_result.get('error') or 'unknown error'}"
+        )
+
+    scrape_error = extraction_result.get("error") or "NONE"
+    scrape_result_json = json.dumps(
+        extraction_result.get("data", {}), ensure_ascii=False
+    )
+
+    def save_result_action():
+        connection = connect_db()
+        cursor = None
+        try:
+            cursor = connection.cursor()
+            cursor.execute(
+                """
+                UPDATE scrape_tracking
+                SET scrape_status = 'completed',
+                    error_message = %s,
+                    date_time = UTC_TIMESTAMP(),
+                    scrape_result = %s
+                WHERE id = %s
+                  AND server_ip = %s
+                  AND scrape_status = 'pending'
+                """,
+                (scrape_error, scrape_result_json, tracking_id, server_ip),
+            )
+            connection.commit()
+            return cursor.rowcount == 1
+        except Exception:
+            connection.rollback()
+            raise
+        finally:
+            if cursor is not None:
+                cursor.close()
+            connection.close()
+
+    saved = execute_db_with_retry(save_result_action)
+    return {
+        "status": saved,
+        "item_url": item_url,
+        "scrape_status": "completed" if saved else "pending",
+        "error": scrape_error,
+        "scrape_result": extraction_result.get("data", {}),
+    }
+
+
+def _watch_alibaba_shutdown():
+    """Stop the pending-item loop when this server receives a shutdown action."""
+    from bots.family_and_hotmail_manager import get_signal_from_db
+
+    while not ALIBABA_SHUTDOWN_WATCHER_STOP.wait(ALIBABA_SHUTDOWN_POLL_SECONDS):
+        try:
+            status, action, _, source = get_signal_from_db(include_source=True)
+            if (
+                status
+                and source != "card_control"
+                and str(action or "").strip().lower() in {"shutdown", "shutdown_all"}
+            ):
+                ALIBABA_SHUTDOWN_REQUESTED.set()
+                print("Alibaba shutdown signal received; finishing the current item.")
+                return
+        except Exception as exc:
+            print(f"Alibaba shutdown signal check failed: {exc}")
+
+
+def run_process_first_pending_url(max_retries=5, server_ip=SERVER_IP):
+    """Process pending items until the queue is empty or shutdown is requested."""
+    failed_attempts = 0
+    ALIBABA_SHUTDOWN_REQUESTED.clear()
+    ALIBABA_SHUTDOWN_WATCHER_STOP.clear()
+    shutdown_watcher = threading.Thread(
+        target=_watch_alibaba_shutdown,
+        name="alibaba-shutdown-watcher",
+        daemon=True,
+    )
+    shutdown_watcher.start()
+
+    try:
+        while failed_attempts < max_retries and not ALIBABA_SHUTDOWN_REQUESTED.is_set():
+            try:
+                result = process_first_pending_url(server_ip=server_ip)
+            except Exception as exc:
+                result = {"status": False, "error": str(exc)}
+
+            if result.get("status"):
+                failed_attempts = 0
+
+                global items_processed_counter
+                with vpn_counter_lock:
+                    items_processed_counter += 1
+                    current_count = items_processed_counter
+
+                if current_count % VPN_RECONNECT_INTERVAL == 0:
+                    print(
+                        f"\n[VPN] Processed {current_count} items. Reconnecting VPN..."
+                    )
+                    try:
+                        connect_vpn(VPN_COUNTRY)
+                        print(f"[VPN] Reconnection completed at item {current_count}")
+                    except Exception as vpn_error:
+                        print(f"[VPN] Reconnection error: {vpn_error}")
+
+                continue
+
+            failed_attempts += 1
+            print(
+                f"Process attempt failed ({failed_attempts}/{max_retries}): "
+                f"{result.get('error') or 'no pending item or unknown error'}"
+            )
+
+        if ALIBABA_SHUTDOWN_REQUESTED.is_set():
+            print("Alibaba processing stopped after the current item.")
+        else:
+            print(f"Stopping after {max_retries} consecutive failed attempts.")
+    finally:
+        ALIBABA_SHUTDOWN_WATCHER_STOP.set()
+        shutdown_watcher.join(timeout=ALIBABA_SHUTDOWN_POLL_SECONDS + 1)
+
+
+def click_next_pagination_btn(driver):
+    """Click the next pagination button if enabled."""
+    try:
+        wait = WebDriverWait(driver, 10)
+        next_btn = wait.until(
+            EC.element_to_be_clickable(
+                (By.CSS_SELECTOR, 'button[class*="next-pagination-item next"]')
+            )
+        )
+        LOADING_SPINNER_ELEMENT = (By.CSS_SELECTOR, 'div[class="next-loading-tip"]')
+
+        disabled_attr = next_btn.get_attribute("disabled")
+        btn_classes = (next_btn.get_attribute("class") or "").lower()
+
+        if disabled_attr or "disabled" in btn_classes:
+            return {
+                "status": False,
+                "error": "btn disabled",
+            }
+
+        driver.execute_script(
+            "arguments[0].scrollIntoView({block: 'center', inline: 'center'});",
+            next_btn,
+        )
+        time.sleep(1)
+        next_btn.click()
+        time.sleep(2)
+        retry = 0
+        loading_ = True
+        while loading_ and retry < 2:
+            try:
+                wait.until(EC.visibility_of_element_located(**LOADING_SPINNER_ELEMENT))
+                break
+            except Exception:
+                retry += 1
+                loading_ = False
+                time.sleep(1)
+        time.sleep(1)
+
+        return {
+            "status": True,
+            "error": "none",
+        }
+    except Exception as exc:
+        return {
+            "status": False,
+            "error": str(exc),
+        }
+
+
+def extract_categories(driver):
+    """Extract product categories from a page using the Selenium driver."""
+    try:
+        wait = WebDriverWait(driver, 10)
+        category_elements = wait.until(
+            EC.presence_of_all_elements_located(
+                (
+                    By.CSS_SELECTOR,
+                    # 'div[module-title="productGroups"] li[role="menuitem"]',
+                    'div[module-title="productGroups"] li',
+                )
+            )
+        )
+
+        category_names = list(map(lambda el: el.text.strip(), category_elements))
+
+        return {
+            "status": True,
+            "data": dict(zip(category_names, category_elements)),
+            "error": "none",
+        }
+    except Exception as exc:
+        return {
+            "status": False,
+            "data": [],
+            "error": str(exc),
+        }
+
+
+def get_page_soup(driver):
+    """Return a BeautifulSoup object for the current browser page."""
+    try:
+        wait = WebDriverWait(driver, 10)
+        wait.until(
+            lambda d: d.execute_script("return document.readyState") == "complete"
+        )
+    except Exception:
+        pass
+    return bs4.BeautifulSoup(driver.page_source, "html.parser")
+
+
+def extract_company_name_profile_page(driver):
+    try:
+        COMPANY_NAME_ELEMENT = 'h2[class="cp-name"]'
+        wait = WebDriverWait(driver, 10)
+        company_name_element = wait.until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, COMPANY_NAME_ELEMENT))
+        )
+        company_name = (
+            company_name_element.text.strip() if company_name_element else "None"
+        )
+        return {
+            "status": True,
+            "data": company_name,
+            "error": "none",
+        }
+    except Exception as exc:
+        return {
+            "status": False,
+            "data": None,
+            "error": f"extract_company_name_profile_page: {str(exc)}",
+        }
+
+
+def extract_company_data_by_categories_old(company_url, retry_input=None):
+    """Scrape product items for each category on a company listing page."""
+    driver = None
+    collected_data = {}
+
+    try:
+        print(f"Extracting company data by categories from: {company_url}")
+
+        # If this company already has items registered in the tracking CSV,
+        # resume from the pending (unscraped) entries instead of re-scraping categories.
+        if has_items_for_company(company_url) and str(retry_input) != "1":
+            pending = get_pending_items_for_company(company_url)
+            if pending:
+                grouped = {}
+                for row in pending:
+                    cat = row.get("category") or "uncategorized"
+                    grouped.setdefault(cat, {"item_count": 0, "items": []})
+                    grouped[cat]["items"].append(
+                        {
+                            "item_name": row.get("item_name"),
+                            "item_url": row.get("item_url"),
+                        }
+                    )
+                    grouped[cat]["item_count"] = len(grouped[cat]["items"])
+
+                return {
+                    "status": True,
+                    "data": grouped,
+                    "error": "resumed_from_csv",
+                }
+            else:
+                # Company has entries but none pending
+                return {
+                    "status": True,
+                    "data": {},
+                    "error": "all_items_scraped",
+                }
+
+        driver = create_driver()
+        driver.get(company_url)
+        time.sleep(2)
+
+        categories_result = extract_categories(driver)
+        if not categories_result.get("status"):
+            return {
+                "status": False,
+                "data": {},
+                "error": categories_result.get("error", "failed to extract categories"),
+            }
+
+        category_names = list(categories_result.get("data", {}).keys())
+        if not category_names:
+            return {
+                "status": False,
+                "data": {},
+                "error": "no categories found",
+            }
+
+        for category_name in category_names:
+            attempt = 0
+            while attempt < 3:
+                try:
+                    print(f"Extracting items for category: {category_name}")
+                    refreshed_categories = extract_categories(driver)
+                    if not refreshed_categories.get("status"):
+                        raise RuntimeError(
+                            refreshed_categories.get(
+                                "error", "failed to refresh categories"
+                            )
+                        )
+
+                    category_element = refreshed_categories.get("data", {}).get(
+                        category_name
+                    )
+                    if category_element is None:
+                        raise RuntimeError("category element not found")
+
+                    driver.execute_script(
+                        "arguments[0].scrollIntoView({block: 'center', inline: 'center'});",
+                        category_element,
+                    )
+                    category_element.click()
+                    time.sleep(2)
+
+                    category_items = []
+                    while True:
+                        page_soup = get_page_soup(driver)
+                        items_result = extract_result_items_from_soup(page_soup)
+                        if items_result.get("status"):
+                            for item in items_result.get("data", []):
+                                extracted_item = extract_data_from_result_page_item(
+                                    item
+                                )
+                                if extracted_item.get("status"):
+                                    category_items.append(extracted_item.get("data"))
+                                else:
+                                    category_items.append(
+                                        {"error": extracted_item.get("error")}
+                                    )
+
+                        next_result = click_next_pagination_btn(driver)
+                        if not next_result.get("status"):
+                            break
+
+                    collected_data[category_name] = {
+                        "item_count": len(category_items),
+                        "items": category_items,
+                    }
+                    try:
+                        # Register category item URLs in tracking CSV to avoid re-scraping categories next run
+                        item_urls = [
+                            {
+                                "item_url": it.get("item_url"),
+                                "item_name": it.get("item_name"),
+                            }
+                            for it in category_items
+                            if isinstance(it, dict) and it.get("item_url")
+                        ]
+                        if item_urls:
+                            add_category_entries(
+                                company_url, None, category_name, item_urls
+                            )
+                    except Exception as e:
+                        print(f"Warning: failed to add category entries to CSV: {e}")
+                    print(
+                        f"Extracted {len(category_items)} items for category: {category_name}"
+                    )
+                    break
+                except Exception as exc:
+                    attempt += 1
+                    print(
+                        f"Attempt {attempt}/3 failed for category {category_name}: {exc}"
+                    )
+                    if attempt >= 3:
+                        collected_data[category_name] = {
+                            "item_count": 0,
+                            "items": [],
+                            "error": str(exc),
+                        }
+                        print(
+                            f"Failed to extract items for category: {category_name}. Error: {exc}"
+                        )
+                    else:
+                        try:
+                            driver.get(company_url)
+                            time.sleep(2)
+                        except Exception:
+                            pass
+                        time.sleep(1)
+                        continue
+
+            try:
+                driver.get(company_url)
+                time.sleep(2)
+            except Exception:
+                pass
+
+        return {
+            "status": True,
+            "data": collected_data,
+            "error": "none",
+        }
+    except Exception as exc:
+        return {
+            "status": False,
+            "data": {},
+            "error": str(exc),
+        }
+    finally:
+        if driver:
+            try:
+                driver.quit()
+            except Exception:
+                pass
+
+
+def extract_company_data_by_categories(company_url, retry_input=None):
+    """Scrape product items for each category on a company listing page."""
+    driver = None
+    collected_data = {}
+
+    try:
+        print(f"Extracting company data by categories from: {company_url}")
+
+        categories_result = {
+            "status": False,
+            "data": [],
+            "error": "no categories found",
+        }
+        for attempt in range(1, 6):
+            if driver:
+                try:
+                    driver.quit()
+                except Exception:
+                    pass
+
+            driver = create_driver()
+            driver.get(company_url)
+            time.sleep(2)
+            categories_result = extract_categories(driver)
+            category_data = categories_result.get("data")
+            category_names = (
+                list(category_data.keys()) if isinstance(category_data, dict) else []
+            )
+            if categories_result.get("status") and category_names:
+                break
+
+            print(
+                f"Category extraction attempt {attempt}/5 failed: "
+                f"{categories_result.get('error', 'no categories found')}"
+            )
+
+        category_data = categories_result.get("data")
+        category_names = (
+            list(category_data.keys()) if isinstance(category_data, dict) else []
+        )
+        if not categories_result.get("status"):
+            return {
+                "status": False,
+                "data": {},
+                "error": categories_result.get("error", "failed to extract categories"),
+            }
+
+        company_name_data = extract_company_name_profile_page(driver)
+        if company_name_data.get("status"):
+            company_name = company_name_data.get("data")
+            print(f"Extracted company name: {company_name}")
+        else:
+            company_name = None
+            print(f"Failed to extract company name for URL: {company_url}")
+
+        category_names = list(categories_result.get("data", {}).keys())
+        if not category_names:
+            return {
+                "status": False,
+                "data": {},
+                "error": "no categories found",
+            }
+
+        for category_name in category_names:
+            attempt = 0
+            while attempt < 3:
+                try:
+                    print(f"Extracting items for category: {category_name}")
+                    refreshed_categories = extract_categories(driver)
+                    if not refreshed_categories.get("status"):
+                        raise RuntimeError(
+                            refreshed_categories.get(
+                                "error", "failed to refresh categories"
+                            )
+                        )
+
+                    category_element = refreshed_categories.get("data", {}).get(
+                        category_name
+                    )
+                    if category_element is None:
+                        raise RuntimeError("category element not found")
+
+                    driver.execute_script(
+                        "arguments[0].scrollIntoView({block: 'center', inline: 'center'});",
+                        category_element,
+                    )
+                    category_element.click()
+                    time.sleep(2)
+
+                    category_items = []
+                    while True:
+                        page_soup = get_page_soup(driver)
+                        items_result = extract_result_items_from_soup(page_soup)
+                        if items_result.get("status"):
+                            for item in items_result.get("data", []):
+                                extracted_item = extract_data_from_result_page_item(
+                                    item
+                                )
+                                if extracted_item.get("status"):
+                                    category_items.append(extracted_item.get("data"))
+                                else:
+                                    category_items.append(
+                                        {"error": extracted_item.get("error")}
+                                    )
+
+                        next_result = click_next_pagination_btn(driver)
+                        if not next_result.get("status"):
+                            break
+
+                    collected_data[category_name] = {
+                        "item_count": len(category_items),
+                        "items": category_items,
+                    }
+                    try:
+                        # Register category item URLs in tracking database to avoid re-scraping categories next run
+                        item_urls = [
+                            {
+                                "item_url": it.get("item_url"),
+                                "item_name": it.get("item_name"),
+                            }
+                            for it in category_items
+                            if isinstance(it, dict) and it.get("item_url")
+                        ]
+                        if item_urls:
+                            add_category_entries(
+                                company_url, company_name, category_name, item_urls
+                            )
+                    except Exception as e:
+                        print(f"Warning: failed to add category entries to db: {e}")
+                    print(
+                        f"Extracted {len(category_items)} items for category: {category_name}"
+                    )
+                    break
+                except Exception as exc:
+                    attempt += 1
+                    print(
+                        f"Attempt {attempt}/3 failed for category {category_name}: {exc}"
+                    )
+                    if attempt >= 3:
+                        collected_data[category_name] = {
+                            "item_count": 0,
+                            "items": [],
+                            "error": str(exc),
+                        }
+                        print(
+                            f"Failed to extract items for category: {category_name}. Error: {exc}"
+                        )
+                    else:
+                        try:
+                            driver.get(company_url)
+                            time.sleep(2)
+                        except Exception:
+                            pass
+                        time.sleep(1)
+                        continue
+
+            try:
+                driver.get(company_url)
+                time.sleep(2)
+            except Exception:
+                pass
+
+        return {
+            "status": True,
+            "data": collected_data,
+            "error": "none",
+        }
+    except Exception as exc:
+        return {
+            "status": False,
+            "data": {},
+            "error": str(exc),
+        }
+    finally:
+        if driver:
+            try:
+                driver.quit()
+            except Exception:
+                pass
+
+
+def _safe_name(value, fallback="item"):
+    """Create a filesystem-safe name from a string."""
+    if not value:
+        return fallback
+    cleaned = re.sub(r"[^A-Za-z0-9._-]+", "_", str(value)).strip("._-")
+    return cleaned[:80] or fallback
+
+
+def load_company_urls_old():
+    """Load company URLs from companies.txt."""
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    companies_path = os.path.join(base_dir, "companies.txt")
+    if not os.path.exists(companies_path):
+        return []
+
+    urls = []
+    with open(companies_path, "r", encoding="utf-8") as handle:
+        for raw_line in handle:
+            line = raw_line.strip()
+            if not line or line.startswith("#"):
+                continue
+
+            for fragment in re.split(r"[\n,]+", line):
+                candidate = fragment.strip().strip("\"'")
+                if candidate.startswith(("http://", "https://")):
+                    # if url does not end with /productlist.html add it to the end
+                    if not candidate.endswith("/productlist.html"):
+                        candidate += "/productlist.html"
+                    urls.append(candidate)
+
+    return list(dict.fromkeys(urls))
+
+
+def load_company_urls():
+    """Load company URLs from the companies database table."""
+
+    def load_urls_action():
+        connection = connect_db()
+        cursor = None
+        try:
+            cursor = connection.cursor()
+            cursor.execute(
+                """
+                SELECT company_url
+                FROM companies AS companies
+                WHERE companies.downloaded = 'false'
+                ORDER BY
+                    CASE
+                        WHEN EXISTS (
+                            SELECT 1
+                            FROM scrape_tracking AS tracking
+                            WHERE tracking.company_url = companies.company_url
+                        ) THEN 1
+                        ELSE 0
+                    END ASC,
+                    companies.date_time DESC,
+                    companies.id DESC
+                """
+            )
+            urls = []
+            for (company_url,) in cursor.fetchall():
+                if company_url:
+                    candidate = str(company_url).strip()
+                    if candidate and not candidate.endswith("/productlist.html"):
+                        candidate += "/productlist.html"
+                    if candidate:
+                        urls.append(candidate)
+            return list(dict.fromkeys(urls))
+        finally:
+            if cursor is not None:
+                cursor.close()
+            connection.close()
+
+    try:
+        return execute_db_with_retry(load_urls_action)
+    except Exception as exc:
+        print(f"Error loading company URLs from database: {exc}")
+        return []
+
+
+def extract_all_compnaies_items():
+    """Extract category items for all companies, newest companies first."""
+    connect_vpn(country=VPN_COUNTRY)
+
+    company_urls = load_company_urls()
+    results = []
+
+    for company_url in company_urls:
+        connect_vpn(country=VPN_COUNTRY)
+
+        print(f"Processing company: {company_url}")
+        result = extract_company_data_by_categories(company_url)
+        results.append({"company_url": company_url, "result": result})
+        print(f"Finished processing company: {company_url}\n{'=' * 60}\n")
+
+    return results
+
+
+def _company_slug_from_url(company_url):
+    """Create a readable folder name from a company URL."""
+    if not company_url:
+        return "company"
+
+    parsed = urlparse(company_url)
+    hostname = (parsed.hostname or "").lower()
+    if hostname:
+        host_parts = [
+            part for part in hostname.split(".") if part and part not in {"www", "en"}
+        ]
+        if host_parts:
+            return _safe_name(host_parts[0], "company")
+
+    path_parts = [
+        part
+        for part in parsed.path.split("/")
+        if part and part not in {"productlist.html", "productlist"}
+    ]
+    if path_parts:
+        return _safe_name(path_parts[0], "company")
+
+    return "company"
+
+
+def _append_log_entry(log_path, lock, status, item_name, item_url, error):
+    """Append a structured line to the log file."""
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    line = (
+        f"{timestamp} | {status} | {item_name or 'N/A'} | {item_url or 'N/A'} | "
+        f"{error or 'none'}\n"
+    )
+    with lock:
+        with open(log_path, "a", encoding="utf-8") as handle:
+            handle.write(line)
+
+
+def _process_category_item(
+    item_payload, category_name, output_dir, log_path, lock, company_url=None
+):
+    """Extract a single product item and persist its data."""
+    global items_processed_counter
+
+    item_name = None
+    item_url = None
+
+    if isinstance(item_payload, dict):
+        item_name = item_payload.get("item_name")
+        item_url = item_payload.get("item_url")
+
+    try:
+        if not item_url:
+            raise ValueError("missing item url")
+
+        print(f"\n{'-' * 60}\nExtracting data for item: {item_name or item_url}")
+        extraction_result = extract_product_data(item_url)
+        if not extraction_result.get("status"):
+            raise RuntimeError(extraction_result.get("error", "extraction failed"))
+
+        category_dir = os.path.join(output_dir, _safe_name(category_name, "category"))
+        os.makedirs(category_dir, exist_ok=True)
+
+        file_name = f"{_safe_name(item_name or item_url, 'item')}.json"
+        output_path = os.path.join(category_dir, file_name)
+        payload = {
+            "category": category_name,
+            "item": item_payload,
+            "extracted_data": extraction_result.get("data", {}),
+            "status": extraction_result.get("status"),
+            "error": extraction_result.get("error"),
+        }
+        with open(output_path, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, indent=2, ensure_ascii=False)
+
+        # Mark item as scraped in CSV (store filepath as scrape_result)
+        try:
+            if company_url and item_url:
+                update_item_status(
+                    company_url,
+                    item_url,
+                    scraped=True,
+                    error=False,
+                    scrape_result=output_path,
+                )
+        except Exception:
+            pass
+
+        # Increment counter and check if VPN reconnection is needed
+        with vpn_counter_lock:
+            items_processed_counter += 1
+            current_count = items_processed_counter
+
+            if current_count % VPN_RECONNECT_INTERVAL == 0:
+                print(f"\n[VPN] Processed {current_count} items. Reconnecting VPN...")
+                try:
+                    connect_vpn(VPN_COUNTRY)
+                    print(f"[VPN] Reconnection completed at item {current_count}")
+                except Exception as vpn_error:
+                    print(f"[VPN] Reconnection error: {vpn_error}")
+
+        _append_log_entry(log_path, lock, "success", item_name, item_url, "none")
+        print(f"Data extracted successfully for item: {item_name or item_url}")
+        return {
+            "status": "success",
+            "category": category_name,
+            "item_name": item_name,
+            "item_url": item_url,
+            "file": output_path,
+        }
+    except Exception as exc:
+        _append_log_entry(log_path, lock, "fail", item_name, item_url, str(exc))
+        print(f"Failed to extract data for item: {item_name or item_url}")
+        try:
+            if company_url and item_url:
+                update_item_status(
+                    company_url,
+                    item_url,
+                    scraped=False,
+                    error=True,
+                    # scrape_result=str(exc),
+                    scrape_result="",
+                )
+        except Exception:
+            pass
+        return {
+            "status": "fail",
+            "category": category_name,
+            "item_name": item_name,
+            "item_url": item_url,
+            "error": str(exc),
+        }
+
+
+def extract_company_items_data(extracted_company_data_by_categories, company_url=None):
+    """Extract each item from category results using multiple threads."""
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    company_slug = _company_slug_from_url(company_url)
+    output_dir = os.path.join(base_dir, "extracted_data", company_slug)
+    os.makedirs(output_dir, exist_ok=True)
+    log_path = os.path.join(output_dir, "log.txt")
+    if not os.path.exists(log_path):
+        with open(log_path, "w", encoding="utf-8"):
+            pass
+
+    if (
+        isinstance(extracted_company_data_by_categories, dict)
+        and "data" in extracted_company_data_by_categories
+    ):
+        category_payload = extracted_company_data_by_categories.get("data", {})
+    else:
+        category_payload = extracted_company_data_by_categories or {}
+
+    tasks = []
+    for category_name, category_data in category_payload.items():
+        items = []
+        if isinstance(category_data, dict):
+            items = category_data.get("items", [])
+        elif isinstance(category_data, list):
+            items = category_data
+
+        for item_payload in items:
+            if isinstance(item_payload, dict):
+                tasks.append((category_name, item_payload))
+
+    lock = threading.Lock()
+    results = {"status": True, "data": {}, "error": "none"}
+
+    if not tasks:
+        return results
+
+    with ThreadPoolExecutor(max_workers=NUMBER_OF_THREADS) as executor:
+        futures = [
+            executor.submit(
+                _process_category_item,
+                item_payload,
+                category_name,
+                output_dir,
+                log_path,
+                lock,
+                company_url,
+            )
+            for category_name, item_payload in tasks
+        ]
+
+        for future in futures:
+            item_result = future.result()
+            category_name = item_result.get("category")
+            if category_name not in results["data"]:
+                results["data"][category_name] = {"success": [], "fail": []}
+            results["data"][category_name][
+                "success" if item_result.get("status") == "success" else "fail"
+            ].append(item_result)
+
+    return results
+
+
+# if __name__ == "__main__":
+#     connect_vpn(country=VPN_COUNTRY)
+#     run_process_first_pending_url()
+
+# url = '//www.alibaba.com/product-detail/2025-New-Cotton-Bath-Towel-for_1601564753932.html'
+
+# data = extract_product_data(url)
+
+# data
