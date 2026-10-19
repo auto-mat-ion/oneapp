@@ -31,6 +31,9 @@ from inputimeout import inputimeout, TimeoutOccurred
 ## read settings.json
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 SETTINGS_PATH = os.path.join(BASE_DIR, "settings.json")
+THE_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+utils_dir = os.path.normpath(os.path.join(THE_BASE_DIR, "../utils"))
+
 
 with open(SETTINGS_PATH) as f:
     settings = json.load(f)
@@ -291,7 +294,7 @@ def connect_vpn(country=VPN_COUNTRY):
         disconnect()
         time.sleep(1)
         try:
-            df = pd.read_csv("utils/express_countries_all.csv")
+            df = pd.read_csv(os.path.join(utils_dir, "express_countries_all.csv"))
             df = get_locations()
 
             rand_locations = df[
