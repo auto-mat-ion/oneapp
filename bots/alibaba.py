@@ -23,14 +23,14 @@ import bs4
 import csv
 from pathlib import Path
 import mysql.connector
-
+import sys
 import random
 from inputimeout import inputimeout, TimeoutOccurred
 
 
 ## read settings.json
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-SETTINGS_PATH = os.path.join(BASE_DIR, "settings.json")
+SETTINGS_PATH = os.path.join(BASE_DIR, "alibaba_settings.json")
 THE_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 utils_dir = os.path.normpath(os.path.join(THE_BASE_DIR, "../utils"))
 
@@ -73,26 +73,8 @@ VPN_CONTINENTS = [
 items_processed_counter = 0
 vpn_counter_lock = threading.Lock()
 
-
-def get_server_ip(path=SERVER_FILE_PATH):
-    """Load the server IP from utils/server.txt, prompting when it is missing."""
-    server_path = Path(path)
-    server_ip = ""
-
-    try:
-        server_ip = server_path.read_text(encoding="utf-8").strip()
-    except FileNotFoundError:
-        pass
-
-    while not server_ip:
-        server_ip = input("Enter server IP: ").strip()
-        if not server_ip:
-            print("Server IP cannot be blank.")
-
-    server_path.parent.mkdir(parents=True, exist_ok=True)
-    server_path.write_text(server_ip + "\n", encoding="utf-8")
-    return server_ip
-
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+from utils.server_ip_helper import get_server_ip
 
 SERVER_IP = get_server_ip()
 VPN_CONNECTION_STATUS = "none"
