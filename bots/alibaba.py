@@ -29,7 +29,10 @@ from inputimeout import inputimeout, TimeoutOccurred
 
 
 ## read settings.json
-with open("utils/settings.json", "r") as f:
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+SETTINGS_PATH = os.path.join(BASE_DIR, "settings.json")
+
+with open(SETTINGS_PATH) as f:
     settings = json.load(f)
 
 EXPRESSVPN_CMD = settings.get("EXPRESSVPN_CMD", "expressvpn")
