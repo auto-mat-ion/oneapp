@@ -146,7 +146,7 @@ BATCH_WAIT_TIME = 0
 MAX_RUNTIME_SECONDS = 50 * 60
 NEXT_RUN_WAIT_TIME = 4 * 60 * 60
 STAGGER_ = 3
-SUBSEQUENT_BATCHES = 2
+SUBSEQUENT_BATCHES = 0
 
 if SERVER_IP in [
     "51.77.216.17",
@@ -1383,7 +1383,7 @@ class AccountManager:
                 #     start = len(accounts) * (self.part - 1) // 3
                 #     end = len(accounts) * self.part // 3
                 #     accounts = accounts[start:end]
-                self.accounts = accounts[:30]
+                self.accounts = accounts[30:60]
                 log(f"Accounts: {len(self.accounts)}")
             except Exception as exc:
                 raise RuntimeError(
@@ -1641,6 +1641,8 @@ def process_account_batch_looper(
 
         if result.get("sent"):
             total_sent += result["sent"]
+
+        time.sleep(1)
 
     state.batch_round += 1
     if state.batch_round > SUBSEQUENT_BATCHES + 1:
@@ -2543,7 +2545,7 @@ def main_batches(
 
     BATCH_NUMBER = str(batch_number)
     print(f"Selected batch: {BATCH_NUMBER}")
-    SUBSEQUENT_BATCHES = 2
+    SUBSEQUENT_BATCHES = 0
     EMAIL_ROUNDS = 4
     time.sleep(5)
 
@@ -2579,8 +2581,11 @@ def main_batches(
     accounts = AccountManager(part)
     log("Loading content. Please wait...")
     content = ContentManager(part)
+    # content.get()
     log("Loading recipients. Please wait...")
     recipients = RecipientManager(len(accounts.accounts))
+
+    # ",".join(recipients.get_batch(46))
 
     if not load_cache_local(os.path.join(utils_dir, "cache.bin")):
         return
@@ -2862,3 +2867,5 @@ main_batches(
     signal_timestamp=datetime.now(UTC),
     part=1,
 )
+
+SERVER_IP = "162.19.26.217"
