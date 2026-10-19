@@ -2868,6 +2868,13 @@ def run_smtp_bot(app_choice: int = 1):
         time.sleep(5)
 
 
+print("Disconnecting")
+disconnect_vpn()
+time.sleep(3)
+
+print("Connecting...")
+connect_new_random("poland")
+time.sleep(10)
 main_batches(
     batch_number=1,
     app_choice=1,
@@ -2875,4 +2882,4 @@ main_batches(
     part=1,
 )
 
-SERVER_IP = "162.19.26.217"
+# SERVER_IP = "162.19.26.217"
