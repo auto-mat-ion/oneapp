@@ -9675,6 +9675,8 @@ def remove_family(new_profile_data):
                     driver.get(MICROSOFT_LOGIN_URL)
                     time.sleep(1)
                     driver_success = True
+
+                    # driver.get('https://outlook.live.com')
             except:
                 driver.quit()
                 retries += 1
@@ -9733,6 +9735,7 @@ def remove_family(new_profile_data):
             return False, "Error clicking next after entering recovery email"
 
         _check_shutdown_requested()
+        # recovery = "kgyjqvb976@affworker.com"
         status, code = wait_for_code_by_recovery_mail(recovery)
         time.sleep(3)
         _check_shutdown_requested()
