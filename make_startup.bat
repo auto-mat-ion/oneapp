@@ -1,6 +1,6 @@
 @echo off
 :: Explicitly define the target path, working directory, and startup destination
-set "TARGET_SCRIPT=C:\Users\Administrator\Desktop\oneapp\update.bat"
+set "TARGET_SCRIPT=C:\Users\Administrator\Desktop\oneapp\update_family.bat"
 set "WORKING_DIR=C:\Users\Administrator\Desktop\oneapp"
 set "SHORTCUT_PATH=%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\update.lnk"
 
