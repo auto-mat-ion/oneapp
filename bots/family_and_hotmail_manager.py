@@ -54,6 +54,7 @@ def request_pc_restart():
             subprocess, "CREATE_NEW_PROCESS_GROUP", 0
         )
         try:
+            keep_alive(current_action="Restarting")
             subprocess.Popen(
                 ["cmd.exe", "/d", "/c", "call", restart_path],
                 cwd=os.path.dirname(BASE_DIR),
