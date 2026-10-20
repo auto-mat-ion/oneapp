@@ -30,7 +30,7 @@ import random
 import msal
 
 import pyautogui
-from bots.family_and_hotmail_manager import get_signal_from_db
+from bots.family_and_hotmail_manager import get_signal_from_db, request_pc_restart
 
 
 lock = threading.Lock()
@@ -437,6 +437,10 @@ def _shutdown_watcher():
             action = str(action or "").strip().lower()
             if not status or not _signal_applies_to_country(action, country, source):
                 continue
+            if action == "restart" and request_pc_restart():
+                SHUTDOWN_REQUESTED = True
+                print("Familybot restart signal received; launching restart script.")
+                return
             if status and action == "pause":
                 PAUSE_REQUESTED = True
             elif status and action == "resume":

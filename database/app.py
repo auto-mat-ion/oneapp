@@ -6934,6 +6934,7 @@ def main():
                             "pause",
                             "resume",
                             "shutdown",
+                            "restart",
                             "run familybot",
                             "run hotmailbot",
                             "run family extractor",
@@ -6950,6 +6951,7 @@ def main():
                         "pause",
                         "resume",
                         "shutdown",
+                        "restart",
                         "run family extractor",
                         "run alibaba",
                         "update",
@@ -7018,6 +7020,7 @@ def main():
                                 "pause",
                                 "resume",
                                 "shutdown",
+                                "restart",
                                 "run family extractor",
                                 "run alibaba",
                                 "update",
@@ -7066,6 +7069,7 @@ def main():
                                     "pause",
                                     "resume",
                                     "shutdown",
+                                    "restart",
                                     "run family extractor",
                                     "update",
                                 }
@@ -7080,6 +7084,8 @@ def main():
                                 # Format action
                                 if action_value == "shutdown":
                                     formatted_action = f"shutdown"
+                                elif action_value == "restart":
+                                    formatted_action = "restart"
                                 elif action_value == "pause":
                                     formatted_action = "pause"
                                 elif action_value == "resume":

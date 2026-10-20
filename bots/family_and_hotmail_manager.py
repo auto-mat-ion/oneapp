@@ -2,6 +2,7 @@ import json
 import os
 import random
 import subprocess
+import threading
 import time
 from datetime import datetime, timedelta, timezone
 
@@ -37,6 +38,35 @@ CARD_CONTROL_DB_CONFIG = {
     "database": os.getenv("CARD_CONTROL_DB_NAME", "sql5836164"),
     "port": int(os.getenv("CARD_CONTROL_DB_PORT", "3306")),
 }
+
+RESTART_PC_REQUESTED = threading.Event()
+_RESTART_PC_LOCK = threading.Lock()
+
+
+def request_pc_restart():
+    """Launch the machine restart script once for this bot process."""
+    with _RESTART_PC_LOCK:
+        if RESTART_PC_REQUESTED.is_set():
+            return True
+
+        restart_path = os.path.abspath(os.path.join(BASE_DIR, "..", "restart_pc.bat"))
+        creationflags = getattr(subprocess, "CREATE_NEW_CONSOLE", 0) | getattr(
+            subprocess, "CREATE_NEW_PROCESS_GROUP", 0
+        )
+        try:
+            subprocess.Popen(
+                ["cmd.exe", "/d", "/c", "call", restart_path],
+                cwd=os.path.dirname(BASE_DIR),
+                creationflags=creationflags,
+                close_fds=True,
+            )
+        except OSError as exc:
+            print(f"Unable to launch restart script: {exc}")
+            return False
+
+        RESTART_PC_REQUESTED.set()
+        print(f"Executing restart script: {restart_path}")
+        return True
 
 
 def _parse_action_record(server_ip, action):
@@ -278,6 +308,10 @@ def runner():
         if action != "run_alibaba":
             alibaba_signal_handled = False
 
+        if status and action == "restart":
+            if request_pc_restart():
+                return
+
         if status and action == "run_familybot":
             print(
                 f"Signal received: {action} for country: {country}\n ============================================================================="
@@ -375,6 +409,9 @@ def runner():
                 check=False,
             )
             os._exit(0)
+
+        if RESTART_PC_REQUESTED.is_set():
+            return
 
         time.sleep(random.uniform(40, 55))
         # time.sleep(random.uniform(4, 6))

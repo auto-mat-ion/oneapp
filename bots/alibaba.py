@@ -1974,11 +1974,20 @@ def process_first_pending_url(server_ip=SERVER_IP):
 
 def _watch_alibaba_shutdown():
     """Stop the pending-item loop when this server receives a shutdown action."""
-    from bots.family_and_hotmail_manager import get_signal_from_db
+    from bots.family_and_hotmail_manager import get_signal_from_db, request_pc_restart
 
     while not ALIBABA_SHUTDOWN_WATCHER_STOP.wait(ALIBABA_SHUTDOWN_POLL_SECONDS):
         try:
             status, action, _, source = get_signal_from_db(include_source=True)
+            if (
+                status
+                and source != "card_control"
+                and str(action or "").strip().lower() == "restart"
+            ):
+                if request_pc_restart():
+                    ALIBABA_SHUTDOWN_REQUESTED.set()
+                    print("Alibaba restart signal received; launching restart script.")
+                    return
             if (
                 status
                 and source != "card_control"

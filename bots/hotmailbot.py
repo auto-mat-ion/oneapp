@@ -28,7 +28,7 @@ from functools import wraps
 import random
 import msal
 
-from bots.family_and_hotmail_manager import get_signal_from_db
+from bots.family_and_hotmail_manager import get_signal_from_db, request_pc_restart
 
 
 lock = threading.Lock()
@@ -270,6 +270,10 @@ def _shutdown_watcher():
             if source == "card_control":
                 continue
             action = str(action or "").strip().lower()
+            if status and action == "restart" and request_pc_restart():
+                SHUTDOWN_REQUESTED = True
+                print("Hotmailbot restart signal received; launching restart script.")
+                return
             if status and action == "pause":
                 PAUSE_REQUESTED = True
             elif status and action == "resume":
