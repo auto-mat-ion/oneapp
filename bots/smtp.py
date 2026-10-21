@@ -2410,7 +2410,7 @@ def update_schedule_smtp_1():
             return True, "A future SMTP schedule already exists."
 
         if schedule_times:
-            start_time = schedule_times[0] + timedelta(minutes=200)
+            start_time = schedule_times[0] + timedelta(minutes=180)
             if start_time <= now_utc:
                 print(
                     "SMTP schedule update: calculated start is in the past; "
