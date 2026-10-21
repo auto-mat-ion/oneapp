@@ -2844,25 +2844,25 @@ def run_smtp_bot(app_choice: int = 1):
                 signal_time = datetime.now(UTC)
                 break
 
-            # time.sleep(20 * 1)
-            # scheduler_signal = get_due_smtp_schedule_1hr()
-            # if scheduler_signal.get("status"):
-            #     # batch_number = int(scheduler_signal.get("batch", 1))
-            #     batch_number = 1
-            #     part = 2
-            #     signal_time = datetime.now(UTC)
-            #     break
-            # time.sleep(20 * 1)
-            # scheduler_signal = get_due_smtp_schedule_2hr()
-            # if scheduler_signal.get("status"):
-            #     batch_number = 1
-            #     part = 3
-            #     signal_time = datetime.now(UTC)
-            #     break
+            time.sleep(20 * 1)
+            scheduler_signal = get_due_smtp_schedule_1hr()
+            if scheduler_signal.get("status"):
+                # batch_number = int(scheduler_signal.get("batch", 1))
+                batch_number = 1
+                part = 2
+                signal_time = datetime.now(UTC)
+                break
+            time.sleep(20 * 1)
+            scheduler_signal = get_due_smtp_schedule_2hr()
+            if scheduler_signal.get("status"):
+                batch_number = 1
+                part = 3
+                signal_time = datetime.now(UTC)
+                break
 
             if SERVER_IP == "51.91.59.107":
                 update_schedule_smtp_1()
-            time.sleep(random.randint(40, 60))
+            time.sleep(random.randint(20, 30))
 
         log(f"Run signal received for part {part}. Preparing to start.")
         main_batches(
@@ -2873,6 +2873,3 @@ def run_smtp_bot(app_choice: int = 1):
         )
         log("SMTP batch finished. Returning to signal wait loop.")
         time.sleep(5)
-
-
-# BEST
