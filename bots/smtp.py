@@ -2874,3 +2874,12 @@ def run_smtp_bot(app_choice: int = 1):
         )
         log("SMTP batch finished. Returning to signal wait loop.")
         time.sleep(5)
+
+
+# SERVER_IP = "162.19.229.114"
+# accounts = AccountManager(2)
+# accounts.accounts
+# from familybot import loginn_test
+
+
+# xxx = loginn_test(random.choice(accounts.accounts))

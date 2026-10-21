@@ -4853,6 +4853,42 @@ def logout_then_re_login_existing_acc(driver, new_profile_data):
         return False
 
 
+def loginn_test(new_profile_data):
+    try:
+        email = new_profile_data.get("email")
+        password = new_profile_data.get("password")
+        recovery = new_profile_data.get("recovery_email")
+
+        status, driverdata, error = initialize_new_profile_driver()
+        if status:
+            driver, user_path, proxy = driverdata.values()
+
+            time.sleep(0.5)
+            driver.maximize_window()
+            time.sleep(0.5)
+            driver.get(MICROSOFT_LOGIN_URL)
+            time.sleep(1)
+            driver_success = True
+
+        print(f"{email} : Logging out then in again")
+
+        enter_email(driver, email)
+        click_next_button(driver)
+        click_use_your_password_button(driver)
+        time.sleep(2)
+        if enter_password(driver=driver, password=password):
+            time.sleep(2)
+            click_password_next_button(driver=driver)
+            click_stay_signed_in_button(driver)
+            driver.get("https://outlook.live.com")
+
+            print(f"{email} : Re-logged in successfully")
+            return driver
+    except:
+        print("Exception")
+        pass
+
+
 def logout_then_re_login_existing_acc___(driver, new_profile_data):
     try:
         email = new_profile_data.get("email")
