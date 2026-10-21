@@ -2427,7 +2427,7 @@ def update_schedule_smtp_1():
             f"SMTP schedule update: first batch scheduled for {start_time.isoformat()}."
         )
         for batch_index in range(1, 8):
-            schedule_time = start_time + timedelta(minutes=200 * (batch_index - 1))
+            schedule_time = start_time + timedelta(minutes=180 * (batch_index - 1))
             batch_name = f"batch_{batch_index}"
             cursor.execute(
                 "UPDATE oneapp.smtp_scheduler SET schedule_time = %s "
