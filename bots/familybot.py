@@ -29,7 +29,6 @@ from functools import wraps
 import random
 import msal
 
-import pyautogui
 from bots.family_and_hotmail_manager import get_signal_from_db, request_pc_restart
 
 
@@ -5706,6 +5705,8 @@ def change_account_language(driver, new_profile_data):
 
 def get_fakey_data(driver, country="united states"):
     try:
+        import pyautogui
+
         countries = {
             "united states": "https://www.fakexy.com/fake-address-generator-us",
             "sweden": "https://www.fakexy.com/fake-address-generator-se",
@@ -5739,6 +5740,7 @@ def get_fakey_data(driver, country="united states"):
                     # time.sleep(10)
                     driver.uc_gui_click_captcha()
                     time.sleep(5)
+
                     pyautogui.click()
                     time.sleep(5)
 

@@ -1,0 +1,30 @@
+Installing git
+sudo apt update
+sudo apt install git -y
+
+#Installing python 3.11.9
+
+# 1. Download and run the automated installer script
+curl https://pyenv.run | bash
+
+# 2. Apply it to your current terminal environment session
+export PATH="$HOME/.pyenv/bin:$PATH"
+eval "$(pyenv init -)"
+eval "$(pyenv virtualenv-init -)"
+
+sudo apt update
+sudo apt install liblzma-dev -y
+
+pyenv install 3.11.9
+
+pyenv global 3.11.9
+
+echo 'export PYENV_ROOT="$HOME/.pyenv"' >> ~/.bashrc
+echo '[[ -d $PYENV_ROOT/bin ]] && export PATH="$PYENV_ROOT/bin:$PATH"' >> ~/.bashrc
+echo 'eval "$(pyenv init -)"' >> ~/.bashrc
+
+source ~/.bashrc
+
+
+chmod +x update_smtp.sh
+./update_smtp.sh
