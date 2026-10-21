@@ -9,7 +9,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from seleniumbase import Driver
 import subprocess
 import random
-import pyautogui
+# import pyautogui
 
 
 EXPRESSVPN_CMD = "C:\\Program Files (x86)\\ExpressVPN\\services\\ExpressVPN.CLI.exe"
@@ -134,6 +134,8 @@ def close_other_tabs(driver):
 
 def get_fakey_data(driver, country="united states"):
     try:
+        import pyautogui
+
         countries = {
             "united states": "https://www.fakexy.com/fake-address-generator-us",
             "sweden": "https://www.fakexy.com/fake-address-generator-se",
