@@ -25,15 +25,22 @@ echo 'eval "$(pyenv init -)"' >> ~/.bashrc
 
 source ~/.bashrc
 
-
-chmod +x update_smtp.sh
-./update_smtp.sh
-
 sudo apt update
 sudo apt install git-lfs
 cd /home/debian/oneapp
 git lfs install
 git lfs pull
+
+
+
+git clone https://github.com/auto-mat-ion/oneapp
+
+
+
+chmod +x update_smtp.sh
+./update_smtp.sh
+
+
 
 
 nohup ./update_smtp.sh &
