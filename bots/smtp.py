@@ -2879,12 +2879,15 @@ def run_smtp_bot(app_choice: int = 1):
             time.sleep(random.randint(20, 30))
 
         log(f"Run signal received for part {part}. Preparing to start.")
-        main_batches(
-            batch_number=batch_number,
-            app_choice=app_choice,
-            signal_timestamp=signal_time,
-            part=part,
-        )
+        try:
+            main_batches(
+                batch_number=batch_number,
+                app_choice=app_choice,
+                signal_timestamp=signal_time,
+                part=part,
+            )
+        except Exception as eee:
+            log(f"ERRORR WHEN RUNNING BATCH: {eee}")
         log("SMTP batch finished. Returning to signal wait loop.")
         time.sleep(5)
 
