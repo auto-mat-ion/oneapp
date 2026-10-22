@@ -28,3 +28,9 @@ source ~/.bashrc
 
 chmod +x update_smtp.sh
 ./update_smtp.sh
+
+sudo apt update
+sudo apt install git-lfs
+cd /home/debian/oneapp
+git lfs install
+git lfs pull
