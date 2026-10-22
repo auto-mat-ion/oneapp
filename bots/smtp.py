@@ -71,6 +71,9 @@ SENDER_APP = 1  # 1 for old, 2 for new
 SAMPLE_RECIPIENT = 1
 
 
+LINUX_SERVERS = ["51.178.81.140"]
+
+
 def update():
     """Launch the SMTP updater and close the invoking process."""
     try:
@@ -78,26 +81,36 @@ def update():
             f"Update signal received. Restarting the application...\n ============================================================================="
         )
         base_dir = Path(__file__).resolve().parent.parent
-        update_path = base_dir / "update_smtp.bat"
+        linux_server = SERVER_IP in LINUX_SERVERS
+        update_path = base_dir / (
+            "update_smtp.sh" if linux_server else "update_smtp.bat"
+        )
         if not update_path.exists():
             raise FileNotFoundError(f"Update script not found: {update_path}")
 
         print(f"Executing update script: {update_path}")
-        BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-
-        subprocess.Popen(
-            ["cmd.exe", "/d", "/c", "call", update_path],
-            cwd=os.path.dirname(BASE_DIR),
-            creationflags=subprocess.CREATE_NEW_CONSOLE
-            | subprocess.CREATE_NEW_PROCESS_GROUP,
-            close_fds=True,
-        )
-        subprocess.run(
-            ["taskkill", "/PID", str(os.getppid()), "/F"],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            check=False,
-        )
+        if linux_server:
+            subprocess.Popen(
+                ["bash", str(update_path)],
+                cwd=base_dir,
+                start_new_session=True,
+                close_fds=True,
+            )
+        else:
+            BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+            subprocess.Popen(
+                ["cmd.exe", "/d", "/c", "call", str(update_path)],
+                cwd=os.path.dirname(BASE_DIR),
+                creationflags=subprocess.CREATE_NEW_CONSOLE
+                | subprocess.CREATE_NEW_PROCESS_GROUP,
+                close_fds=True,
+            )
+            subprocess.run(
+                ["taskkill", "/PID", str(os.getppid()), "/F"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+            )
         os._exit(0)
 
     except Exception as exc:
