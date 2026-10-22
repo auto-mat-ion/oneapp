@@ -34,3 +34,8 @@ sudo apt install git-lfs
 cd /home/debian/oneapp
 git lfs install
 git lfs pull
+
+
+nohup ./update_smtp.sh &
+
+tail -f nohup.out

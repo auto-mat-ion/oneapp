@@ -2858,21 +2858,21 @@ def run_smtp_bot(app_choice: int = 1):
                 signal_time = datetime.now(UTC)
                 break
 
-            time.sleep(20 * 1)
-            scheduler_signal = get_due_smtp_schedule_1hr()
-            if scheduler_signal.get("status"):
-                # batch_number = int(scheduler_signal.get("batch", 1))
-                batch_number = 1
-                part = 2
-                signal_time = datetime.now(UTC)
-                break
-            time.sleep(20 * 1)
-            scheduler_signal = get_due_smtp_schedule_2hr()
-            if scheduler_signal.get("status"):
-                batch_number = 1
-                part = 3
-                signal_time = datetime.now(UTC)
-                break
+            time.sleep(30)
+            # scheduler_signal = get_due_smtp_schedule_1hr()
+            # if scheduler_signal.get("status"):
+            #     # batch_number = int(scheduler_signal.get("batch", 1))
+            #     batch_number = 1
+            #     part = 2
+            #     signal_time = datetime.now(UTC)
+            #     break
+            # time.sleep(20 * 1)
+            # scheduler_signal = get_due_smtp_schedule_2hr()
+            # if scheduler_signal.get("status"):
+            #     batch_number = 1
+            #     part = 3
+            #     signal_time = datetime.now(UTC)
+            #     break
 
             if SERVER_IP == "51.91.59.107":
                 update_schedule_smtp_1()
@@ -2889,8 +2889,8 @@ def run_smtp_bot(app_choice: int = 1):
         time.sleep(5)
 
 
-# SERVER_IP = "162.19.229.114"
-# accounts = AccountManager(2)
+# SERVER_IP = "51.178.81.140"
+# accounts = AccountManager(1)
 # accounts.accounts
 # from familybot import loginn_test
 
