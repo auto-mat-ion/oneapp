@@ -39,12 +39,12 @@ chmod +x ./update_smtp.sh
 chmod +x update.sh
 ./update.sh
 
+################### SETTING UP SERVER IP ##################################
+
+# source .venv/bin/activate
+# $ python main.py
 
 ############### AFTER SETUP ##################
 
-nohup ./update_smtp.sh & tail -f nohup.out
+# nohup ./update_smtp.sh & tail -f nohup.out
 
-################### SETTING UP SERVER IP ##################################
-
-source .venv/bin/activate
-python main.py
