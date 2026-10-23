@@ -1,48 +1,50 @@
-Installing git
+# Installing git
 sudo apt update
 sudo apt install git -y
-
-#Installing python 3.11.9
-
+# C compilers
+sudo apt update
+sudo apt install build-essential make libssl-dev zlib1g-dev \
+libbz2-dev libreadline-dev libsqlite3-dev curl git \
+libncursesw5-dev xz-utils tk-dev libxml2-dev libxmlsec1-dev \
+libffi-dev liblzma-dev libzstd-dev
+sudo apt upgrade
+# Installing python 3.11.9
 # 1. Download and run the automated installer script
 curl https://pyenv.run | bash
-
 # 2. Apply it to your current terminal environment session
 export PATH="$HOME/.pyenv/bin:$PATH"
 eval "$(pyenv init -)"
 eval "$(pyenv virtualenv-init -)"
-
+#Update 
 sudo apt update
 sudo apt install liblzma-dev -y
-
+#Install
 pyenv install 3.11.9
-
 pyenv global 3.11.9
-
+# POST INSTALL FOR PYTHON
 echo 'export PYENV_ROOT="$HOME/.pyenv"' >> ~/.bashrc
 echo '[[ -d $PYENV_ROOT/bin ]] && export PATH="$PYENV_ROOT/bin:$PATH"' >> ~/.bashrc
 echo 'eval "$(pyenv init -)"' >> ~/.bashrc
-
 source ~/.bashrc
-
+# CLONE REPO
+git clone https://github.com/auto-mat-ion/oneapp
+# INSTALL Git lfs
 sudo apt update
 sudo apt install git-lfs
+# Go to oneapp and run update
 cd /home/debian/oneapp
 git lfs install
 git lfs pull
+chmod +x ./update_smtp.sh
+chmod +x update.sh
+./update.sh
 
 
+############### AFTER SETUP ##################
 
-git clone https://github.com/auto-mat-ion/oneapp
+nohup ./update_smtp.sh & tail -f nohup.out
 
+################### SETTING UP SERVER IP ##################################
 
-
-chmod +x update_smtp.sh
-./update_smtp.sh
-
-
-
-
-nohup ./update_smtp.sh &
-
-tail -f nohup.out
+source .venv/bin/activate
+python main.py

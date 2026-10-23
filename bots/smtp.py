@@ -71,9 +71,6 @@ SENDER_APP = 1  # 1 for old, 2 for new
 SAMPLE_RECIPIENT = 1
 
 
-LINUX_SERVERS = ["51.178.81.140"]
-
-
 def update():
     """Launch the SMTP updater and close the invoking process."""
     try:
@@ -81,7 +78,7 @@ def update():
             f"Update signal received. Restarting the application...\n ============================================================================="
         )
         base_dir = Path(__file__).resolve().parent.parent
-        linux_server = SERVER_IP in LINUX_SERVERS
+        linux_server = is_linux_server()
         update_path = base_dir / (
             "update_smtp.sh" if linux_server else "update_smtp.bat"
         )
@@ -2501,6 +2498,32 @@ def is_server_authorized() -> bool:
             pass
 
 
+def is_linux_server() -> bool:
+    if not SERVER_IP:
+        return False
+
+    conn = _get_db_connection()
+    if conn is None:
+        return False
+
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT server_type FROM oneapp.servers_details WHERE server_ip = %s LIMIT 1",
+            (SERVER_IP,),
+        )
+        row = cursor.fetchone()
+        cursor.close()
+        return bool(row and row[0] and str(row[0]).strip().lower().startswith("debian"))
+    except Exception:
+        return False
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
 def check_manual_shutdown_signal() -> bool:
     conn = _get_db_connection()
     if conn is None:
@@ -2892,10 +2915,9 @@ def run_smtp_bot(app_choice: int = 1):
         time.sleep(5)
 
 
-# SERVER_IP = "51.178.81.140"
+# SERVER_IP = "162.19.26.217"
+# is_linux_server()
 # accounts = AccountManager(1)
 # accounts.accounts
 # from familybot import loginn_test
-
-
 # xxx = loginn_test(random.choice(accounts.accounts))
