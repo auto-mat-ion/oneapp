@@ -1401,10 +1401,10 @@ class AccountManager:
                             "creation_date": "",
                         }
                     )
-                if self.part in {1, 2, 3}:
-                    start = len(accounts) * (self.part - 1) // 3
-                    end = len(accounts) * self.part // 3
-                    accounts = accounts[start:end]
+                # if self.part in {1, 2, 3}:
+                #     start = len(accounts) * (self.part - 1) // 3
+                #     end = len(accounts) * self.part // 3
+                #     accounts = accounts[start:end]
                 self.accounts = accounts
                 log(f"Accounts: {len(self.accounts)}")
             except Exception as exc:
