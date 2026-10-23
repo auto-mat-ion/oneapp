@@ -1889,7 +1889,8 @@ def flush_db_operations():
         retries = 0
         done_acc_update = False
         done_failed_update = False
-        while retries < 7:
+        time.sleep(random.randint(10, 80))
+        while retries < 10:
             engine = _create_sqlalchemy_engine()
             if engine is None:
                 log("Warning: unable to start DB operations (SQLAlchemy unavailable)")
@@ -2011,7 +2012,7 @@ def flush_db_operations():
                 return True
 
             retries += 1
-            time.sleep(random.randint(55, 75))
+            time.sleep(random.randint(10, 80))
 
 
 def prompt_for_sender_app_selection() -> Optional[int]:
@@ -2470,7 +2471,14 @@ def is_linux_server() -> bool:
         )
         row = cursor.fetchone()
         cursor.close()
-        return bool(row and row[0] and str(row[0]).strip().lower().startswith("debian"))
+        return bool(
+            row
+            and row[0]
+            and (
+                str(row[0]).strip().lower().startswith("debian")
+                or str(row[0]).strip().lower().startswith("contabo")
+            )
+        )
     except Exception:
         return False
     finally:
@@ -2871,9 +2879,12 @@ def run_smtp_bot(app_choice: int = 1):
         time.sleep(5)
 
 
-# SERVER_IP = "162.19.26.217"
+# SERVER_IP = "144.217.85.183"
 # is_linux_server()
 # accounts = AccountManager(1)
 # accounts.accounts
 # from familybot import loginn_test
-# xxx = loginn_test(random.choice(accounts.accounts))
+
+# [i for i in accounts.accounts if '@hotmail.com' in i['email']]
+
+# xxx = loginn_test(random.choice([i for i in accounts.accounts if '@hotmail.com' in i['email']]))
