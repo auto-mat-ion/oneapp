@@ -719,7 +719,8 @@ CREATE TABLE
   IF NOT EXISTS server_status (
     server_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
     server_ip VARCHAR(255) NULL,
-    last_uptime DATETIME NULL
+    last_uptime DATETIME NULL,
+    status VARCHAR(255) NULL
   ) ENGINE = InnoDB;
 
 CREATE TABLE
@@ -740,7 +741,8 @@ CREATE TABLE
   IF NOT EXISTS server_status_family_and_hotmail (
     server_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
     server_ip VARCHAR(255) NULL,
-    last_uptime DATETIME NULL
+    last_uptime DATETIME NULL,
+    status VARCHAR(255) NULL
   ) ENGINE = InnoDB;
 
 CREATE TABLE

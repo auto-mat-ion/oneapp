@@ -33,7 +33,7 @@ except ImportError:  # fallback if SQLAlchemy is unavailable
 import pandas as pd
 import subprocess
 
-
+SMTP_VERSION = "v1.0.0"
 SETTINGS_PATH = Path(__file__).resolve().parent / "settings.json"
 SENDER_LOG_DIR = Path(__file__).resolve().parent.parent / "sender_logs"
 LOG_FILE = SENDER_LOG_DIR / "email_sender.log"
@@ -2085,6 +2085,48 @@ def sync_pc_time() -> bool:
         return False
 
 
+def update_server_status(status: str) -> bool:
+    conn = _get_db_connection()
+    if conn is None:
+        return False
+
+    cursor = None
+    try:
+        server_ip = str(SERVER_IP or "").strip()
+        if not server_ip:
+            return False
+
+        cursor = conn.cursor()
+        now_utc = datetime.now(UTC)
+        cursor.execute(
+            "SELECT server_id FROM server_status WHERE server_ip = %s LIMIT 1",
+            (server_ip,),
+        )
+        if cursor.fetchone():
+            cursor.execute(
+                "UPDATE server_status SET last_uptime = %s, status = %s "
+                "WHERE server_ip = %s",
+                (now_utc, status, server_ip),
+            )
+        else:
+            cursor.execute(
+                "INSERT INTO server_status (server_ip, last_uptime, status) "
+                "VALUES (%s, %s, %s)",
+                (server_ip, now_utc, status),
+            )
+
+        conn.commit()
+        return True
+    except Exception as exc:
+        conn.rollback()
+        log(f"Failed to update SMTP server status: {exc}")
+        return False
+    finally:
+        if cursor is not None:
+            cursor.close()
+        conn.close()
+
+
 def get_action_status() -> tuple[bool, dict]:
     def _fetch_action_status():
         sync_pc_time()
@@ -2094,27 +2136,6 @@ def get_action_status() -> tuple[bool, dict]:
 
         try:
             cursor = conn.cursor()
-            server_ip = str(SERVER_IP or "").strip()
-            now_utc = datetime.now(UTC)
-
-            if server_ip:
-                cursor.execute(
-                    "SELECT server_id FROM server_status WHERE server_ip = %s",
-                    (server_ip,),
-                )
-                existing_row = cursor.fetchone()
-                if existing_row:
-                    cursor.execute(
-                        "UPDATE server_status SET last_uptime = %s WHERE server_ip = %s",
-                        (now_utc, server_ip),
-                    )
-                else:
-                    cursor.execute(
-                        "INSERT INTO server_status (server_ip, last_uptime) VALUES (%s, %s)",
-                        (server_ip, now_utc),
-                    )
-                conn.commit()
-
             cursor.execute(
                 "SELECT action, status, date_time, batch_number FROM manualbot_actions_tracker "
                 "ORDER BY action_id DESC LIMIT 1"
@@ -2588,6 +2609,7 @@ def main_batches(
     signal_timestamp: Optional[datetime] = None,
     part: int = 1,
 ):
+    update_server_status("Signal received! Loading data...")
     run_state = {}
     try:
         _main_batches(batch_number, app_choice, signal_timestamp, part, run_state)
@@ -2708,6 +2730,7 @@ def _main_batches(
 
     round_idx = 0
     while round_idx <= SUBSEQUENT_BATCHES:
+        update_server_status(f"Running - b{round_idx + 1}")
         batch_start_time = datetime.now(UTC)
         if _shutdown.is_set() and _shutdown_reason:
             log("Shutdown: stopping batch rounds. Reason: " + _shutdown_reason)
@@ -2877,6 +2900,7 @@ def run_smtp_bot(app_choice: int = 1):
             if active:
                 batch_value = data.get("batch_number")
                 if str(batch_value).strip().lower() == "update":
+                    update_server_status("Update signal received. Updating...")
                     update()
                 else:
                     if batch_value is not None:
@@ -2919,6 +2943,7 @@ def run_smtp_bot(app_choice: int = 1):
             if SERVER_IP == "51.91.59.107":
                 update_schedule_smtp_1()
             time.sleep(random.randint(20, 30))
+            update_server_status(f"{SMTP_VERSION} - standby")
 
         log(f"Run signal received for part {part}. Preparing to start.")
         try:
