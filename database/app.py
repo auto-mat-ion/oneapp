@@ -1103,10 +1103,12 @@ def get_server_uptime_status_df():
     if conn is None:
         return pd.DataFrame(
             columns=[
+                "server_number",
                 "server_ip",
                 "last_update_time_utc",
                 "last_update_seconds",
                 "status",
+                "server_status",
                 "server_type",
             ]
         )
@@ -1119,6 +1121,7 @@ def get_server_uptime_status_df():
                 ss.server_ip,
                 ss.last_uptime AS last_update_time_utc,
                 TIMESTAMPDIFF(SECOND, ss.last_uptime, UTC_TIMESTAMP()) AS last_update_seconds,
+                ss.status AS server_status,
                 COALESCE(sd.server_type, 'undefined') AS server_type
             FROM server_status ss
             LEFT JOIN servers_details sd ON sd.server_ip = ss.server_ip
@@ -1131,10 +1134,12 @@ def get_server_uptime_status_df():
         if not rows:
             return pd.DataFrame(
                 columns=[
+                    "server_number",
                     "server_ip",
                     "last_update_time_utc",
                     "last_update_seconds",
                     "status",
+                    "server_status",
                     "server_type",
                 ]
             )
@@ -1150,6 +1155,7 @@ def get_server_uptime_status_df():
         df["server_type"] = (
             df["server_type"].fillna("undefined").replace({"": "undefined"})
         )
+        df["server_status"] = df["server_status"].fillna("")
 
         def get_status(seconds):
             if pd.isna(seconds):
@@ -1197,16 +1203,19 @@ def get_server_uptime_status_df():
             by=["status_rank", "server_sort_key"],
             kind="mergesort",
         ).reset_index(drop=True)
+        df.insert(0, "server_number", range(1, len(df) + 1))
 
         df["last_update_time_utc"] = df["last_update_time_utc"].dt.strftime(
             "%Y-%m-%d %H:%M:%S"
         )
         return df[
             [
+                "server_number",
                 "server_ip",
                 "last_update_time_utc",
                 "last_update_seconds",
                 "status",
+                "server_status",
                 "server_type",
             ]
         ]
@@ -1214,10 +1223,12 @@ def get_server_uptime_status_df():
         st.error(f"Unable to load server uptime status: {exc}")
         return pd.DataFrame(
             columns=[
+                "server_number",
                 "server_ip",
                 "last_update_time_utc",
                 "last_update_seconds",
                 "status",
+                "server_status",
                 "server_type",
             ]
         )

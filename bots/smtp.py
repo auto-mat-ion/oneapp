@@ -33,7 +33,7 @@ except ImportError:  # fallback if SQLAlchemy is unavailable
 import pandas as pd
 import subprocess
 
-SMTP_VERSION = "v1.0.0"
+SMTP_VERSION = "v1.0.1"
 SETTINGS_PATH = Path(__file__).resolve().parent / "settings.json"
 SENDER_LOG_DIR = Path(__file__).resolve().parent.parent / "sender_logs"
 LOG_FILE = SENDER_LOG_DIR / "email_sender.log"
@@ -2625,6 +2625,9 @@ def _main_batches(
     run_state,
 ):
     print("***********************Starting***********************************\n\n")
+    signal_epoch = (
+        signal_timestamp.timestamp() if signal_timestamp is not None else time.time()
+    )
 
     global \
         BATCH_NUMBER, \
@@ -2728,10 +2731,10 @@ def _main_batches(
     ]
     run_state["account_states"] = account_states
 
+    batch_slot_seconds = MAX_RUNTIME_SECONDS / (SUBSEQUENT_BATCHES + 1)
     round_idx = 0
     while round_idx <= SUBSEQUENT_BATCHES:
         update_server_status(f"Running - b{round_idx + 1}")
-        batch_start_time = datetime.now(UTC)
         if _shutdown.is_set() and _shutdown_reason:
             log("Shutdown: stopping batch rounds. Reason: " + _shutdown_reason)
             break
@@ -2830,11 +2833,13 @@ def _main_batches(
                 log("No recipients left after batch round.")
                 break
 
-            batch_elapsed = datetime.now(UTC) - batch_start_time
+            batch_deadline = signal_epoch + (round_idx + 1) * batch_slot_seconds
+            batch_now = time.time()
+            batch_elapsed = batch_now - (signal_epoch + round_idx * batch_slot_seconds)
             log(
-                f"Batch {round_idx + 1} ran for : {batch_elapsed.total_seconds():.1f}s = {batch_elapsed.total_seconds() / 60:.1f} minutes"
+                f"Batch {round_idx + 1} used its slot for: {batch_elapsed:.1f}s = {batch_elapsed / 60:.1f} minutes"
             )
-            batch_wait_time = (5 * 60) - batch_elapsed.total_seconds()
+            batch_wait_time = max(0, batch_deadline - batch_now)
             if batch_wait_time > 0 and round_idx < SUBSEQUENT_BATCHES:
                 log(
                     f"Waiting {batch_wait_time:.1f}s = {batch_wait_time / 60:.1f} minutes before next batch..."
