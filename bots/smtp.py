@@ -1,3 +1,4 @@
+import gc
 import json
 import os
 import platform
@@ -2547,11 +2548,59 @@ def _manual_shutdown_watcher():
         time.sleep(5)
 
 
+def _cleanup_batch_memory(run_state):
+    global _shared_cache
+
+    recipients = run_state.get("recipients")
+    if recipients is not None:
+        with _recipient_lock:
+            recipients.queue.clear()
+
+    accounts = run_state.get("accounts")
+    if accounts is not None:
+        accounts.accounts.clear()
+
+    content = run_state.get("content")
+    if content is not None:
+        content.hyperlinks.clear()
+        content.links.clear()
+        content.subjects.clear()
+        content.texts.clear()
+
+    stats = run_state.get("stats")
+    if stats is not None:
+        with _stats_lock:
+            stats.processed_accounts.clear()
+
+    account_states = run_state.get("account_states")
+    if account_states is not None:
+        account_states.clear()
+
+    run_state.clear()
+    with _cache_lock:
+        _shared_cache = msal.SerializableTokenCache()
+    gc.collect()
+
+
 def main_batches(
     batch_number: int = 1,
     app_choice: int = 1,
     signal_timestamp: Optional[datetime] = None,
     part: int = 1,
+):
+    run_state = {}
+    try:
+        _main_batches(batch_number, app_choice, signal_timestamp, part, run_state)
+    finally:
+        _cleanup_batch_memory(run_state)
+
+
+def _main_batches(
+    batch_number: int,
+    app_choice: int,
+    signal_timestamp: datetime | None,
+    part: int,
+    run_state,
 ):
     print("***********************Starting***********************************\n\n")
 
@@ -2599,22 +2648,26 @@ def main_batches(
     log("Loading senders. Please wait...")
 
     accounts = AccountManager(part)
-    log("Loading content. Please wait...")
-    content = ContentManager(part)
-    log("Loading recipients. Please wait...")
-    recipients = RecipientManager(len(accounts.accounts))
-
-    if not load_cache_local(os.path.join(utils_dir, "cache.bin")):
-        return
-
+    run_state["accounts"] = accounts
     if not accounts.accounts:
         log("✗ No accounts. Exiting.")
         return
+
+    log("Loading content. Please wait...")
+    content = ContentManager(part)
+    run_state["content"] = content
+    if not content.is_valid():
+        log("✗ Missing content (need subjects, texts, links). Exiting.")
+        return
+
+    log("Loading recipients. Please wait...")
+    recipients = RecipientManager(len(accounts.accounts))
+    run_state["recipients"] = recipients
     if not recipients.queue:
         log("✗ No recipients. Exiting.")
         return
-    if not content.is_valid():
-        log("✗ Missing content (need subjects, texts, links). Exiting.")
+
+    if not load_cache_local(os.path.join(utils_dir, "cache.bin")):
         return
 
     total_acc = len(accounts.accounts)
@@ -2646,10 +2699,12 @@ def main_batches(
         _shutdown_watcher_started = True
 
     stats = StatsTracker(total_acc, total_rcpt)
+    run_state["stats"] = stats
     account_states = [
         AccountState(account, idx, total_acc)
         for idx, account in enumerate(accounts.accounts)
     ]
+    run_state["account_states"] = account_states
 
     round_idx = 0
     while round_idx <= SUBSEQUENT_BATCHES:
@@ -2737,7 +2792,7 @@ def main_batches(
                 if _shutdown.is_set():
                     break
         finally:
-            executor.shutdown(wait=False)
+            executor.shutdown(wait=True)
 
             log(
                 f"\n{'=' * 55}\n\nBatch {round_idx + 1}/{SUBSEQUENT_BATCHES + 1} Finished\n"
