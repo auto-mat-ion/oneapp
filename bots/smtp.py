@@ -262,14 +262,48 @@ THE_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 utils_dir = os.path.normpath(os.path.join(THE_BASE_DIR, "../utils"))
 
 
-_log_lock = threading.Lock()
-_recipient_lock = threading.Lock()
-_content_lock = threading.Lock()
-_file_lock = threading.Lock()
-_cache_lock = threading.Lock()
-_stats_lock = threading.Lock()
-_account_status_lock = threading.Lock()
-_recipient_window_lock = threading.Lock()
+LOCK_TIMEOUT_SECONDS = 10
+
+
+class TimeoutLock:
+    def __init__(self):
+        self._lock = threading.Lock()
+
+    def acquire(self, blocking=True, timeout=LOCK_TIMEOUT_SECONDS):
+        if not blocking:
+            return self._lock.acquire(blocking=False)
+
+        if timeout is None or timeout < 0:
+            timeout = LOCK_TIMEOUT_SECONDS
+        timeout = min(float(timeout), LOCK_TIMEOUT_SECONDS)
+        return self._lock.acquire(timeout=timeout)
+
+    def release(self):
+        self._lock.release()
+
+    def locked(self):
+        return self._lock.locked()
+
+    def __enter__(self):
+        if not self.acquire(timeout=LOCK_TIMEOUT_SECONDS):
+            raise TimeoutError(
+                f"Timed out waiting up to {LOCK_TIMEOUT_SECONDS} seconds for lock"
+            )
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.release()
+        return False
+
+
+_log_lock = TimeoutLock()
+_recipient_lock = TimeoutLock()
+_content_lock = TimeoutLock()
+_file_lock = TimeoutLock()
+_cache_lock = TimeoutLock()
+_stats_lock = TimeoutLock()
+_account_status_lock = TimeoutLock()
+_recipient_window_lock = TimeoutLock()
 _account_success_count = 0
 _account_fail_count = 0
 _recipient_window_start = 0
@@ -278,7 +312,7 @@ _shared_cache = msal.SerializableTokenCache()
 _shutdown = threading.Event()
 _shutdown_reason: Optional[str] = None
 _shutdown_watcher_started = False
-_connect_lock = threading.Lock()
+_connect_lock = TimeoutLock()
 _pause_requested = threading.Event()
 
 
@@ -914,7 +948,7 @@ def prompt_for_batch_selection() -> Optional[str]:
 
 
 def get_token(email: str) -> Optional[str]:
-    if not _cache_lock.acquire(timeout=5):
+    if not _cache_lock.acquire(timeout=LOCK_TIMEOUT_SECONDS):
         log(f"Token lookup skipped for {email}: timed out waiting for cache lock.")
         return None
 
@@ -2614,7 +2648,7 @@ def _cleanup_batch_memory(run_state):
         account_states.clear()
 
     run_state.clear()
-    if _cache_lock.acquire(timeout=5):
+    if _cache_lock.acquire(timeout=LOCK_TIMEOUT_SECONDS):
         try:
             _shared_cache = msal.SerializableTokenCache()
         finally:
