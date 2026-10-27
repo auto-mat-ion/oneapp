@@ -33,7 +33,7 @@ except ImportError:  # fallback if SQLAlchemy is unavailable
 import pandas as pd
 import subprocess
 
-SMTP_VERSION = "v1.0.1"
+SMTP_VERSION = "v1.0.2"
 SETTINGS_PATH = Path(__file__).resolve().parent / "settings.json"
 SENDER_LOG_DIR = Path(__file__).resolve().parent.parent / "sender_logs"
 LOG_FILE = SENDER_LOG_DIR / "email_sender.log"
@@ -2147,7 +2147,13 @@ def get_action_status() -> tuple[bool, dict]:
 
             action = str(row[0]).strip().lower() if row[0] is not None else ""
             status = str(row[1]).strip().lower() if row[1] is not None else ""
-            timestamp = row[2].replace(tzinfo=timezone.utc) if row[2] else None
+            timestamp = row[2] if isinstance(row[2], datetime) else None
+            if timestamp is not None:
+                timestamp = (
+                    timestamp.replace(tzinfo=UTC)
+                    if timestamp.tzinfo is None
+                    else timestamp.astimezone(UTC)
+                )
             batch_number = row[3]
 
             if not timestamp or not isinstance(timestamp, datetime):
@@ -2158,6 +2164,7 @@ def get_action_status() -> tuple[bool, dict]:
 
             return action in {"run_bots", "update"} and status == "true", {
                 "batch_number": "update" if action == "update" else batch_number,
+                "signal_timestamp": timestamp,
             }
         finally:
             try:
@@ -2221,7 +2228,11 @@ def get_due_smtp_schedule() -> dict:
                     log(
                         f"⏰⏰ : SMTP schedule for now found: batch {batch_value} at {parsed_time.isoformat()}\n\n"
                     )
-                    return {"status": True, "batch": batch_value}
+                    return {
+                        "status": True,
+                        "batch": batch_value,
+                        "signal_timestamp": parsed_time,
+                    }
             except Exception:
                 continue
 
@@ -2641,7 +2652,7 @@ def _main_batches(
 
     BATCH_NUMBER = str(batch_number)
     print(f"Selected batch: {BATCH_NUMBER}")
-    SUBSEQUENT_BATCHES = 9
+    SUBSEQUENT_BATCHES = 13
     EMAIL_ROUNDS = 1
     time.sleep(5)
 
@@ -2913,7 +2924,7 @@ def run_smtp_bot(app_choice: int = 1):
                             batch_number = int(batch_value)
                         except Exception:
                             batch_number = 1
-                signal_time = datetime.now(UTC)
+                signal_time = data.get("signal_timestamp")
 
                 part = 1
                 if batch_number > 1:
@@ -2926,7 +2937,7 @@ def run_smtp_bot(app_choice: int = 1):
                 # batch_number = int(scheduler_signal.get("batch", 1))
                 batch_number = 1
                 part = 1
-                signal_time = datetime.now(UTC)
+                signal_time = scheduler_signal.get("signal_timestamp")
                 break
 
             time.sleep(30)
@@ -2962,14 +2973,3 @@ def run_smtp_bot(app_choice: int = 1):
             log(f"ERRORR WHEN RUNNING BATCH: {eee}")
         log("SMTP batch finished. Returning to signal wait loop.")
         time.sleep(5)
-
-
-# SERVER_IP = "144.217.85.183"
-# is_linux_server()
-# accounts = AccountManager(1)
-# accounts.accounts
-# from familybot import loginn_test
-
-# [i for i in accounts.accounts if '@hotmail.com' in i['email']]
-
-# xxx = loginn_test(random.choice([i for i in accounts.accounts if '@hotmail.com' in i['email']]))
