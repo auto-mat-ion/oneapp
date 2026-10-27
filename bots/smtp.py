@@ -914,23 +914,26 @@ def prompt_for_batch_selection() -> Optional[str]:
 
 
 def get_token(email: str) -> Optional[str]:
+    if not _cache_lock.acquire(timeout=5):
+        log(f"Token lookup skipped for {email}: timed out waiting for cache lock.")
+        return None
+
     try:
-        with _cache_lock:
-            app = msal.PublicClientApplication(
-                client_id=_get_client_id(),
-                authority=AUTHORITY,
-                token_cache=_shared_cache,
-            )
-            matching = None
-            for acc in app.get_accounts():
-                if acc.get("username", "").lower() == email.lower():
-                    matching = acc
-                    break
+        app = msal.PublicClientApplication(
+            client_id=_get_client_id(),
+            authority=AUTHORITY,
+            token_cache=_shared_cache,
+        )
+        matching = None
+        for acc in app.get_accounts():
+            if acc.get("username", "").lower() == email.lower():
+                matching = acc
+                break
 
-            if not matching:
-                return None
+        if not matching:
+            return None
 
-            result = app.acquire_token_silent(scopes=SCOPES, account=matching)
+        result = app.acquire_token_silent(scopes=SCOPES, account=matching)
 
         if result and "access_token" in result:
             return result["access_token"]
@@ -938,6 +941,8 @@ def get_token(email: str) -> Optional[str]:
         return None
     except Exception:
         return None
+    finally:
+        _cache_lock.release()
 
 
 def get_access_token(email: str) -> Optional[str]:
@@ -2609,8 +2614,13 @@ def _cleanup_batch_memory(run_state):
         account_states.clear()
 
     run_state.clear()
-    with _cache_lock:
-        _shared_cache = msal.SerializableTokenCache()
+    if _cache_lock.acquire(timeout=5):
+        try:
+            _shared_cache = msal.SerializableTokenCache()
+        finally:
+            _cache_lock.release()
+    else:
+        log("Cache reset skipped: timed out waiting for cache lock.")
     gc.collect()
 
 
@@ -2717,7 +2727,7 @@ def _main_batches(
 
     if signal_timestamp is not None:
         elapsed = datetime.now(UTC) - signal_timestamp
-        wait_seconds = max(0, 2 * 60 - elapsed.total_seconds())
+        wait_seconds = max(0, 0.5 * 60 - elapsed.total_seconds())
 
         if wait_seconds > 0:
             log(
