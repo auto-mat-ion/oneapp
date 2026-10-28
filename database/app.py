@@ -1098,6 +1098,70 @@ def get_scheduler_default_values():
     return default_values
 
 
+def get_smtp_server_stats_df():
+    columns = [
+        "server_number",
+        "server_type",
+        "server_ip",
+        "stat_date",
+        "total_senders",
+        "total_failed_senders_today",
+        "total_recipients_sent_today",
+        "average_recipients_per_sender",
+        "sent_recipients_percentage",
+        "total_batches_sent_today",
+        "average_batch_time",
+        "average_batch_per_run",
+        "updated_at",
+    ]
+    conn = get_db_connection()
+    if conn is None:
+        return pd.DataFrame(columns=columns)
+
+    try:
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(
+            """
+            SELECT
+                stats.server_ip,
+                COALESCE(sd.server_type, 'undefined') AS server_type,
+                stats.stat_date,
+                stats.total_senders,
+                stats.total_failed_senders_today,
+                stats.total_recipients_sent_today,
+                stats.average_recipients_per_sender,
+                stats.sent_recipients_percentage,
+                stats.total_batches_sent_today,
+                stats.average_batch_time,
+                stats.average_batch_per_run,
+                stats.updated_at
+            FROM smtp_server_stats stats
+            LEFT JOIN servers_details sd ON sd.server_ip = stats.server_ip
+            ORDER BY stats.server_ip
+            """
+        )
+        rows = cursor.fetchall()
+        cursor.close()
+
+        if not rows:
+            return pd.DataFrame(columns=columns)
+
+        df = pd.DataFrame(rows)
+        df["server_type"] = (
+            df["server_type"].fillna("undefined").replace({"": "undefined"})
+        )
+        df.insert(0, "server_number", range(1, len(df) + 1))
+        return df[columns]
+    except Exception as exc:
+        st.error(f"Unable to load SMTP server stats: {exc}")
+        return pd.DataFrame(columns=columns)
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
 def get_server_uptime_status_df():
     conn = get_db_connection()
     if conn is None:
@@ -6854,6 +6918,18 @@ def main():
                     }
                 )
                 st.dataframe(display_df, use_container_width=True, hide_index=True)
+
+            st.markdown("---")
+            if st.button("Refresh", key="refresh_family_hotmail_uptime_status"):
+                st.session_state["family_hotmail_uptime_status_refresh"] = True
+                st.rerun()
+
+            st.subheader("SMTP Server Stats")
+            stats_df = get_smtp_server_stats_df()
+            if stats_df.empty:
+                st.info("No SMTP server stats available yet.")
+            else:
+                st.dataframe(stats_df, use_container_width=True, hide_index=True)
 
         elif st.session_state.selected_page == "Family and Hotmailbots":
             st.title("Family and Hotmailbots")

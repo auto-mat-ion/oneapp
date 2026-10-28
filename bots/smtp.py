@@ -2029,7 +2029,7 @@ class DailyStatsTracker:
 
             recipients = int(self.data.get("total_recipients_sent_today", 0) or 0)
             senders = int(self.data.get("total_senders", 0) or 0)
-            sent_percentage = _safe_divide(senders * 1000, recipients)
+            sent_percentage = _safe_divide(recipients * 100, senders * 1000)
             cursor = conn.cursor()
             cursor.execute(
                 """
