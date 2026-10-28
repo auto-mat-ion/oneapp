@@ -40,6 +40,7 @@ LOG_FILE = SENDER_LOG_DIR / "email_sender.log"
 PROCESSED_FILE = SENDER_LOG_DIR / "processed_accounts.txt"
 FAILED_FILE = SENDER_LOG_DIR / "failed_accounts.txt"
 SENT_RECIPIENTS_FILE = SENDER_LOG_DIR / "sent_recipients.txt"
+STATS_FILE = SENDER_LOG_DIR / "stats.json"
 
 _deferred_sent_recipients: List[str] = []
 _deferred_account_updates: List[Tuple[str, datetime, str, str]] = []
@@ -1880,8 +1881,233 @@ def process_account_batch(
         session.close()
 
 
+def _safe_divide(numerator: int | float, denominator: int | float) -> float:
+    return numerator / denominator if denominator != 0 else 0.0
+
+
+class DailyStatsTracker:
+    def __init__(self):
+        self.stats_path = STATS_FILE
+        self.data = self._load()
+        self._reset_if_new_utc_day()
+
+    def _utc_day(self) -> str:
+        return datetime.now(UTC).strftime("%Y-%m-%d")
+
+    def _empty_day(self) -> Dict:
+        return {
+            "total_senders": 0,
+            "total_failed_senders_today": 0,
+            "total_recipients_sent_today": 0,
+            "total_batches_sent_today": 0,
+            "average_recipients_per_sender": 0,
+            "average_batch_time": 0,
+            "average_batch_per_run": 0,
+            "_successful_senders": 0,
+            "_sender_emails": [],
+            "_failed_sender_emails": [],
+            "_batch_time_total": 0.0,
+            "_runs": 0,
+        }
+
+    def _load(self) -> Dict:
+        try:
+            if self.stats_path.exists():
+                loaded = json.loads(self.stats_path.read_text(encoding="utf-8"))
+                if isinstance(loaded, dict):
+                    return loaded
+        except (OSError, json.JSONDecodeError):
+            pass
+        return {"date": self._utc_day(), "days": {}, **self._empty_day()}
+
+    def _save(self):
+        self.stats_path.parent.mkdir(parents=True, exist_ok=True)
+        temp_path = self.stats_path.with_suffix(".json.tmp")
+        temp_path.write_text(
+            json.dumps(self.data, indent=2, ensure_ascii=False), encoding="utf-8"
+        )
+        os.replace(temp_path, self.stats_path)
+
+    def _reset_if_new_utc_day(self):
+        today = self._utc_day()
+        saved_day = str(self.data.get("date", ""))
+        if saved_day != today:
+            if saved_day and saved_day in self.data.get("days", {}):
+                pass
+            elif saved_day:
+                previous = {
+                    key: value
+                    for key, value in self.data.items()
+                    if key in self._empty_day()
+                }
+                if previous:
+                    self.data.setdefault("days", {})[saved_day] = previous
+            self.data = {
+                "date": today,
+                "days": self.data.get("days", {}),
+                **self._empty_day(),
+            }
+            self._save()
+        else:
+            self.data.setdefault("days", {})
+            self.data.setdefault("date", today)
+            self._save()
+
+    def _archive_current(self):
+        day = str(self.data.get("date", ""))
+        if day:
+            self.data.setdefault("days", {})[day] = {
+                key: value
+                for key, value in self.data.items()
+                if key in self._empty_day()
+            }
+
+    def _day_stats(self) -> Dict:
+        return {
+            key: self.data.get(key, default)
+            for key, default in self._empty_day().items()
+        }
+
+    def _refresh_averages(self):
+        today = self._day_stats()
+        recipients = today["total_recipients_sent_today"]
+        senders = today["total_senders"]
+        batches = today["total_batches_sent_today"]
+        runs = today["_runs"]
+        self.data.pop("average_senders_sent_per_email", None)
+        self.data["average_recipients_per_sender"] = _safe_divide(recipients, senders)
+        self.data["average_batch_time"] = _safe_divide(
+            today["_batch_time_total"], batches
+        )
+        self.data["average_batch_per_run"] = _safe_divide(batches, runs)
+        self._archive_current()
+
+    def start_run(self, sender_accounts: List[Dict] | None = None):
+        with _stats_lock:
+            self._reset_if_new_utc_day()
+            sender_emails = self.data.setdefault("_sender_emails", [])
+            for account in sender_accounts or []:
+                email = str(account.get("email", "")).strip().lower()
+                if email and email not in sender_emails:
+                    sender_emails.append(email)
+
+            self.data["total_senders"] = len(sender_emails)
+            failed_emails = self.data.setdefault("_failed_sender_emails", [])
+            self.data["total_failed_senders_today"] = len(failed_emails)
+            self.data["_runs"] = int(self.data.get("_runs", 0)) + 1
+            self._refresh_averages()
+            self._save()
+
+    def record_sender(self, account: Dict, success: bool):
+        email = str(account.get("email", "")).strip().lower()
+        with _stats_lock:
+            self._reset_if_new_utc_day()
+            sender_emails = self.data.setdefault("_sender_emails", [])
+            failed_emails = self.data.setdefault("_failed_sender_emails", [])
+            if email and email not in sender_emails:
+                sender_emails.append(email)
+            if not success and email and email not in failed_emails:
+                failed_emails.append(email)
+
+            self.data["total_senders"] = len(sender_emails)
+            self.data["total_failed_senders_today"] = len(failed_emails)
+            if success and email in failed_emails:
+                failed_emails.remove(email)
+                self.data["total_failed_senders_today"] = len(failed_emails)
+            self._refresh_averages()
+            self._save()
+
+    def _sync_server_stats(self):
+        if not SERVER_IP:
+            return
+
+        conn = None
+        try:
+            conn = _get_db_connection()
+            if conn is None:
+                return
+
+            recipients = int(self.data.get("total_recipients_sent_today", 0) or 0)
+            senders = int(self.data.get("total_senders", 0) or 0)
+            sent_percentage = _safe_divide(senders * 1000, recipients)
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT INTO smtp_server_stats (
+                    server_ip, stat_date, total_senders,
+                    total_failed_senders_today, total_recipients_sent_today,
+                    average_recipients_per_sender, sent_recipients_percentage,
+                    total_batches_sent_today, average_batch_time,
+                    average_batch_per_run, updated_at
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, UTC_TIMESTAMP())
+                ON DUPLICATE KEY UPDATE
+                    stat_date = VALUES(stat_date),
+                    total_senders = VALUES(total_senders),
+                    total_failed_senders_today = VALUES(total_failed_senders_today),
+                    total_recipients_sent_today = VALUES(total_recipients_sent_today),
+                    average_recipients_per_sender = VALUES(average_recipients_per_sender),
+                    sent_recipients_percentage = VALUES(sent_recipients_percentage),
+                    total_batches_sent_today = VALUES(total_batches_sent_today),
+                    average_batch_time = VALUES(average_batch_time),
+                    average_batch_per_run = VALUES(average_batch_per_run),
+                    updated_at = UTC_TIMESTAMP()
+                """,
+                (
+                    str(SERVER_IP),
+                    datetime.now(UTC).date(),
+                    senders,
+                    int(self.data.get("total_failed_senders_today", 0) or 0),
+                    recipients,
+                    float(self.data.get("average_recipients_per_sender", 0) or 0),
+                    sent_percentage,
+                    int(self.data.get("total_batches_sent_today", 0) or 0),
+                    float(self.data.get("average_batch_time", 0) or 0),
+                    float(self.data.get("average_batch_per_run", 0) or 0),
+                ),
+            )
+            conn.commit()
+            cursor.close()
+        except Exception as exc:
+            if conn is not None:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+            print(f"Failed to sync SMTP server stats: {exc}")
+        finally:
+            if conn is not None:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+
+    def record_batch(self, recipients_sent: int, batch_seconds: float):
+        with _stats_lock:
+            self._reset_if_new_utc_day()
+            self.data["total_recipients_sent_today"] = int(
+                self.data.get("total_recipients_sent_today", 0)
+            ) + max(0, recipients_sent)
+            self.data["total_batches_sent_today"] = (
+                int(self.data.get("total_batches_sent_today", 0)) + 1
+            )
+            self.data["_batch_time_total"] = float(
+                self.data.get("_batch_time_total", 0.0)
+            ) + max(0.0, batch_seconds)
+            self._refresh_averages()
+            self._save()
+            self._sync_server_stats()
+
+
+_daily_stats = DailyStatsTracker()
+
+
 class StatsTracker:
-    def __init__(self, total_accounts: int, total_recipients: int):
+    def __init__(
+        self,
+        total_accounts: int,
+        total_recipients: int,
+        sender_accounts: List[Dict] | None = None,
+    ):
         self.total_accounts = total_accounts
         self.total_recipients = total_recipients
         self.total_sent = 0
@@ -1889,6 +2115,7 @@ class StatsTracker:
         self.fail_count = 0
         self.processed_accounts = []
         self.start_time = time.time()
+        _daily_stats.start_run(sender_accounts)
 
     def update(self, account: Dict, success: bool, sent: int):
         with _stats_lock:
@@ -1898,11 +2125,15 @@ class StatsTracker:
                 self.fail_count += 1
             self.total_sent += sent
             self.processed_accounts.append(account)
+        _daily_stats.record_sender(account, success)
+
+    def record_batch(self, recipients_sent: int, batch_seconds: float):
+        _daily_stats.record_batch(recipients_sent, batch_seconds)
 
     def get_stats(self) -> Dict:
         with _stats_lock:
             elapsed = time.time() - self.start_time
-            rate = self.total_sent / elapsed if elapsed > 0 else 0
+            rate = _safe_divide(self.total_sent, elapsed)
             return {
                 "total_sent": self.total_sent,
                 "ok_count": self.ok_count,
@@ -2752,7 +2983,14 @@ def _main_batches(
 
     total_acc = len(accounts.accounts)
     total_rcpt = recipients._total_loaded
+    batch_count = SUBSEQUENT_BATCHES + 1
+    if batch_count <= 0:
+        log("Invalid number of subsequent batches. Exiting.")
+        return
     max_per_account = (FIRST_BATCH_BCC) + SUBSEQUENT_BATCHES * (SUBSEQUENT_BATCH_BCC)
+    if max_per_account <= 0:
+        log("Invalid recipient capacity per account. Exiting.")
+        return
     est_accounts_needed = (total_rcpt + max_per_account - 1) // max_per_account
 
     log(f"Ready: {total_acc} accounts | {total_rcpt} recipients")
@@ -2778,7 +3016,7 @@ def _main_batches(
         threading.Thread(target=_manual_shutdown_watcher, daemon=True).start()
         _shutdown_watcher_started = True
 
-    stats = StatsTracker(total_acc, total_rcpt)
+    stats = StatsTracker(total_acc, total_rcpt, accounts.accounts)
     run_state["stats"] = stats
     account_states = [
         AccountState(account, idx, total_acc)
@@ -2786,9 +3024,11 @@ def _main_batches(
     ]
     run_state["account_states"] = account_states
 
-    batch_slot_seconds = MAX_RUNTIME_SECONDS / (SUBSEQUENT_BATCHES + 1)
+    batch_slot_seconds = MAX_RUNTIME_SECONDS / batch_count
     round_idx = 0
+    batch_start_time = time.monotonic()
     while round_idx <= SUBSEQUENT_BATCHES:
+        batch_start_time = time.monotonic()
         update_server_status(f"Running - b{round_idx + 1}")
         if _shutdown.is_set() and _shutdown_reason:
             log("Shutdown: stopping batch rounds. Reason: " + _shutdown_reason)
@@ -2830,6 +3070,7 @@ def _main_batches(
 
             batch_success = 0
             batch_fail = 0
+            batch_recipients_sent = 0
             print("Waiting for account processing to complete...")
             log("=" * 55)
 
@@ -2859,6 +3100,8 @@ def _main_batches(
                     elif result.get("completed"):
                         batch_success += 1
 
+                    batch_recipients_sent += max(0, int(result.get("sent", 0) or 0))
+
                     if result.get("failed") and not state.finalized:
                         state.finalized = True
                         accounts.mark_failed(state.account, result.get("error", ""))
@@ -2882,6 +3125,10 @@ def _main_batches(
             final_stats = stats.get_stats()
             log(
                 f"  Time:       {final_stats['elapsed']:.1f}s = {final_stats['elapsed'] / 60:.1f} minutes : ({final_stats['rate']:.1f}/s)"
+            )
+            stats.record_batch(
+                batch_recipients_sent,
+                time.monotonic() - batch_start_time,
             )
 
             if not recipients.has_more():
@@ -3017,3 +3264,6 @@ def run_smtp_bot(app_choice: int = 1):
             log(f"ERRORR WHEN RUNNING BATCH: {eee}")
         log("SMTP batch finished. Returning to signal wait loop.")
         time.sleep(5)
+
+
+# SERVER_IP = "144.91.97.9"

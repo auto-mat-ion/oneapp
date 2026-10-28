@@ -738,6 +738,21 @@ CREATE TABLE
   ) ENGINE = InnoDB;
 
 CREATE TABLE
+  IF NOT EXISTS smtp_server_stats (
+    server_ip VARCHAR(255) PRIMARY KEY,
+    stat_date DATE NOT NULL,
+    total_senders INT NOT NULL DEFAULT 0,
+    total_failed_senders_today INT NOT NULL DEFAULT 0,
+    total_recipients_sent_today INT NOT NULL DEFAULT 0,
+    average_recipients_per_sender DOUBLE NOT NULL DEFAULT 0,
+    sent_recipients_percentage DOUBLE NOT NULL DEFAULT 0,
+    total_batches_sent_today INT NOT NULL DEFAULT 0,
+    average_batch_time DOUBLE NOT NULL DEFAULT 0,
+    average_batch_per_run DOUBLE NOT NULL DEFAULT 0,
+    updated_at DATETIME NOT NULL
+  ) ENGINE = InnoDB;
+
+CREATE TABLE
   IF NOT EXISTS server_status_family_and_hotmail (
     server_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
     server_ip VARCHAR(255) NULL,
