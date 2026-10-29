@@ -33,7 +33,7 @@ except ImportError:  # fallback if SQLAlchemy is unavailable
 import pandas as pd
 import subprocess
 
-SMTP_VERSION = "v1.0.4"
+SMTP_VERSION = "v1.0.5"
 SETTINGS_PATH = Path(__file__).resolve().parent / "settings.json"
 SENDER_LOG_DIR = Path(__file__).resolve().parent.parent / "sender_logs"
 LOG_FILE = SENDER_LOG_DIR / "email_sender.log"
