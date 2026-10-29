@@ -33,7 +33,7 @@ except ImportError:  # fallback if SQLAlchemy is unavailable
 import pandas as pd
 import subprocess
 
-SMTP_VERSION = "v1.0.5"
+SMTP_VERSION = "v1.0.6"
 SETTINGS_PATH = Path(__file__).resolve().parent / "settings.json"
 SENDER_LOG_DIR = Path(__file__).resolve().parent.parent / "sender_logs"
 LOG_FILE = SENDER_LOG_DIR / "email_sender.log"
@@ -159,49 +159,14 @@ MAX_RUNTIME_SECONDS = 50 * 60
 NEXT_RUN_WAIT_TIME = 4 * 60 * 60
 STAGGER_ = 3
 SUBSEQUENT_BATCHES = 2
-
-if SERVER_IP in [
-    "51.77.216.17",
-    "51.75.119.199",
-    "13.140.161.126",
-    "13.140.181.21",
-    "13.140.181.18",
-    "13.140.181.23",
-    "13.140.181.20",
-    "13.140.181.19",
-    "13.140.181.17",
-    "13.140.181.14",
-    "13.140.181.16",
-    "13.140.181.22",
-]:
-    MAX_CONCURRENT_ACCOUNTS = 2
-else:
-    MAX_CONCURRENT_ACCOUNTS = 2
+MAX_CONCURRENT_ACCOUNTS = 2
 
 
-SMTP_MAILER = {
-    "51.178.81.140": "smtp45@affworker.com",
-    "57.129.184.182": "smtp46@affworker.com",
-    "57.129.184.183": "smtp47@affworker.com",
-    "57.129.184.181": "smtp48@affworker.com",
-    "57.129.184.185": "smtp49@affworker.com",
-    "57.129.184.184": "smtp50@affworker.com",
-    "54.39.109.65": "smtp51@affworker.com",
-    "54.39.109.66": "smtp52@affworker.com",
-    "54.39.109.63": "smtp53@affworker.com",
-    "54.39.109.68": "smtp54@affworker.com",
-    "54.39.109.64": "smtp55@affworker.com",
-    "54.39.109.60": "smtp56@affworker.com",
-    "54.39.109.69": "smtp57@affworker.com",
-    "54.39.109.67": "smtp58@affworker.com",
-    "54.39.109.61": "smtp59@affworker.com",
-    "54.39.109.62": "smtp60@affworker.com",
-}
+SMTP_MAILER = {}
 
 SAMPLE_RECIPIENT_EMAIL = (
     [SMTP_MAILER.get(SERVER_IP)] if SMTP_MAILER.get(SERVER_IP) else []
 )
-# SAMPLE_RECIPIENT_EMAIL = []
 
 if SERVER_IP in ["51.91.59.107"]:
     SAMPLE_RECIPIENT_EMAIL += [
@@ -235,20 +200,8 @@ elif SERVER_IP in ["162.19.27.8"]:
 elif SERVER_IP in ["146.59.196.225"]:
     SAMPLE_RECIPIENT_EMAIL += ["aidanmotthews986@gmail.com", "bradley.konsa@gmail.com"]
 
-# else:
-#     SAMPLE_RECIPIENT_EMAIL = []
 
-
-VPN_COUNTRY = {
-    "51.91.59.107": "poland",
-    "79.137.75.57": "denmark",
-    "51.91.56.36": "sweden",
-    "193.70.86.209": "poland",
-    "51.161.34.220": "czech",
-    "51.77.195.218": "latvia",
-    "51.91.97.55": "slovakia",
-    "162.19.220.105": "slovenia",
-}.get(SERVER_IP, "poland")
+VPN_COUNTRY = "poland"
 
 
 GRAPH_ENDPOINT = "https://graph.microsoft.com/v1.0"
@@ -321,28 +274,7 @@ _BASIC_RE = re.compile(r".+@.+\..+")
 LOAD_RETRY_ATTEMPTS = 7
 LOAD_RETRY_DELAY_SECONDS = 5.0
 CACHE_LOAD_RETRIES = 10
-EMAIL_ROUNDS = 2
-
-# NEW_RECIPIENT_LIST = [
-#     "144.217.85.183",
-#     "152.228.137.224",
-#     "217.182.71.146",
-#     "146.59.196.225",
-#     "51.254.222.49",
-#     "162.19.26.243",
-#     "162.19.26.44",
-#     "162.19.27.233",
-#     "162.19.27.118",
-#     "162.19.26.209",
-#     "162.19.27.8",
-#     "162.19.27.214",
-#     "162.19.27.84",
-#     "162.19.26.200",
-#     "162.19.27.76",
-#     "162.19.26.195",
-#     "162.19.27.202",
-#     "162.19.26.217",
-# ]
+EMAIL_ROUNDS = 5
 
 NEW_RECIPIENT_LIST = []
 
@@ -1683,11 +1615,11 @@ def process_account_batch_looper(
 ) -> Dict:
     total_sent = 0
 
-    for mess_num in range(EMAIL_ROUNDS):
+    for i in range(EMAIL_ROUNDS):
         # process account 10 times if everything ok, keeping track of sent count and failed status. if failed, break and return the status, else continue to next iteration. if sent count is 0, break and return the status. if completed, break and return the status. if shutdown, break and return the status.
         # The 10 rounds are not for fail mitigation. They ensure sending 10 times the batch size of emails per account, as per the EMAIL_ROUNDS constant. The loop should not exit early, but run all 10 rounds.
         # Exit only in case of error, shutdown, or if the account has completed its sending quota.
-        result = process_account_batch(state, recipients, content, mess_num=mess_num)
+        result = process_account_batch(state, recipients, content)
 
         if result.get("failed") or result.get("skipped"):
             return result
@@ -1705,7 +1637,6 @@ def process_account_batch_looper(
         if result.get("sent"):
             total_sent += result["sent"]
 
-    state.batch_round += 1
     return result
 
 
@@ -1713,7 +1644,6 @@ def process_account_batch(
     state: AccountState,
     recipients: "RecipientManager",
     content: "ContentManager",
-    mess_num: int,
 ) -> Dict:
 
     if _shutdown.is_set() or state.failed or not recipients.has_more():
@@ -1737,21 +1667,13 @@ def process_account_batch(
             state.started = True
 
         if state.batch_round == 0:
-            if mess_num == 0:
-                batch_size = 1
-                label = "warmup-m1"
-            else:
-                batch_size = random.randint(FIRST_BATCH_BCC_LOWER, FIRST_BATCH_BCC)
-            label = "warmup-m2"
+            batch_size = random.randint(FIRST_BATCH_BCC_LOWER, FIRST_BATCH_BCC)
+            label = "warmup"
         else:
-            if mess_num == 0:
-                batch_size = 1
-                label = f"b{state.batch_round + 1}-m1"
-            else:
-                batch_size = random.randint(
-                    SUBSEQUENT_BATCH_BCC_LOWER, SUBSEQUENT_BATCH_BCC
-                )
-                label = f"b{state.batch_round + 1}-m2"
+            batch_size = random.randint(
+                SUBSEQUENT_BATCH_BCC_LOWER, SUBSEQUENT_BATCH_BCC
+            )
+            label = f"b{state.batch_round + 1}"
 
         batch = recipients.get_batch(batch_size)
         if not batch:
@@ -1869,7 +1791,8 @@ def process_account_batch(
             if _shutdown.wait(delay):
                 return {"skipped": True}
 
-        if state.batch_round > SUBSEQUENT_BATCHES + 1:
+        state.batch_round += 1
+        if state.batch_round > EMAIL_ROUNDS * 3:
             state.completed = True
             # _log_account_status(True)
             return {
@@ -2937,7 +2860,7 @@ def _main_batches(
     BATCH_NUMBER = str(batch_number)
     print(f"Selected batch: {BATCH_NUMBER}")
     SUBSEQUENT_BATCHES = 13
-    EMAIL_ROUNDS = 2
+    EMAIL_ROUNDS = 1
     time.sleep(5)
 
     log("Current settings:")
@@ -3073,9 +2996,7 @@ def _main_batches(
                 if not recipients.has_more():
                     break
                 futures[
-                    executor.submit(
-                        process_account_batch_looper, state, recipients, content
-                    )
+                    executor.submit(process_account_batch, state, recipients, content)
                 ] = state
             print(f"Submitted {len(futures)} accounts for processing.")
 
