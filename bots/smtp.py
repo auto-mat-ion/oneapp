@@ -321,7 +321,7 @@ _BASIC_RE = re.compile(r".+@.+\..+")
 LOAD_RETRY_ATTEMPTS = 7
 LOAD_RETRY_DELAY_SECONDS = 5.0
 CACHE_LOAD_RETRIES = 10
-EMAIL_ROUNDS = 5
+EMAIL_ROUNDS = 2
 
 # NEW_RECIPIENT_LIST = [
 #     "144.217.85.183",
@@ -1683,11 +1683,11 @@ def process_account_batch_looper(
 ) -> Dict:
     total_sent = 0
 
-    for i in range(EMAIL_ROUNDS):
+    for mess_num in range(EMAIL_ROUNDS):
         # process account 10 times if everything ok, keeping track of sent count and failed status. if failed, break and return the status, else continue to next iteration. if sent count is 0, break and return the status. if completed, break and return the status. if shutdown, break and return the status.
         # The 10 rounds are not for fail mitigation. They ensure sending 10 times the batch size of emails per account, as per the EMAIL_ROUNDS constant. The loop should not exit early, but run all 10 rounds.
         # Exit only in case of error, shutdown, or if the account has completed its sending quota.
-        result = process_account_batch(state, recipients, content)
+        result = process_account_batch(state, recipients, content, mess_num=mess_num)
 
         if result.get("failed") or result.get("skipped"):
             return result
@@ -1705,6 +1705,7 @@ def process_account_batch_looper(
         if result.get("sent"):
             total_sent += result["sent"]
 
+    state.batch_round += 1
     return result
 
 
@@ -1712,6 +1713,7 @@ def process_account_batch(
     state: AccountState,
     recipients: "RecipientManager",
     content: "ContentManager",
+    mess_num: int,
 ) -> Dict:
 
     if _shutdown.is_set() or state.failed or not recipients.has_more():
@@ -1735,13 +1737,21 @@ def process_account_batch(
             state.started = True
 
         if state.batch_round == 0:
-            batch_size = random.randint(FIRST_BATCH_BCC_LOWER, FIRST_BATCH_BCC)
-            label = "warmup"
+            if mess_num == 0:
+                batch_size = 1
+                label = "warmup-m1"
+            else:
+                batch_size = random.randint(FIRST_BATCH_BCC_LOWER, FIRST_BATCH_BCC)
+            label = "warmup-m2"
         else:
-            batch_size = random.randint(
-                SUBSEQUENT_BATCH_BCC_LOWER, SUBSEQUENT_BATCH_BCC
-            )
-            label = f"b{state.batch_round + 1}"
+            if mess_num == 0:
+                batch_size = 1
+                label = f"b{state.batch_round + 1}-m1"
+            else:
+                batch_size = random.randint(
+                    SUBSEQUENT_BATCH_BCC_LOWER, SUBSEQUENT_BATCH_BCC
+                )
+                label = f"b{state.batch_round + 1}-m2"
 
         batch = recipients.get_batch(batch_size)
         if not batch:
@@ -1859,8 +1869,7 @@ def process_account_batch(
             if _shutdown.wait(delay):
                 return {"skipped": True}
 
-        state.batch_round += 1
-        if state.batch_round > EMAIL_ROUNDS * 3:
+        if state.batch_round > SUBSEQUENT_BATCHES + 1:
             state.completed = True
             # _log_account_status(True)
             return {
@@ -2928,7 +2937,7 @@ def _main_batches(
     BATCH_NUMBER = str(batch_number)
     print(f"Selected batch: {BATCH_NUMBER}")
     SUBSEQUENT_BATCHES = 13
-    EMAIL_ROUNDS = 1
+    EMAIL_ROUNDS = 2
     time.sleep(5)
 
     log("Current settings:")
@@ -3064,7 +3073,9 @@ def _main_batches(
                 if not recipients.has_more():
                     break
                 futures[
-                    executor.submit(process_account_batch, state, recipients, content)
+                    executor.submit(
+                        process_account_batch_looper, state, recipients, content
+                    )
                 ] = state
             print(f"Submitted {len(futures)} accounts for processing.")
 
