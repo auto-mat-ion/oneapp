@@ -447,7 +447,7 @@ wait_time = 10
 
 # ── Custom TempMail API ──────────────────────────────────────────────────────
 BASE_URL = "https://affworker.com"
-TEMPMAIL_API_KEY = "LCIE5xag3SScK9CH55pwoiVuPNMmkvbm2nb16ca4"
+TEMPMAIL_API_KEY = "jcfPNcqnl7GZoYYBUp9gTHObSIQaRnwIIBtNRd5J"
 
 
 def create_email():

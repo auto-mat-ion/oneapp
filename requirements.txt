@@ -12,3 +12,4 @@ SQLAlchemy
 pymysql
 inputimeout
 wonderwords
+adspower 

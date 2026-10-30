@@ -609,7 +609,7 @@ wait_time = 10
 
 # ── Custom TempMail API ──────────────────────────────────────────────────────
 BASE_URL = "https://affworker.com"
-TEMPMAIL_API_KEY = "LCIE5xag3SScK9CH55pwoiVuPNMmkvbm2nb16ca4"
+TEMPMAIL_API_KEY = "jcfPNcqnl7GZoYYBUp9gTHObSIQaRnwIIBtNRd5J"
 
 
 def create_email():
@@ -662,7 +662,7 @@ def wait_for_code(email_token, timeout=120, poll_interval=3):
 def fetch_messages_smtp2(recovery_email):
     try:
         BASE_URL = "https://affworker.com"
-        TEMPMAIL_API_KEY = "LCIE5xag3SScK9CH55pwoiVuPNMmkvbm2nb16ca4"
+        TEMPMAIL_API_KEY = "jcfPNcqnl7GZoYYBUp9gTHObSIQaRnwIIBtNRd5J"
 
         resp = requests.post(
             f"{BASE_URL}/api/messages/by-email/{TEMPMAIL_API_KEY}",
