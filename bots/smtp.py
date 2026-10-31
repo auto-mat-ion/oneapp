@@ -2051,6 +2051,8 @@ class DailyStatsTracker:
             senders = int(self.data.get("total_senders", 0) or 0)
             sent_percentage = _safe_divide(recipients * 100, senders * 1000)
             cursor = conn.cursor()
+
+            stat_date = datetime.now(UTC).date()
             cursor.execute(
                 """
                 INSERT INTO smtp_server_stats (
@@ -2061,7 +2063,6 @@ class DailyStatsTracker:
                     average_batch_per_run, updated_at
                 ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, UTC_TIMESTAMP())
                 ON DUPLICATE KEY UPDATE
-                    stat_date = VALUES(stat_date),
                     total_senders = VALUES(total_senders),
                     total_failed_senders_today = VALUES(total_failed_senders_today),
                     total_recipients_sent_today = VALUES(total_recipients_sent_today),
@@ -2074,7 +2075,7 @@ class DailyStatsTracker:
                 """,
                 (
                     str(SERVER_IP),
-                    datetime.now(UTC).date(),
+                    stat_date,
                     senders,
                     int(self.data.get("total_failed_senders_today", 0) or 0),
                     recipients,
