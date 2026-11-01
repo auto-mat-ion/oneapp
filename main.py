@@ -1,13 +1,7 @@
 from bots.smtp import run_smtp_bot
 from bots.familybot import run_family_link_extractor, run_familybot, run_familybot_share
 from bots.hotmailbot import run_hotmailbot
-# from ali.ex_botx.password_changer import run_password_changerbot
-
-
-# from bots.email_sender_test import main_sec
-# from ali.ex_botx.new_app_hotmail import run_second_app_hotmails
-
-# from bots.manual_sender import save_cookies, runner
+from bots.hotmailbot2 import run_hotmailbot2
 import json
 from utils.server_ip_helper import get_server_ip
 from bots.fakey_scrapper import scraper

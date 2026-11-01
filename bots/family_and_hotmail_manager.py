@@ -286,6 +286,7 @@ def runner():
     from bots.familybot import run_familybot, run_family_link_extractor
     from bots.hotmailbot import run_hotmailbot
     from bots.alibaba import run_process_first_pending_url
+    from bots.hotmailbot2 import run_hotmailbot2
 
     print(
         "\n\n============================================================================\nWaiting for a signal..."
@@ -352,7 +353,7 @@ def runner():
             print(
                 f"Signal received: {action} for country: {country}\n ============================================================================="
             )
-            result = run_hotmailbot(country)
+            result = run_hotmailbot2(country)
             current_action = (
                 "No more links, waiting for signal"
                 if result == "NO_LINKS"

