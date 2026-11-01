@@ -33,7 +33,11 @@ except ImportError:  # fallback if SQLAlchemy is unavailable
 import pandas as pd
 import subprocess
 
-SMTP_VERSION = "v1.0.6"
+SMTP_VERSION = "v1.0.7"
+
+
+APP2_SERVERS = ["162.19.229.114"]
+
 SETTINGS_PATH = Path(__file__).resolve().parent / "settings.json"
 SENDER_LOG_DIR = Path(__file__).resolve().parent.parent / "sender_logs"
 LOG_FILE = SENDER_LOG_DIR / "email_sender.log"
@@ -69,7 +73,7 @@ APP_SETTINGS = _load_settings().get("app")
 SERVER_IP = get_server_ip()
 BOT_TYPE = "email_sender"
 BATCH_NUMBER: Optional[str] = None
-SENDER_APP = 1  # 1 for old, 2 for new
+SENDER_APP = 1
 SAMPLE_RECIPIENT = 1
 
 
@@ -125,7 +129,7 @@ def _get_sender_accounts_table() -> str:
 def _get_client_id() -> str:
     return (
         "fe61e5b1-479a-480d-b45e-636e075bc1d3"
-        if SENDER_APP == 2
+        if SERVER_IP in APP2_SERVERS
         else "e62beeb7-8a9b-4637-b57f-f8601c0d13f5"
     )
 
@@ -135,7 +139,7 @@ def _get_sender2_failed_accounts_table() -> str:
 
 
 def _get_cache_bins_table() -> str:
-    return "second_app_cache_bins" if SENDER_APP == 2 else "cache_bins"
+    return "cache_bins2" if SERVER_IP in APP2_SERVERS else "cache_bins"
 
 
 FIRST_BATCH_BCC = 10
@@ -160,48 +164,13 @@ NEXT_RUN_WAIT_TIME = 4 * 60 * 60
 STAGGER_ = 3
 SUBSEQUENT_BATCHES = 2
 
-if SERVER_IP in [
-    "51.77.216.17",
-    "51.75.119.199",
-    "13.140.161.126",
-    "13.140.181.21",
-    "13.140.181.18",
-    "13.140.181.23",
-    "13.140.181.20",
-    "13.140.181.19",
-    "13.140.181.17",
-    "13.140.181.14",
-    "13.140.181.16",
-    "13.140.181.22",
-]:
-    MAX_CONCURRENT_ACCOUNTS = 2
-else:
-    MAX_CONCURRENT_ACCOUNTS = 2
+MAX_CONCURRENT_ACCOUNTS = 2
 
-
-SMTP_MAILER = {
-    "51.178.81.140": "smtp45@affworker.com",
-    "57.129.184.182": "smtp46@affworker.com",
-    "57.129.184.183": "smtp47@affworker.com",
-    "57.129.184.181": "smtp48@affworker.com",
-    "57.129.184.185": "smtp49@affworker.com",
-    "57.129.184.184": "smtp50@affworker.com",
-    "54.39.109.65": "smtp51@affworker.com",
-    "54.39.109.66": "smtp52@affworker.com",
-    "54.39.109.63": "smtp53@affworker.com",
-    "54.39.109.68": "smtp54@affworker.com",
-    "54.39.109.64": "smtp55@affworker.com",
-    "54.39.109.60": "smtp56@affworker.com",
-    "54.39.109.69": "smtp57@affworker.com",
-    "54.39.109.67": "smtp58@affworker.com",
-    "54.39.109.61": "smtp59@affworker.com",
-    "54.39.109.62": "smtp60@affworker.com",
-}
+SMTP_MAILER = {}
 
 SAMPLE_RECIPIENT_EMAIL = (
     [SMTP_MAILER.get(SERVER_IP)] if SMTP_MAILER.get(SERVER_IP) else []
 )
-# SAMPLE_RECIPIENT_EMAIL = []
 
 if SERVER_IP in ["51.91.59.107"]:
     SAMPLE_RECIPIENT_EMAIL += [
@@ -239,17 +208,7 @@ elif SERVER_IP in ["146.59.196.225"]:
 #     SAMPLE_RECIPIENT_EMAIL = []
 
 
-VPN_COUNTRY = {
-    "51.91.59.107": "poland",
-    "79.137.75.57": "denmark",
-    "51.91.56.36": "sweden",
-    "193.70.86.209": "poland",
-    "51.161.34.220": "czech",
-    "51.77.195.218": "latvia",
-    "51.91.97.55": "slovakia",
-    "162.19.220.105": "slovenia",
-}.get(SERVER_IP, "poland")
-
+VPN_COUNTRY = "poland"
 
 GRAPH_ENDPOINT = "https://graph.microsoft.com/v1.0"
 AUTHORITY = "https://login.microsoftonline.com/common"
@@ -322,28 +281,6 @@ LOAD_RETRY_ATTEMPTS = 7
 LOAD_RETRY_DELAY_SECONDS = 5.0
 CACHE_LOAD_RETRIES = 10
 EMAIL_ROUNDS = 2
-
-# NEW_RECIPIENT_LIST = [
-#     "144.217.85.183",
-#     "152.228.137.224",
-#     "217.182.71.146",
-#     "146.59.196.225",
-#     "51.254.222.49",
-#     "162.19.26.243",
-#     "162.19.26.44",
-#     "162.19.27.233",
-#     "162.19.27.118",
-#     "162.19.26.209",
-#     "162.19.27.8",
-#     "162.19.27.214",
-#     "162.19.27.84",
-#     "162.19.26.200",
-#     "162.19.27.76",
-#     "162.19.26.195",
-#     "162.19.27.202",
-#     "162.19.26.217",
-# ]
-
 NEW_RECIPIENT_LIST = []
 
 
@@ -730,24 +667,9 @@ def log(msg: str):
         _append_to_file(LOG_FILE, file_line)
 
 
-# def _signal_handler(sig, frame):
-#     if not _shutdown.is_set():
-#         log("⚠ Shutdown requested (Ctrl+C). Finishing current accounts...")
-#         global _shutdown_reason
-#         _shutdown_reason = "manual"
-#         _shutdown.set()
-
-
-# signal.signal(signal.SIGINT, _signal_handler)
-# try:
-#     signal.signal(signal.SIGBREAK, _signal_handler)
-# except AttributeError:
-#     pass
-
-
 def load_cache() -> bool:
     def _load_once():
-        log("Loading cache")
+        log(f"Loading cache from {_get_cache_bins_table()} table...")
         conn = None
         cursor = None
         try:
@@ -2999,8 +2921,14 @@ def _main_batches(
         log("✗ No recipients. Exiting.")
         return
 
-    if not load_cache_local(os.path.join(utils_dir, "cache.bin")):
-        return
+    if SERVER_IP in APP2_SERVERS:
+        if not load_cache():
+            return
+    else:
+        if not load_cache_local(os.path.join(utils_dir, "cache.bin")):
+            return
+
+    print("Loaded cache successfully.")
 
     total_acc = len(accounts.accounts)
     total_rcpt = recipients._total_loaded

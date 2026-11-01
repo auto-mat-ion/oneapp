@@ -1,7 +1,6 @@
 from bots.smtp import run_smtp_bot
 from bots.familybot import run_family_link_extractor, run_familybot, run_familybot_share
 from bots.hotmailbot import run_hotmailbot
-from bots.hotmailbot2 import run_hotmailbot2
 import json
 from utils.server_ip_helper import get_server_ip
 from bots.fakey_scrapper import scraper
