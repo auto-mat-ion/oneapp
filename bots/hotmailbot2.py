@@ -491,8 +491,8 @@ def fetch_messages(email_token: str):
 
 
 def delete_message(message_id: str):
-    url = f"{BASE_URL}/api/message/delete/{message_id}/{TEMPMAIL_API_KEY}"
     try:
+        url = f"{BASE_URL}/api/message/delete/{message_id}/{TEMPMAIL_API_KEY}"
         resp = requests.post(url, timeout=15)
         data = resp.json()
         if data.get("status") == "success":
@@ -505,20 +505,31 @@ def delete_message(message_id: str):
 def wait_for_code(email_token, timeout=120, poll_interval=3):
     deadline = time.time() + timeout
     while time.time() < deadline:
-        _check_shutdown_requested()
-        ok, messages = fetch_messages(email_token)
-        last_message = messages[0]
-        message_id = last_message.get("id")
+        try:
+            message_id = None
+            _check_shutdown_requested()
+            ok, messages = fetch_messages(email_token)
+            last_message = messages[0]
+            message_id = last_message.get("id")
 
-        plain = re.sub(r"<[^>]+>", " ", last_message.get("content"))  # strip HTML
-        match = re.search(r"\s*(\d{6})", plain)
-        if match:
-            delete_message(message_id)
             try:
-                return True, match.group(1)
+                plain = re.sub(r"<[^>]+>", " ", last_message.get("content"))
+                match = re.search(r"\s*(\d{6})", plain)
+                if match:
+                    try:
+                        if message_id:
+                            delete_message(message_id)
+                        return True, match.group(1)
+                    except:
+                        pass
             except:
                 pass
-        time.sleep(poll_interval)
+            if message_id:
+                delete_message(message_id)
+
+            time.sleep(poll_interval)
+        except:
+            pass
     return False, ""
 
 
@@ -5362,6 +5373,7 @@ def new_app(new_profile_data):
                 "Error initializing new browser driver. Network or proxy error",
             )
             return False, "Error initializing new browser driver instance"
+
         if not enter_email(driver=driver, email_address=email_address):
             print(f"{email_address}: Error entering email")
             new_profile_logger(email_address, "FAIL", "Error loading login page")
@@ -5376,7 +5388,10 @@ def new_app(new_profile_data):
             return False, "Error clicking next button after entering email"
         time.sleep(1)
 
+        # print(f"{email_address}: Reloging in with password or email")
+
         if enter_password(driver=driver, password=password):
+            print(f"{email_address}: Reloging in with password")
             click_password_next_button(driver=driver)
             if password_use_unavailable(driver):
                 click_send_code_to_recovery_email_button(driver)
@@ -5393,6 +5408,7 @@ def new_app(new_profile_data):
                             return False, "Recovery code not received"
                         enter_code_and_click_next_after_pass_change(driver, code)
         else:
+            print(f"{email_address}: Reloging in with recovery email")
             if enter_recovery_email_2(driver, recovery):
                 click_password_next_button(driver)
                 if email_login_limit_reached(driver):
@@ -5405,10 +5421,11 @@ def new_app(new_profile_data):
                     if not status:
                         return False, "Recovery code not received"
                     enter_code_and_click_next_after_pass_change(driver, code)
-
+        print(f"{email_address}: SUCCESSFULL LOGIN!")
         _check_shutdown_requested()
         click_stay_signed_in_button(driver)
         _check_shutdown_requested()
+        print(f"{email_address}: Setting up SMTP")
         status, error = smtp_process(driver, new_profile_data)
 
         if status:
