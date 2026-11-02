@@ -3033,6 +3033,7 @@ def _main_batches(
             log("All recipients consumed.")
             break
 
+        MAX_CONCURRENT_ACCOUNTS = 1
         if round_idx > 0:
             MAX_CONCURRENT_ACCOUNTS = 1
         log("=" * 55)
