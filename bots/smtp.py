@@ -3222,11 +3222,11 @@ def run_smtp_bot(app_choice: int = 1):
                 break
 
             scheduler_signal = get_due_smtp_schedule()
-            scheduler_signal = {
-                "status": True,
-                "batch": 1,
-                "signal_timestamp": datetime.now(UTC),
-            }
+            # scheduler_signal = {
+            #     "status": True,
+            #     "batch": 1,
+            #     "signal_timestamp": datetime.now(UTC),
+            # }
             if scheduler_signal.get("status"):
                 # batch_number = int(scheduler_signal.get("batch", 1))
                 batch_number = 1
