@@ -2913,6 +2913,52 @@ def _main_batches(
     if not content.is_valid():
         log("✗ Missing content (need subjects, texts, links). Exiting.")
         return
+    if SERVER_IP in APP2_SERVERS:
+        content.subjects = [
+            "There’s more to know about me than meets the eye, so feel free to {stop by | drop in | have a look} at my profile.",
+            "Sometimes a simple hello can lead to something wonderful. Why not {take a chance | say hello | start here}?",
+            "I enjoy discovering new personalities, sharing laughs, and making connections. Perhaps we could {get acquainted | exchange a few words | start chatting}.",
+            "My profile is a little window into who I am. Come {take a closer look | get a glimpse | see what you discover}.",
+            "Great conversations often begin unexpectedly. I’d be delighted if you {stopped by | reached out | dropped me a message}.",
+            "If making new acquaintances sounds appealing, you might find something interesting when you {visit | check out | browse} my profile.",
+            "I believe every person has a unique story. Perhaps yours and mine could make an interesting conversation.",
+            "A little curiosity can open the door to new possibilities. Feel free to {find me | explore my page | have a look around}.",
+            "I’m always fascinated by different personalities, fresh perspectives, and unexpected conversations.",
+            "Perhaps today is a good day to meet someone different. You can {start by visiting | begin with exploring | take a look at} my profile.",
+            "New faces and interesting minds are always welcome around here. Don't hesitate to {reach out | introduce yourself | get in touch}.",
+            "There’s nothing better than connecting with someone who knows how to keep a conversation interesting.",
+            "If you appreciate genuine people and spontaneous chats, we might have something to talk about.",
+            "Why let a good opportunity pass by? Come {check my page | discover my profile | get to know me}.",
+            "I’m always interested in crossing paths with people who bring positive energy and interesting ideas.",
+            "Every new connection starts somewhere. Maybe ours begins with a visit to my profile.",
+            "Have a little time to spare? Come {browse my page | get a glimpse of my world | see what I'm about}.",
+            "I enjoy meeting people who can turn an ordinary chat into an enjoyable experience.",
+            "You never know who you might meet or what you might discover. Take a moment to {visit my page | explore my profile | stop by}.",
+            "If you're in the mood for something fresh and interesting, perhaps we should {connect | exchange greetings | get to know each other}.",
+        ]
+        content.texts = [
+            "I’m looking for someone who values honesty, enjoys a good conversation, and appreciates the little things in life.",
+            "I enjoy meeting people who are open-minded, kind-hearted, and have a good sense of humor.",
+            "I’m interested in connecting with someone who is genuine, thoughtful, and enjoys sharing experiences.",
+            "I appreciate people who are curious, adventurous, and enjoy exploring new ideas and perspectives.",
+            "I’m {open | ready | happy} to seeing where a genuine conversation might take us when two people are interested in learning about each other.",
+            "I’m looking for someone who is respectful, kind, and enjoys meaningful conversations that can lead to a deeper connection.",
+            "I enjoy meeting people who are passionate about their interests, open to new experiences, and value good communication.",
+            "I’m interested in connecting with someone who is thoughtful, considerate, and enjoys sharing their thoughts and ideas.",
+            "I appreciate people who are authentic, sincere, and enjoy building a connection based on mutual respect and understanding.",
+        ]
+        content.links = ["alicias-ruby.findhotlady.info"]
+        content.hyperlinks = [
+            "Uncover My Hidden Charms",
+            "Explore My World of Fun",
+            "Step Into My Secret Life",
+            "Unveil My Mysterious Side",
+            "Discover My Hidden Desires",
+            "Explore My Playful World",
+            "Uncover My Secret Passions",
+            "Step Into My Enchanting World",
+            "Discover My Hidden Charms",
+        ]
 
     log("Loading recipients. Please wait...")
     recipients = RecipientManager(len(accounts.accounts))
@@ -3175,6 +3221,11 @@ def run_smtp_bot(app_choice: int = 1):
                 break
 
             scheduler_signal = get_due_smtp_schedule()
+            scheduler_signal = {
+                "status": True,
+                "batch": 1,
+                "signal_timestamp": datetime.now(UTC),
+            }
             if scheduler_signal.get("status"):
                 # batch_number = int(scheduler_signal.get("batch", 1))
                 batch_number = 1
