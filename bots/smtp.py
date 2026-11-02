@@ -36,7 +36,7 @@ import subprocess
 SMTP_VERSION = "v1.0.7"
 
 
-APP2_SERVERS = ["162.19.229.114"]
+APP2_SERVERS = ["162.19.229.114", "57.129.184.183"]
 
 SETTINGS_PATH = Path(__file__).resolve().parent / "settings.json"
 SENDER_LOG_DIR = Path(__file__).resolve().parent.parent / "sender_logs"
