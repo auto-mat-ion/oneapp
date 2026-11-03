@@ -3054,10 +3054,7 @@ def _main_batches(
         log("✗ No recipients. Exiting.")
         return
 
-    if SERVER_IP in APP2_SERVERS:
-        if not load_cache():
-            return
-    if SERVER_IP in TEST_2_S:
+    if (SERVER_IP in APP2_SERVERS) or (SERVER_IP in TEST_2_S):
         if not load_cache():
             return
     else:
