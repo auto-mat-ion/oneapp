@@ -431,7 +431,13 @@ def execute_db_action(action, retries=7, delay=10):
             attempt += 1
 
 
-CLIENT_ID = "fe61e5b1-479a-480d-b45e-636e075bc1d3"
+MODE = "APP1"
+if MODE == "APP1":
+    CLIENT_ID = "e62beeb7-8a9b-4637-b57f-f8601c0d13f5"
+else:
+    CLIENT_ID = "f3c1e5b1-479a-480d-b45e-636e075bc1d3"
+
+
 AUTHORITY = "https://login.microsoftonline.com/common"
 SCOPES = ["https://graph.microsoft.com/.default"]
 CACHE_PATH = os.path.normpath(
@@ -4390,6 +4396,38 @@ def load_cache():
         return msal.SerializableTokenCache()
 
 
+def load_cache2():
+    try:
+        cache = msal.SerializableTokenCache()
+
+        def load_action():
+            conn = get_db_connection()
+            if conn is None:
+                raise RuntimeError("Unable to connect to database")
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT cache_bin_file FROM cache_bins WHERE server_ip = %s AND bot_type = %s ORDER BY date_time DESC LIMIT 1",
+                (SERVER_IP, BOT_TYPE),
+            )
+            result = cursor.fetchone()
+            cursor.close()
+            conn.close()
+            return result
+
+        try:
+            result = execute_db_action(load_action, retries=7, delay=10)
+        except Exception as e:
+            print(f"Error loading cache after retries: {e}")
+            return cache
+
+        if result and result[0]:
+            cache.deserialize(result[0].decode("utf-8"))
+        return cache
+    except Exception as e:
+        print(f"Error loading cache: {e}")
+        return msal.SerializableTokenCache()
+
+
 def save_cache(cache):
     try:
         if not cache.has_state_changed:
@@ -4421,6 +4459,69 @@ def save_cache(cache):
             else:
                 cursor.execute(
                     "INSERT INTO cache_bins2 (server_ip, bot_type, date_time, cache_bin_file) VALUES (%s, %s, %s, %s)",
+                    (
+                        SERVER_IP,
+                        BOT_TYPE,
+                        datetime.now(),
+                        serialized_cache.encode("utf-8"),
+                    ),
+                )
+            conn.commit()
+            cursor.close()
+            conn.close()
+
+        try:
+            execute_db_action(save_action, retries=10, delay=10)
+        except Exception as e:
+            _check_shutdown_requested()
+            print(f"Error saving cache after retries: {e}")
+
+        file_retries = 3
+        for attempt in range(1, file_retries + 1):
+            try:
+                with open(CACHE_PATH, "w", encoding="utf-8") as f:
+                    f.write(serialized_cache)
+                break
+            except Exception as file_exc:
+                if attempt == file_retries:
+                    print(f"Error saving cache file after retries: {file_exc}")
+                else:
+                    time.sleep(1)
+    except Exception as e:
+        print(f"Error saving cache: {e}")
+
+
+def save_cache2(cache):
+    try:
+        if not cache.has_state_changed:
+            return
+
+        serialized_cache = cache.serialize()
+
+        def save_action():
+            _check_shutdown_requested()
+            conn = get_db_connection()
+            if conn is None:
+                raise RuntimeError("Unable to connect to database")
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT cache_id FROM cache_bins WHERE server_ip = %s AND bot_type = %s",
+                (SERVER_IP, BOT_TYPE),
+            )
+            result = cursor.fetchone()
+            if result:
+                cursor.execute(
+                    "UPDATE cache_bins SET date_time = %s, cache_bin_file = %s WHERE server_ip = %s AND bot_type = %s",
+                    (
+                        datetime.now(),
+                        serialized_cache.encode("utf-8"),
+                        SERVER_IP,
+                        BOT_TYPE,
+                    ),
+                )
+            else:
+                cursor.execute(
+                    "INSERT INTO cache_bins (server_ip, bot_type, date_time, cache_bin_file) VALUES (%s, %s, %s, %s)",
                     (
                         SERVER_IP,
                         BOT_TYPE,
@@ -4530,8 +4631,10 @@ def entire_smtp_process(driver, new_profile_data):
         password = new_profile_data.get("pass")
         email_token = new_profile_data.get("email_token")
         print(f"{email_address} : Creating app. Getting login url and code")
-
-        cache = load_cache()
+        if MODE == "APP1":
+            cache = load_cache2()
+        else:
+            cache = load_cache()
         app = msal.PublicClientApplication(
             CLIENT_ID, authority=AUTHORITY, token_cache=cache
         )
@@ -4613,7 +4716,10 @@ def entire_smtp_process(driver, new_profile_data):
             )
             result = app.acquire_token_by_device_flow(flow)
             _check_shutdown_requested()
-            save_cache(cache)
+            if MODE == "APP1":
+                save_cache2(cache)
+            else:
+                save_cache(cache)
             print(f"{email_address} : Successfully saved tokens")
 
             return True, "SUCCESS"
@@ -5458,6 +5564,141 @@ def new_app(new_profile_data):
     finally:
         try:
             driver.quit()
+            processed_email(new_profile_data_original)
+            processed_email2(new_profile_data_original)
+            pass
+        except:
+            pass
+
+        print("\n--------------------------------------\n")
+
+
+def login_test(new_profile_data):
+    """
+    Creating a new chrome profile.
+
+    A dictionary with email_address, and password
+    """
+    try:
+        _check_shutdown_requested()
+        print("\n")
+        connect_new_random()
+        time.sleep(0.5)
+        _check_shutdown_requested()
+        email_address = new_profile_data.get("email")
+        password = new_profile_data.get("pass")
+        recovery = new_profile_data.get("recovery")
+
+        status, email_token = get_email_token(recovery_email=recovery)
+        if not status:
+            print(f"{email_address}: Error getting email token for recovery email")
+            new_profile_logger(
+                email_address,
+                "FAIL",
+                "Error getting email token for recovery email",
+            )
+            return False, "Error getting email token for recovery email"
+
+        print(f"{email_address}: Got email token for recovery email")
+        new_profile_data["email_token"] = email_token
+        new_profile_data_original = new_profile_data.copy()
+        update_accounts_data(email=email_address, email_token=email_token)
+
+        retries = 0
+        driver_success = False
+        print(f"{email_address} : Initializing browser driver")
+        while (retries < 3) and (not driver_success):
+            try:
+                status, driverdata, error = initialize_new_profile_driver()
+                print(f"{email_address} : Driver status: {status}, error: {error}")
+                if status:
+                    driver, user_path, proxy = driverdata.values()
+
+                    time.sleep(0.5)
+                    driver.maximize_window()
+                    time.sleep(0.5)
+                    driver.get(MICROSOFT_LOGIN_URL)
+                    time.sleep(0.5)
+                    driver_success = True
+
+            except:
+                try:
+                    driver.quit()
+                except:
+                    pass
+                retries += 1
+
+        _check_shutdown_requested()
+        if not driver_success:
+            print(f"{email_address}: Error initializing new browser driver")
+            new_profile_logger(
+                email_address,
+                "FAIL",
+                "Error initializing new browser driver. Network or proxy error",
+            )
+            return False, "Error initializing new browser driver instance"
+
+        if not enter_email(driver=driver, email_address=email_address):
+            print(f"{email_address}: Error entering email")
+            new_profile_logger(email_address, "FAIL", "Error loading login page")
+            return False, "Error loading login page"
+
+        time.sleep(1)
+        if not click_next_button(driver=driver):
+            print(f"{email_address}: Error clicking next button after entering email")
+            new_profile_logger(
+                email_address, "FAIL", "Error clicking next button after entering email"
+            )
+            return False, "Error clicking next button after entering email"
+        time.sleep(1)
+
+        # print(f"{email_address}: Reloging in with password or email")
+
+        if enter_password(driver=driver, password=password):
+            print(f"{email_address}: Reloging in with password")
+            click_password_next_button(driver=driver)
+            if password_use_unavailable(driver):
+                click_send_code_to_recovery_email_button(driver)
+                if enter_recovery_email_2(driver, recovery):
+                    click_password_next_button(driver)
+                    if email_login_limit_reached(driver):
+                        print(f"{email_address} : Login limit reached. Using password.")
+                        click_use_your_password_button(driver)
+                        enter_password(driver, password)
+                        click_password_next_button(driver)
+                    else:
+                        status, code = wait_for_code(email_token)
+                        if not status:
+                            return False, "Recovery code not received"
+                        enter_code_and_click_next_after_pass_change(driver, code)
+        else:
+            print(f"{email_address}: Reloging in with recovery email")
+            if enter_recovery_email_2(driver, recovery):
+                click_password_next_button(driver)
+                if email_login_limit_reached(driver):
+                    print(f"{email_address} : Login limit reached. Using password.")
+                    click_use_your_password_button(driver)
+                    enter_password(driver, password)
+                    click_password_next_button(driver)
+                else:
+                    status, code = wait_for_code(email_token)
+                    if not status:
+                        return False, "Recovery code not received"
+                    enter_code_and_click_next_after_pass_change(driver, code)
+        print(f"{email_address}: SUCCESSFULL LOGIN!")
+        _check_shutdown_requested()
+        click_stay_signed_in_button(driver)
+        _check_shutdown_requested()
+        return driver, "success"
+    except Exception as E:
+        try:
+            new_profile_logger(email_address, "FAIL", f"EXCEPTION_ERROR: {E}")
+        except:
+            pass
+        return False, f"Undocumented_error: {E}"
+    finally:
+        try:
+            # driver.quit()
             processed_email(new_profile_data_original)
             processed_email2(new_profile_data_original)
             pass
