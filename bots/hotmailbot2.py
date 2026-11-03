@@ -4771,6 +4771,7 @@ def smtp_process(driver, new_profile_data):
             )
 
         retries += 1
+        time.sleep(60)
 
     print(f"{new_profile_data.get('email')} : Out of retries...")
 
@@ -5532,6 +5533,7 @@ def new_app(new_profile_data):
         click_stay_signed_in_button(driver)
         _check_shutdown_requested()
         print(f"{email_address}: Setting up SMTP")
+        time.sleep(40)
         status, error = smtp_process(driver, new_profile_data)
 
         if status:
