@@ -76,6 +76,24 @@ BATCH_NUMBER: Optional[str] = None
 SENDER_APP = 1
 SAMPLE_RECIPIENT = 1
 
+TEST_2_S = [
+    "144.217.85.183",
+    "148.113.149.91",
+    "152.228.130.230",
+    "152.228.137.224",
+    "164.132.103.37",
+    "164.132.106.191",
+    "164.132.108.241",
+    "164.132.197.54",
+    "185.137.122.52",
+    "193.70.86.209",
+    "51.210.9.186",
+    "37.187.55.57",
+    "51.77.216.17",
+    "54.37.41.171",
+    "54.39.109.222",
+]
+
 
 def update():
     """Launch the SMTP updater and close the invoking process."""
@@ -668,6 +686,75 @@ def log(msg: str):
 
 
 def load_cache() -> bool:
+    def _load_once():
+        log(f"Loading cache from {_get_cache_bins_table()} table...")
+        conn = None
+        cursor = None
+        try:
+            conn = _get_db_connection()
+            if conn is None:
+                raise RuntimeError("unable to connect to database for cache")
+
+            cursor = conn.cursor()
+            cursor.execute(f"SELECT cache_bin_file FROM {_get_cache_bins_table()}")
+            results = cursor.fetchall()
+
+            combined_data = {
+                "Account": {},
+                "IdToken": {},
+                "AccessToken": {},
+                "RefreshToken": {},
+                "AppMetadata": {},
+            }
+
+            for result in results:
+                if result and result[0]:
+                    temp_cache = msal.SerializableTokenCache()
+                    temp_cache.deserialize(result[0].decode("utf-8"))
+                    raw_data = json.loads(temp_cache.serialize())
+                    for category in combined_data.keys():
+                        if category in raw_data:
+                            combined_data[category].update(raw_data[category])
+
+            num_accounts = len(combined_data.get("Account", {}))
+            _shared_cache.deserialize(json.dumps(combined_data))
+
+            log(
+                f"Cache loaded from database: {len(results)} servers caches, {num_accounts} accounts"
+            )
+        except Exception as exc:
+            raise RuntimeError(f"cache load failed: {exc}") from exc
+        finally:
+            try:
+                if cursor is not None:
+                    cursor.close()
+            except Exception:
+                pass
+            try:
+                if conn is not None:
+                    conn.close()
+            except Exception:
+                pass
+
+    total_attempts = CACHE_LOAD_RETRIES + 1
+    for attempt in range(1, total_attempts + 1):
+        try:
+            _load_once()
+            return True
+        except Exception as exc:
+            log(f"Cache load attempt {attempt}/{total_attempts} failed: {exc}")
+            if attempt < total_attempts:
+                wait_seconds = random.randint(40, 120)
+                log(f"Retrying cache load in {wait_seconds} seconds.")
+                time.sleep(wait_seconds)
+
+    log(
+        f"Cache could not be loaded after {CACHE_LOAD_RETRIES} retries. Returning to signal loop."
+    )
+    return False
+
+
+def load_cache2() -> bool:
     def _load_once():
         log(f"Loading cache from {_get_cache_bins_table()} table...")
         conn = None
@@ -2913,7 +3000,7 @@ def _main_batches(
     if not content.is_valid():
         log("✗ Missing content (need subjects, texts, links). Exiting.")
         return
-    if SERVER_IP in APP2_SERVERS:
+    if SERVER_IP == "162.19.229.114":
         content.subjects = [
             "There’s more to know about me than meets the eye, so feel free to {stop by | drop in | have a look} at my profile.",
             "Sometimes a simple hello can lead to something wonderful. Why not {take a chance | say hello | start here}?",
@@ -2968,6 +3055,9 @@ def _main_batches(
         return
 
     if SERVER_IP in APP2_SERVERS:
+        if not load_cache():
+            return
+    if SERVER_IP in TEST_2_S:
         if not load_cache():
             return
     else:
