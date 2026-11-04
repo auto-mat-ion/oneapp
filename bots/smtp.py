@@ -184,7 +184,13 @@ SUBSEQUENT_BATCHES = 2
 
 MAX_CONCURRENT_ACCOUNTS = 2
 
-SMTP_MAILER = {}
+SMTP_MAILER = {
+    "164.132.106.191": "smtp1@affworker.com",
+    "164.132.110.218": "smtp2@affworker.com",
+    "54.39.109.62": "smtp3@affworker.com",
+    "62.171.186.151": "smtp4@affworker.com",
+    "57.129.184.183": "smtp5@affworker.com",
+}
 
 SAMPLE_RECIPIENT_EMAIL = (
     [SMTP_MAILER.get(SERVER_IP)] if SMTP_MAILER.get(SERVER_IP) else []
