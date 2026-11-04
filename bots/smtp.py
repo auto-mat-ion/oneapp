@@ -225,7 +225,13 @@ elif SERVER_IP in ["146.59.196.225"]:
 # else:
 #     SAMPLE_RECIPIENT_EMAIL = []
 
-
+NEW_TEST = [
+    "164.132.106.191",
+    "164.132.110.218",
+    "54.39.109.62",
+    "62.171.186.151",
+    "57.129.184.183",
+]
 VPN_COUNTRY = "poland"
 
 GRAPH_ENDPOINT = "https://graph.microsoft.com/v1.0"
@@ -2995,7 +3001,8 @@ def _main_batches(
         return
 
     log("Loading content. Please wait...")
-    content = ContentManager(part)
+    content_part = SERVER_IP if SERVER_IP in NEW_TEST else part
+    content = ContentManager(content_part)
     run_state["content"] = content
     if not content.is_valid():
         log("✗ Missing content (need subjects, texts, links). Exiting.")
