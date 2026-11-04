@@ -296,7 +296,7 @@ _account_status_lock = TimeoutLock()
 _recipient_window_lock = TimeoutLock()
 _account_success_count = 0
 _account_fail_count = 0
-_recipient_window_start = 0
+_recipient_window_start = random.randint(0, 60000)
 
 _shared_cache = msal.SerializableTokenCache()
 _shutdown = threading.Event()
