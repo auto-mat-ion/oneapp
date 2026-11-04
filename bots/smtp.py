@@ -187,7 +187,7 @@ if SERVER_IP in ["51.91.59.107"]:
     ]
 
 elif SERVER_IP in ["162.19.229.114"]:
-    SAMPLE_RECIPIENT_EMAIL += ["mitestingacc.02@gmail.com", "stacho1988@gmail.com"]
+    SAMPLE_RECIPIENT_EMAIL += ["mitestingacc.02@gmail.com", "wrochna1988@gmail.com"]
 
 elif SERVER_IP in ["51.178.81.140"]:
     SAMPLE_RECIPIENT_EMAIL += [
@@ -207,8 +207,8 @@ elif SERVER_IP in ["162.19.26.217"]:
         "mitestingacc.04@gmail.com",
     ]
 
-elif SERVER_IP in ["162.19.27.8"]:
-    SAMPLE_RECIPIENT_EMAIL += ["wrochna1988@gmail.com", "dover.miranach@gmail.com"]
+elif SERVER_IP in ["57.129.184.183"]:
+    SAMPLE_RECIPIENT_EMAIL += ["stacho1988@gmail.com", "dover.miranach@gmail.com"]
 
 elif SERVER_IP in ["146.59.196.225"]:
     SAMPLE_RECIPIENT_EMAIL += ["aidanmotthews986@gmail.com", "bradley.konsa@gmail.com"]
@@ -2954,7 +2954,7 @@ def _main_batches(
 
     BATCH_NUMBER = str(batch_number)
     print(f"Selected batch: {BATCH_NUMBER}")
-    SUBSEQUENT_BATCHES = 7
+    SUBSEQUENT_BATCHES = 5
     EMAIL_ROUNDS = 3
     time.sleep(5)
 
@@ -2998,7 +2998,7 @@ def _main_batches(
     if not content.is_valid():
         log("✗ Missing content (need subjects, texts, links). Exiting.")
         return
-    if SERVER_IP == "162.19.229.114":
+    if SERVER_IP == "164.132.110.218":
         content.subjects = [
             "There’s more to know about me than meets the eye, so feel free to {stop by | drop in | have a look} at my profile.",
             "Sometimes a simple hello can lead to something wonderful. Why not {take a chance | say hello | start here}?",
