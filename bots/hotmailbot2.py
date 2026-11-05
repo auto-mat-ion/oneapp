@@ -5826,18 +5826,3 @@ def run_hotmailbot2(country=None):
         else:
             print("No input emails in database...")
             return True
-
-
-ddd = """unit.deviceplug@outlook.com	6bP27NMw53p5.	dtnjnna959@imailito.com
-thumbtrophy-injury@outlook.com	EBe232bh9484.	ggqmyna499@imailito.com
-practicejoke.secret@outlook.com	2e4nO3CyJ42m.	susvfuc770@mailkrank.com
-tackle_socialsolar@outlook.com	k580352hUwqW.	tsdigqb741@mailhuba.com"""
-
-
-for dd in ddd.split("\n"):
-    dd = dd.split("\t")
-    new_profile_data = {"email": dd[0], "pass": dd[1], "recovery": dd[2]}
-
-    xx = login_test(new_profile_data)
-    driver = xx[0]
-    # driver.get("https://outlook.live.com")
