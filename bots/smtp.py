@@ -2995,9 +2995,7 @@ def _main_batches(
     content_part = SERVER_IP if SERVER_IP in NEW_TEST else part
     content = ContentManager(content_part)
     run_state["content"] = content
-    if not content.is_valid():
-        log("✗ Missing content (need subjects, texts, links). Exiting.")
-        return
+
     if SERVER_IP == "164.132.110.218":
         content.subjects = [
             "There’s more to know about me than meets the eye, so feel free to {stop by | drop in | have a look} at my profile.",
@@ -3044,6 +3042,9 @@ def _main_batches(
             "Step Into My Enchanting World",
             "Discover My Hidden Charms",
         ]
+    if not content.is_valid():
+        log("✗ Missing content (need subjects, texts, links). Exiting.")
+        return
 
     log("Loading recipients. Please wait...")
     recipients = RecipientManager(len(accounts.accounts))
