@@ -2954,7 +2954,7 @@ def _main_batches(
 
     BATCH_NUMBER = str(batch_number)
     print(f"Selected batch: {BATCH_NUMBER}")
-    SUBSEQUENT_BATCHES = 7
+    SUBSEQUENT_BATCHES = 5
     EMAIL_ROUNDS = 3
     time.sleep(5)
 
