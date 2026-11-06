@@ -8483,7 +8483,7 @@ def get__premium_italy(driver, new_profile_data):
                 By.CSS_SELECTOR,
                 'button[aria-label="Salva"]',
             )
-        elif PREFERRED_SMS_COUNTRY.lower() in ["poland2", "poland"]:
+        else:
             SAVE_BUTTON_ELEMENT = (
                 By.CSS_SELECTOR,
                 'button[aria-label="Save"]',
@@ -8499,7 +8499,7 @@ def get__premium_italy(driver, new_profile_data):
                 By.CSS_SELECTOR,
                 'button[aria-label*="Avvia la versione di prova, paga in seguito"]',
             )
-        elif PREFERRED_SMS_COUNTRY.lower() in ["poland2", "poland"]:
+        else:
             START_TRIAL_BUTTON_ELEMENT = (
                 By.CSS_SELECTOR,
                 'button[aria-label*="Start trial, pay later"]',
