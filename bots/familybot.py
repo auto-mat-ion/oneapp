@@ -8313,8 +8313,7 @@ def get__premium_italy(driver, new_profile_data):
                 elif PREFERRED_SMS_COUNTRY.lower() in ["poland2", "poland"]:
                     driver.get("https://www.microsoft.com/pl-pl/microsoft-365/try")
                 else:
-                    driver.get("https://www.microsoft.com/microsoft-365/try")
-
+                    driver.get("https://www.microsoft.com/en-us/microsoft-365/try")
                 time.sleep(1)
 
                 current_status = "clicking premium element"
@@ -8339,6 +8338,11 @@ def get__premium_italy(driver, new_profile_data):
                 element_retries -= 1
 
         _check_shutdown_requested()
+        if PREFERRED_SMS_COUNTRY.lower() == "cyprus":
+            driver.get(
+                "https://checkout.microsoft365.com/acquire/purchase?language=en&market=CY&requestedDuration=Year&scenario=microsoft-365-family-trial&country=CY"
+            )
+
         if PREFERRED_SMS_COUNTRY.lower() != "united states":
             try:
                 current_status = "clicking checkbox"
