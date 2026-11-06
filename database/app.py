@@ -3169,7 +3169,9 @@ def enrich_familybot_card_details(df):
         )
 
     country = country_values[0]
-    details_country = "poland" if country == "poland2" else country
+    details_country = (
+        "poland" if country == "poland2" else "%" if country == "cyprus" else country
+    )
     conn = get_db_connection()
     if conn is None:
         return False, "No database connection available for card enrichment."
@@ -3177,17 +3179,17 @@ def enrich_familybot_card_details(df):
     try:
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT firstnames FROM familybot_first_names WHERE LOWER(country) = %s",
+            "SELECT firstnames FROM familybot_first_names WHERE LOWER(country) LIKE %s",
             (details_country,),
         )
         first_names = [row[0].strip() for row in cursor.fetchall() if row[0]]
 
         cursor.execute(
-            "SELECT surnames FROM familybot_surnames WHERE LOWER(country) = %s",
+            "SELECT surnames FROM familybot_surnames WHERE LOWER(country) LIKE %s",
             (details_country,),
         )
         surnames = [row[0].strip() for row in cursor.fetchall() if row[0]]
-
+        details_country = "poland" if country == "poland2" else country
         cursor.execute(
             "SELECT address_line1, city, state, postal_code FROM familybot_fake_details WHERE LOWER(country) = %s",
             (details_country,),
@@ -4904,20 +4906,20 @@ def load_familybot_return_preview(country):
         name_country = (
             "poland"
             if country.lower() == "poland2"
-            else "united states"
+            else "a"
             if country.lower() == "cyprus"
             else country.lower()
         )
         cursor.execute(
             "SELECT firstnames FROM oneapp.familybot_first_names "
-            "WHERE country = %s AND firstnames IS NOT NULL AND TRIM(firstnames) <> '' "
+            "WHERE country LIKE %s AND firstnames IS NOT NULL AND TRIM(firstnames) <> '' "
             "ORDER BY RAND() LIMIT %s",
             (name_country, row_count),
         )
         first_names = [row[0] for row in cursor.fetchall()]
         cursor.execute(
             "SELECT surnames FROM oneapp.familybot_surnames "
-            "WHERE country = %s AND surnames IS NOT NULL AND TRIM(surnames) <> '' "
+            "WHERE country LIKE %s AND surnames IS NOT NULL AND TRIM(surnames) <> '' "
             "ORDER BY RAND() LIMIT %s",
             (name_country, row_count),
         )

@@ -8312,6 +8312,8 @@ def get__premium_italy(driver, new_profile_data):
                     # driver.refresh()
                 elif PREFERRED_SMS_COUNTRY.lower() in ["poland2", "poland"]:
                     driver.get("https://www.microsoft.com/pl-pl/microsoft-365/try")
+                else:
+                    driver.get("https://www.microsoft.com/microsoft-365/try")
 
                 time.sleep(1)
 
