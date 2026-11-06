@@ -9963,7 +9963,7 @@ def initialize(new_profile_data):
         email_address = new_profile_data.get("email").strip()
         password = new_profile_data.get("pass").strip()
         new_profile_data_original = new_profile_data.copy()
-
+        email_token = ""
         retries = 0
         driver_success = False
         print(f"{email_address} : Initializing browser driver")
