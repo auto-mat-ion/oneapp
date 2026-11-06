@@ -4141,7 +4141,7 @@ def update_accounts_data(
                     update_fields.append("bitly_acc_password = %s")
                     update_values.append(bitly_acc_password)
                 if email_token is not None:
-                    update_fields.append("email_token = %s")
+                    update_fields.append("recovery_email_token = %s")
                     update_values.append(email_token)
                 if save_smtp:
                     update_fields.append("save_smtp = %s")
@@ -4154,7 +4154,7 @@ def update_accounts_data(
             else:
                 # Insert new record
                 cursor.execute(
-                    "INSERT INTO accounts_details (server_ip, bot_type, date_time, email_acc, password, profile_dir, proxy_used, country, has_recovery_email, recovery_email, has_recovery_phone, recovery_phone_number, joined_microsoft_premium,join_time_microsoft_premium, has_bitly_account, bitly_acc_password, email_token, save_smtp) VALUES (%s, %s, %s, %s, %s,%s,%s, %s, %s, %s, %s, %s, %s,%s, %s, %s, %s, %s)",
+                    "INSERT INTO accounts_details (server_ip, bot_type, date_time, email_acc, password, profile_dir, proxy_used, country, has_recovery_email, recovery_email, has_recovery_phone, recovery_phone_number, joined_microsoft_premium,join_time_microsoft_premium, has_bitly_account, bitly_acc_password, recovery_email_token, save_smtp) VALUES (%s, %s, %s, %s, %s,%s,%s, %s, %s, %s, %s, %s, %s,%s, %s, %s, %s, %s)",
                     (
                         SERVER_IP,
                         BOT_TYPE,
