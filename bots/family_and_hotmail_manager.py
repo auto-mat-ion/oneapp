@@ -140,7 +140,8 @@ def _get_card_control_signal(cutoff_utc, now_utc):
                 if record["server_ip"] in {"all", str(SERVER_IP).strip()}:
                     return True, record["action"], record["country"]
     except (mysql.connector.Error, OSError) as exc:
-        print(f"Error getting action signal from card control database: {exc}")
+        # print(f"Error getting action signal from card control database: {exc}")
+        return False, None, None
     finally:
         if cursor is not None:
             cursor.close()
