@@ -5604,17 +5604,20 @@ def login_test(new_profile_data):
         print(f"{email_address}: Got email token for recovery email")
         new_profile_data["email_token"] = email_token
         new_profile_data_original = new_profile_data.copy()
-        update_accounts_data(email=email_address, email_token=email_token)
+        # update_accounts_data(email=email_address, email_token=email_token)
 
         retries = 0
         driver_success = False
+        from seleniumbase import sb_cdp
+
         print(f"{email_address} : Initializing browser driver")
         while (retries < 3) and (not driver_success):
             try:
-                status, driverdata, error = initialize_new_profile_driver()
+                # status, driverdata, error = initialize_new_profile_driver()
+                status, driverdata, error = True, "", ""
                 print(f"{email_address} : Driver status: {status}, error: {error}")
                 if status:
-                    driver, user_path, proxy = driverdata.values()
+                    driver, user_path, proxy = sb_cdp.Chrome(incognito=True), "", ""
 
                     time.sleep(0.5)
                     driver.maximize_window()

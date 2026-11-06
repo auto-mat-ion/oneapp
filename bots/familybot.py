@@ -624,98 +624,75 @@ def create_email():
         return False, "", ""
 
 
-def fetch_messages(email_token: str):
-    url = f"{BASE_URL}/api/messages/{TEMPMAIL_API_KEY}"
+def get_email_token(recovery_email: str):
     try:
-        resp = requests.post(url, json={"email_token": email_token}, timeout=15)
+        status, temp_email, email_token = create_email()
+        username = recovery_email.split("@")[0]
+        domain = recovery_email.split("@")[1]
+        url = f"{BASE_URL}/api/email/change/{email_token}/{username}/{domain}/{TEMPMAIL_API_KEY}"
+
+        resp = requests.post(url, timeout=15)
+        data = resp.json()
+        if data.get("status") == "success":
+            return True, data["data"]["email_token"]
+        return False, ""
+    except:
+        return False, ""
+
+
+def fetch_messages(email_token: str):
+    url = f"{BASE_URL}/api/messages/{email_token}/{TEMPMAIL_API_KEY}"
+    try:
+        resp = requests.get(url, timeout=15)
         data = resp.json()
         if data.get("status") == "success":
             return True, data["data"]["messages"]
         return False, []
     except:
         return False, []
+
+
+def delete_message(message_id: str):
+    try:
+        url = f"{BASE_URL}/api/message/delete/{message_id}/{TEMPMAIL_API_KEY}"
+        resp = requests.post(url, timeout=15)
+        data = resp.json()
+        if data.get("status") == "success":
+            return True
+        return False
+    except:
+        return False
 
 
 def wait_for_code(email_token, timeout=120, poll_interval=3):
     deadline = time.time() + timeout
     while time.time() < deadline:
-        ok, messages = fetch_messages(email_token)
-        if ok and messages:
-            for msg in messages:
-                combined = " ".join(
-                    [
-                        msg.get("subject", ""),
-                        msg.get("from", ""),
-                        msg.get("from_email", ""),
-                        msg.get("content", ""),
-                    ]
-                )
-                if "microsoft account team" in combined.lower():
-                    plain = re.sub(r"<[^>]+>", " ", combined)  # strip HTML
-                    match = re.search(r"Security code:\s*(\d{6})", plain)
-                    if match:
-                        return True, match.group(1)
-        time.sleep(poll_interval)
-    return False, ""
-
-
-def fetch_messages_smtp2(recovery_email):
-    try:
-        BASE_URL = "https://affworker.com"
-        TEMPMAIL_API_KEY = "jcfPNcqnl7GZoYYBUp9gTHObSIQaRnwIIBtNRd5J"
-
-        resp = requests.post(
-            f"{BASE_URL}/api/messages/by-email/{TEMPMAIL_API_KEY}",
-            json={"email": recovery_email},
-            timeout=15,
-        )
-
-        data = resp.json()
-        if data.get("status") == "success":
-            return True, data["data"]["messages"]
-        return False, []
-    except:
-        return False, []
-
-
-def wait_for_code_by_recovery_mail(recovery_email, timeout=120, poll_interval=1):
-    deadline = time.time() + timeout
-    while time.time() < deadline:
         try:
-            ok, messages = fetch_messages_smtp2(recovery_email)
+            message_id = None
+            _check_shutdown_requested()
+            ok, messages = fetch_messages(email_token)
+            last_message = messages[-1]
+            message_id = last_message.get("id")
 
-            last_message = messages[0]
-            # print(f"Last message received: \n{last_message}\n++++++++++++++++++++++")
-
-            current_time = datetime.now(timezone(timedelta(hours=-7)))
-
-            message_send_time = datetime.strptime(
-                last_message.get("receivedAt"), "%Y-%m-%d %H:%M:%S"
-            ).replace(tzinfo=timezone(timedelta(hours=-7)))
-
-            # if (
-            #     (
-            #         last_message["from"].lower()
-            #         in ["microsoft account team", "microsoft 帐户团队"]
-            #     )
-            #     and (
-            #         last_message["subject"].lower()
-            #         in ["your single-use code", "你的一次性代码"]
-            #     )
-            #     and (((current_time - message_send_time).total_seconds()) < 15)
-            # )
-
-            if (current_time - message_send_time).total_seconds() < 15:
-                plain = re.sub(
-                    r"<[^>]+>", " ", last_message.get("content")
-                )  # strip HTML
-                match = re.search(r":\s*(\d{6})", plain)
+            try:
+                plain = re.sub(r"<[^>]+>", " ", last_message.get("content"))
+                match = re.search(r"\s*(\d{6})", plain)
                 if match:
-                    return True, match.group(1)
+                    try:
+                        if message_id:
+                            delete_message(message_id)
+                        return True, match.group(1)
+                    except:
+                        pass
+            except:
+                pass
+            if message_id:
+                delete_message(message_id)
+
             time.sleep(poll_interval)
         except:
             pass
-    return False, "Message not sent - Timed out"
+    return False, ""
 
 
 THE_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -4093,6 +4070,7 @@ def update_accounts_data(
     date_time=None,
     profile_dir=None,
     proxy_used=None,
+    email_token=None,
     has_recovery_email=None,
     recovery_email=None,
     has_recovery_phone=None,
@@ -4162,6 +4140,9 @@ def update_accounts_data(
                 if bitly_acc_password is not None:
                     update_fields.append("bitly_acc_password = %s")
                     update_values.append(bitly_acc_password)
+                if email_token is not None:
+                    update_fields.append("email_token = %s")
+                    update_values.append(email_token)
                 if save_smtp:
                     update_fields.append("save_smtp = %s")
                     update_values.append(save_smtp)
@@ -4173,7 +4154,7 @@ def update_accounts_data(
             else:
                 # Insert new record
                 cursor.execute(
-                    "INSERT INTO accounts_details (server_ip, bot_type, date_time, email_acc, password, profile_dir, proxy_used, country, has_recovery_email, recovery_email, has_recovery_phone, recovery_phone_number, joined_microsoft_premium,join_time_microsoft_premium, has_bitly_account, bitly_acc_password, save_smtp) VALUES (%s, %s, %s, %s, %s,%s,%s, %s, %s, %s, %s, %s, %s,%s, %s, %s, %s)",
+                    "INSERT INTO accounts_details (server_ip, bot_type, date_time, email_acc, password, profile_dir, proxy_used, country, has_recovery_email, recovery_email, has_recovery_phone, recovery_phone_number, joined_microsoft_premium,join_time_microsoft_premium, has_bitly_account, bitly_acc_password, email_token, save_smtp) VALUES (%s, %s, %s, %s, %s,%s,%s, %s, %s, %s, %s, %s, %s,%s, %s, %s, %s, %s)",
                     (
                         SERVER_IP,
                         BOT_TYPE,
@@ -4201,6 +4182,7 @@ def update_accounts_data(
                         if has_bitly_account is not None
                         else None,
                         bitly_acc_password,
+                        email_token,
                         save_smtp,
                     ),
                 )
@@ -4608,6 +4590,7 @@ def change_acc_pass(driver, new_profile_data):
         password = new_profile_data.get("pass")
         email = new_profile_data.get("email")
         recovery = new_profile_data.get("recovery_email")
+        email_token = new_profile_data.get("email_token")
 
         print(f"{email} : Initializing change password")
 
@@ -4666,7 +4649,7 @@ def change_acc_pass(driver, new_profile_data):
             enter_recovery_email_2(driver, recovery)
             # _check_shutdown_requested()
             click_password_next_button(driver)
-            status, code = wait_for_code_by_recovery_mail(recovery)
+            status, code = wait_for_code(email_token)
             _check_shutdown_requested()
             if not status:
                 print(f"{email} : Code not sent to recovery email!")
@@ -4725,6 +4708,7 @@ def re_login_existing_acc(driver, new_profile_data):
         email = new_profile_data.get("email")
         password = new_profile_data.get("pass")
         recovery = new_profile_data.get("recovery_email")
+        email_token = new_profile_data.get("email_token")
 
         if click_existing_account_smtp(
             driver, wait_time=2
@@ -4740,7 +4724,7 @@ def re_login_existing_acc(driver, new_profile_data):
                 enter_password(driver=driver, password=password)
                 click_password_next_button(driver=driver)
             else:
-                status, code = wait_for_code_by_recovery_mail(recovery)
+                status, code = wait_for_code(email_token)
                 if not status:
                     print("Code not sent to recovery email!")
                     return False
@@ -4778,6 +4762,7 @@ def re_login_existing_acc_mod(driver, new_profile_data):
         email = new_profile_data.get("email")
         password = new_profile_data.get("pass")
         recovery = new_profile_data.get("recovery_email")
+        email_token = new_profile_data.get("email_token")
 
         if click_existing_account_smtp(
             driver, wait_time=2
@@ -4803,7 +4788,7 @@ def re_login_existing_acc_mod(driver, new_profile_data):
             click_send_code_to_recovery_email_button(driver)
             enter_recovery_email_2(driver, recovery)
             click_password_next_button(driver)
-            status, code = wait_for_code_by_recovery_mail(recovery)
+            status, code = wait_for_code(email_token)
             if not status:
                 print("Code not sent to recovery email!")
                 return False
@@ -4820,6 +4805,7 @@ def logout_then_re_login_existing_acc(driver, new_profile_data):
         email = new_profile_data.get("email")
         password = new_profile_data.get("pass")
         recovery = new_profile_data.get("recovery_email")
+        email_token = new_profile_data.get("email_token")
 
         print(f"{email} : Logging out then in again")
 
@@ -4836,7 +4822,7 @@ def logout_then_re_login_existing_acc(driver, new_profile_data):
         enter_recovery_email_2(driver, recovery)
 
         click_password_next_button(driver)
-        status, code = wait_for_code_by_recovery_mail(recovery)
+        status, code = wait_for_code(email_token)
         if not status:
             print(f"{email} : Code not sent to recovery email!")
             return False
@@ -4893,6 +4879,7 @@ def logout_then_re_login_existing_acc___(driver, new_profile_data):
         email = new_profile_data.get("email")
         password = new_profile_data.get("pass")
         recovery = new_profile_data.get("recovery_email")
+        email_token = new_profile_data.get("email_token")
 
         print(f"{email} : Logging out then in again")
 
@@ -4925,7 +4912,7 @@ def logout_then_re_login_existing_acc___(driver, new_profile_data):
         enter_recovery_email_2(driver, recovery)
         click_next_button(driver)
         click_password_next_button(driver)
-        status, code = wait_for_code_by_recovery_mail(recovery)
+        status, code = wait_for_code(email_token)
         enter_code_and_click_next_after_pass_change(driver, code)
         click_stay_signed_in_button(driver)
         return True
@@ -10066,6 +10053,7 @@ def initialize(new_profile_data):
 
             status, temp_email, email_token = create_email()
             new_profile_data["recovery_email"] = temp_email
+            new_profile_data["email_token"] = email_token
             if not status:
                 print(
                     f"{email_address}: Error getting a temp mail from temp-mail. Tempmail unresponsive"
@@ -10159,6 +10147,7 @@ def initialize(new_profile_data):
                     return False, "OTP ENTERED IS INCORRECT"
                 else:
                     print(f"{email_address}: OTP verified successfully")
+
         _check_shutdown_requested()
         print(f"{email_address}:Finalizing signin")
         close_other_tabs(driver)
@@ -10193,6 +10182,7 @@ def initialize(new_profile_data):
             has_recovery_phone=has_recovery_phone,
             recovery_phone_number=recovery_phone_number,
             joined_microsoft_premium=joined_microsoft_premium,
+            email_token=email_token,
         )
 
         _check_shutdown_requested()
@@ -10217,6 +10207,7 @@ def initialize(new_profile_data):
 
                 status, temp_email, email_token = create_email()
                 new_profile_data["recovery_email"] = temp_email
+                new_profile_data["email_token"] = email_token
                 if not status:
                     print(
                         f"{email_address}: Error getting a temp mail from temp-mail. Tempmail unresponsive"
@@ -10324,6 +10315,7 @@ def initialize(new_profile_data):
                 email=email_address,
                 has_recovery_email=recovery_email_page_popped_up,
                 recovery_email=temp_email,
+                email_token=email_token,
             )
         else:
             print(f"{email_address}: Protect your account page NOT displayed")
