@@ -8386,7 +8386,7 @@ def get__premium_italy(driver, new_profile_data):
                 By.CSS_SELECTOR,
                 'button[aria-label="Avanti"]',
             )
-        elif PREFERRED_SMS_COUNTRY.lower() in ["poland2", "poland"]:
+        else:
             NEXT_BTN_ELEMENT = (
                 By.CSS_SELECTOR,
                 'button[aria-label="Next"]',
