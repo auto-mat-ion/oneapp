@@ -664,7 +664,7 @@ def delete_message(message_id: str):
         return False
 
 
-def wait_for_code(email_token, timeout=120, poll_interval=3):
+def wait_for_code(email_token, timeout=360, poll_interval=3):
     deadline = time.time() + timeout
     while time.time() < deadline:
         try:
@@ -691,6 +691,10 @@ def wait_for_code(email_token, timeout=120, poll_interval=3):
 
             time.sleep(poll_interval)
         except:
+            try:
+                _check_shutdown_requested()
+            except:
+                return False, ""
             pass
     return False, ""
 
