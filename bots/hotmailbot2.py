@@ -6543,6 +6543,8 @@ def enter_password_sb(driver, password):
         driver.wait_for_element_visible(PASSWORD_INPUT_ELEMENT, timeout=wait_time)
         time.sleep(2)
         driver.click(PASSWORD_INPUT_ELEMENT)
+        time.sleep(1)
+        driver.send_keys(PASSWORD_INPUT_ELEMENT, password)
         return True
     except:
         return False
@@ -6671,18 +6673,19 @@ def cancel_setup_passkey_sb(driver):
                 bring_to_front_sb(driver)
                 time.sleep(1)
                 driver.gui_press_key("ESC")
-                print("Clicked ESC key to cancel passkey setup if it appeared.")
                 time.sleep(1)
                 driver.gui_press_key("ESC")
-                print("Clicked ESC key to cancel passkey setup if it appeared.")
                 time.sleep(2)
                 TITLE_ELEMENT = 'div[id="title"]'
                 CANCEL_BTN_ELEMENT = 'input[value="Cancel"]'
-                if "setting up your passkey" in driver.get_text(TITLE_ELEMENT).lower():
+                title_element = driver.wait_for_element_visible(
+                    TITLE_ELEMENT, timeout=wait_time
+                )
+                if "setting up your passkey" in title_element.text.lower():
                     driver.wait_for_element_visible(
                         CANCEL_BTN_ELEMENT, timeout=wait_time
                     )
-                    time.sleep(1)
+                    time.sleep(2)
                     driver.click(CANCEL_BTN_ELEMENT)
                     return True
             except:
