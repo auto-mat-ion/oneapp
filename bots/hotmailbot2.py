@@ -4612,19 +4612,6 @@ def click_existing_account_smtp(driver):
         return False
 
 
-def click_existing_account_smtp_sb(driver):
-    """
-    Clicks the existing account button on login page if exists
-    """
-    try:
-        EXISTING_ACC_BTN_ELEMENT = 'div[id="newSessionLink"]'
-        driver.wait_for_element_visible(EXISTING_ACC_BTN_ELEMENT, timeout=wait_time)
-        driver.click(EXISTING_ACC_BTN_ELEMENT)
-        return True
-    except:
-        return False
-
-
 def enter_smtp_code(driver, code):
     """
     Enters code in otp field
@@ -6432,10 +6419,6 @@ def click_stay_signed_in_button_sb(driver):
         return True
     except:
         return False
-
-
-def update_accounts_data(email, **kwargs):
-    return True
 
 
 def bring_to_front_sb(driver):
