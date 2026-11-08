@@ -1246,19 +1246,6 @@ def click_password_next_button(driver):
         return False
 
 
-def click_password_next_button_sb(driver):
-    """
-    Clicks the next button on gmail login
-    """
-    try:
-        NEXT_BUTTON_ELEMENT = (By.CSS_SELECTOR, 'button[type="submit"]')
-        driver.wait_for_element_visible(NEXT_BUTTON_ELEMENT, timeout=wait_time)
-        driver.click(NEXT_BUTTON_ELEMENT)
-        return True
-    except:
-        return False
-
-
 def is_your_account_has_been_locked_page(driver):
     """
     Checks if the page is YOUR ACCOUNT HAS BEEN LOCKED
@@ -2351,24 +2338,6 @@ def click_use_your_password_button(driver):
             ].index(True)
         ]
 
-        button_element.click()
-        return True
-    except:
-        return False
-
-
-def click_use_your_password_button_sb(driver):
-    """
-    Clicks the use your password button
-    """
-    try:
-        BUTTON_ELEMENT = 'span[role="button"]'
-        button_elements = driver.find_all(BUTTON_ELEMENT, wait_time)
-        button_element = button_elements[
-            [
-                i.text.lower().startswith("use your password") for i in button_elements
-            ].index(True)
-        ]
         button_element.click()
         return True
     except:
@@ -5977,16 +5946,6 @@ def click_next_button_sb(driver):
         return False
 
 
-def enter_recovery_email_2_sb(driver, recovery_email):
-    try:
-        input_element = 'input[type="text"]'
-        driver.wait_for_element_visible(input_element, timeout=wait_time)
-        driver.type(input_element, recovery_email)
-        return True
-    except:
-        return False
-
-
 def click_send_code_to_recovery_email_button_sb(driver):
     try:
         BUTTONS = 'span[role="button"]'
@@ -6234,7 +6193,7 @@ def click_use_your_password_button_sb(driver):
                 i.text.lower().startswith("use your password") for i in button_elements
             ].index(True)
         ]
-        time.sleep(2)
+        time.sleep(1)
         button_element.click()
         return True
     except:
@@ -6440,7 +6399,7 @@ def click_existing_account_smtp_sb(driver):
     try:
         EXISTING_ACC_BTN_ELEMENT = 'div[id="newSessionLink"]'
         driver.wait_for_element_visible(EXISTING_ACC_BTN_ELEMENT, timeout=wait_time)
-        time.sleep(3)
+        time.sleep(1)
         driver.click(EXISTING_ACC_BTN_ELEMENT)
         return True
     except:
@@ -6451,9 +6410,6 @@ def enter_password_sb(driver, password):
     try:
         PASSWORD_INPUT_ELEMENT = 'input[type="password"]'
         driver.wait_for_element_visible(PASSWORD_INPUT_ELEMENT, timeout=wait_time)
-        time.sleep(2)
-        driver.click(PASSWORD_INPUT_ELEMENT)
-        time.sleep(1)
         driver.send_keys(PASSWORD_INPUT_ELEMENT, password)
         return True
     except:
@@ -6467,7 +6423,7 @@ def click_password_next_button_sb(driver):
     try:
         NEXT_BUTTON_ELEMENT = 'button[type="submit"]'
         driver.wait_for_element_visible(NEXT_BUTTON_ELEMENT, timeout=wait_time)
-        time.sleep(2)
+        time.sleep(1)
         driver.click(NEXT_BUTTON_ELEMENT)
         return True
     except:
@@ -6514,7 +6470,7 @@ def change_acc_pass_sb(driver, new_profile_data):
         if not click_next_button_sb(driver):
             print(f"{email} : Error clicking next button after changing password")
             return False, "Error locating password input elements"
-        time.sleep(5)
+        time.sleep(2)
         try:
             print(f"{email}: Reloging in after password change")
             if click_existing_account_smtp_sb(driver):
@@ -6647,7 +6603,7 @@ def click_join_family_link_btn_sb(driver, new_profile_data):
                 print(f"{email} : Clicked looks good button")
             time.sleep(1)
             click_existing_account_smtp_sb(driver)
-            time.sleep(2)
+            time.sleep(1)
             click_use_your_password_button_sb(driver)
             time.sleep(2)
             if enter_password_sb(driver, password=password):
