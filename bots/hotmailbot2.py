@@ -3054,17 +3054,6 @@ def enter_password(driver, password):
         return False
 
 
-def enter_password_sb(driver, password):
-    try:
-        PASSWORD_INPUT_ELEMENT = 'input[type="password"]'
-        time.sleep(0.5)
-        driver.wait_for_element_visible(PASSWORD_INPUT_ELEMENT, timeout=wait_time)
-        driver.click(PASSWORD_INPUT_ELEMENT)
-        return True
-    except:
-        return False
-
-
 def wrong_password_error_displayed(driver):
     """
     Checks if wrong password label appears.
@@ -5009,85 +4998,6 @@ def change_acc_pass(driver, new_profile_data):
         return False, f"Exception during changing password: {str(e)}"
 
 
-def change_acc_pass_sb(driver, new_profile_data):
-    try:
-        password = new_profile_data.get("pass")
-        email = new_profile_data.get("email")
-        email_token = new_profile_data.get("email_token")
-        print(f"{email} : Initializing change password")
-
-        bring_to_front(driver)
-        pass_change_url = "https://account.live.com/password/change"
-        driver.get(pass_change_url)
-        click_next_if_a_quick_note_page_sb(driver)
-        _check_shutdown_requested()
-
-        new_pass = password + "."
-        retries = 0
-        while retries < 3:
-            try:
-                _check_shutdown_requested()
-                PASSWORD_ELEMENT = 'input[type="password"]'
-                driver.wait_for_element_visible(PASSWORD_ELEMENT, timeout=wait_time)
-                password_input_elements = driver.find_elements(
-                    By.CSS_SELECTOR, PASSWORD_ELEMENT
-                )
-
-                for password_input_element in password_input_elements:
-                    password_input_element.clear()
-                    password_input_element.send_keys(new_pass)
-                    time.sleep(1)
-
-                print(f"{email} : Entered and confirmed new password")
-                retries = 10
-                break
-            except:
-                _check_shutdown_requested()
-                print(f"{email} : Error locating password input elements. Retrying...")
-                driver.get(pass_change_url)
-                click_next_if_a_quick_note_page_sb(driver)
-                time.sleep(2)
-                retries += 1
-
-        if retries != 10:
-            return False, "Error entering new password"
-
-        if not click_next_button_sb(driver):
-            print(f"{email} : Error clicking next button after changing password")
-            return False, "Error locating password input elements"
-        time.sleep(1)
-
-        try:
-            print(f"{email}: Reloging in with NEW password")
-            click_existing_account_smtp_sb(driver)
-
-            if enter_password_sb(driver=driver, password=new_pass):
-                click_password_next_button_sb(driver=driver)
-            else:
-                recovery = new_profile_data.get("recovery_email")
-                if enter_recovery_email_2_sb(driver, recovery):
-                    click_next_button_sb(driver)
-                    if email_login_limit_reached_sb(driver):
-                        print(f"{email} : Login limit reached. Using password.")
-                        click_use_your_password_button_sb(driver)
-                        enter_password_sb(driver, password)
-                        click_password_next_button_sb(driver)
-                    else:
-                        status, code = wait_for_code_sb(email_token)
-                        if not status:
-                            return False, "Recovery code not received"
-                        enter_code_and_click_next_after_pass_change_sb(driver, code)
-        except:
-            pass
-
-        print(f"{email} : Password changed successfully")
-        return True, new_pass
-
-    except Exception as e:
-        print(f"{email} : Exception error while changing password: {str(e)}")
-        return False, f"Exception during changing password: {str(e)}"
-
-
 def initialize_new_profile(new_profile_data):
     """
     Creating a new chrome profile.
@@ -6758,6 +6668,10 @@ def cancel_setup_passkey_sb(driver):
         while retries < 5:
             try:
                 driver.gui_press_key("ESC")
+                print("Clicked ESC key to cancel passkey setup if it appeared.")
+                time.sleep(1)
+                driver.gui_press_key("ESC")
+                print("Clicked ESC key to cancel passkey setup if it appeared.")
                 time.sleep(2)
                 TITLE_ELEMENT = 'div[id="title"]'
                 CANCEL_BTN_ELEMENT = 'input[value="Cancel"]'
@@ -6765,6 +6679,7 @@ def cancel_setup_passkey_sb(driver):
                     driver.wait_for_element_visible(
                         CANCEL_BTN_ELEMENT, timeout=wait_time
                     )
+                    time.sleep(1)
                     driver.click(CANCEL_BTN_ELEMENT)
                     return True
             except:
@@ -6805,7 +6720,7 @@ def password_use_unavailable_sb(driver):
 
 def click_join_family_link_btn_sb(driver, new_profile_data):
     try:
-        wait_time = 30
+        wait_time = 15
         button = 'button[aria-label="Join now"]'
         driver.wait_for_element_visible(button, timeout=wait_time)
         time.sleep(3)
@@ -6830,7 +6745,10 @@ def click_join_family_link_btn_sb(driver, new_profile_data):
             time.sleep(2)
             click_use_your_password_button_sb(driver)
             time.sleep(2)
-            enter_password_sb(driver, password=password)
+            if enter_password_sb(driver, password=password):
+                print(f"{email} : Entered password : {password}")
+            else:
+                print(f"{email} : Error entering password")
             time.sleep(2)
             click_password_next_button_sb(driver)
             if password_use_unavailable_sb(driver):
@@ -6840,7 +6758,7 @@ def click_join_family_link_btn_sb(driver, new_profile_data):
                     if email_login_limit_reached_sb(driver):
                         print(f"{email} : Login limit reached. Using password.")
                         click_use_your_password_button_sb(driver)
-                        enter_password_sb(driver, password)
+                        enter_password_sb(driver, password=password)
                         click_password_next_button_sb(driver)
                     else:
                         status, code = wait_for_code_sb(
@@ -7457,7 +7375,6 @@ def initialize_new_profile_sb(new_profile_data):
         print(f"{email_address}: Finalizing signin")
         _check_shutdown_requested()
         close_other_tabs(driver)
-        # click_looks_good_button_sb(driver)
         _check_shutdown_requested()
         joined_microsoft_premium = "NO"
         print(f"{email_address}: SUCCESSFULL LOGIN!")
@@ -7477,6 +7394,7 @@ def initialize_new_profile_sb(new_profile_data):
         status, error = change_acc_pass_sb(driver, new_profile_data)
         _check_shutdown_requested()
         if status:
+            print(f"{email_address}: Password changed successfully. New pass: {error}")
             update_accounts_data(email=email_address, password=error)
             new_profile_data["pass"] = error
         else:
