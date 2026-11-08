@@ -706,7 +706,8 @@ def connect_new_random():
     global VPN_CONNECTION_STATUS, VPN_CONNECTION_WATCHDOG, VPN_CONNECTION_WATCHDOG_STOP
 
     try:
-        vpn_country = PREFERRED_SMS_COUNTRY.lower()
+        # vpn_country = PREFERRED_SMS_COUNTRY.lower()
+        vpn_country = "netherlans"
         if vpn_country == "poland2":
             vpn_country = "poland"
 
@@ -7463,7 +7464,7 @@ def initialize_new_profile_sb(new_profile_data):
         return False, f"Undocumented_error: {E}"
     finally:
         try:
-            time.sleep(60)
+            # time.sleep(60)
             driver.quit()
             processed_email(new_profile_data_original)
             pass
