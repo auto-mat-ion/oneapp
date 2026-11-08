@@ -6510,13 +6510,13 @@ def update_accounts_data(email, **kwargs):
     return True
 
 
-def bring_to_front(driver):
+def bring_to_front_sb(driver):
     try:
         with lock:
             position = driver.get_window_position()
-            driver.minimize_window()
-            driver.set_window_position(position["x"], position["y"])
-            driver.maximize_window()
+            driver.minimize()
+            driver.set_window_rect(position["x"], position["y"], 10, 10)
+            driver.maximize()
             time.sleep(1)
     except:
         pass
@@ -6568,7 +6568,7 @@ def change_acc_pass_sb(driver, new_profile_data):
         recovery = new_profile_data.get("recovery")
         email_token = new_profile_data.get("email_token")
         print(f"{email} : Initializing change password")
-        bring_to_front(driver)
+        bring_to_front_sb(driver)
         pass_change_url = "https://account.live.com/password/change"
         driver.get(pass_change_url)
         click_next_if_a_quick_note_page_sb(driver)
@@ -6667,7 +6667,8 @@ def cancel_setup_passkey_sb(driver):
         retries = 0
         while retries < 5:
             try:
-                bring_to_front(driver)
+                bring_to_front_sb(driver)
+                time.sleep(1)
                 driver.gui_press_key("ESC")
                 print("Clicked ESC key to cancel passkey setup if it appeared.")
                 time.sleep(1)
