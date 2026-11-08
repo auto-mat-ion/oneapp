@@ -693,7 +693,10 @@ def load_cache() -> bool:
                 raise RuntimeError("unable to connect to database for cache")
 
             cursor = conn.cursor()
-            cursor.execute(f"SELECT cache_bin_file FROM {_get_cache_bins_table()}")
+            cursor.execute(
+                f"SELECT cache_bin_file FROM {_get_cache_bins_table()} WHERE SERVER_IP = %s",
+                ("0.1.0.1",),
+            )
             results = cursor.fetchall()
 
             combined_data = {
@@ -3353,3 +3356,17 @@ def run_smtp_bot(app_choice: int = 1):
             log(f"ERRORR WHEN RUNNING BATCH: {eee}")
         log("SMTP batch finished. Returning to signal wait loop.")
         time.sleep(5)
+
+
+# recipients = RecipientManager(1000)
+# content = ContentManager(1)
+# email = "karlslbbroks8@outlook.com"
+# SAMPLE_RECIPIENT_EMAIL = ['darmbakamoro@gmail.com']
+# h, link, subj, body = content.get()
+# session = make_session()
+# token = get_token(email)
+# batch = recipients.get_batch(50)
+# html = build_html(body, h, link)
+# send_email(
+#             session, token, email, batch[0], batch[1:], subj, html
+#         )
