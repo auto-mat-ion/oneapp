@@ -1194,16 +1194,6 @@ def click_looks_good_button(driver):
         return False
 
 
-def click_looks_good_button_sb(driver):
-    try:
-        BUTTON_ELEMENT = 'input[id="iLooksGood"]'
-        driver.wait_for_element_visible(BUTTON_ELEMENT, timeout=wait_time / 2)
-        driver.click(BUTTON_ELEMENT)
-        return True
-    except:
-        return False
-
-
 def click_next_button_rec_email(driver):
     """
     Clicks the next button
@@ -1832,16 +1822,6 @@ def click_stay_signed_in_button(driver):
         )
 
         button.click()
-        return True
-    except:
-        return False
-
-
-def click_stay_signed_in_button_sb(driver):
-    try:
-        BUTTON_ELEMENT = 'button[data-testid="primaryButton"]'
-        driver.wait_for_element_visible(BUTTON_ELEMENT, timeout=wait_time)
-        driver.click(BUTTON_ELEMENT)
         return True
     except:
         return False
@@ -3266,51 +3246,6 @@ def enter_recovery_email_2(driver, recovery_email):
         )
         input_element.clear()
         input_element.send_keys(recovery_email)
-        return True
-    except:
-        return False
-
-
-def click_next_if_a_quick_note_page_sb(driver):
-    try:
-        HEADER_ELEMENT = 'span[role="heading"]'
-        driver.wait_for_element_visible(HEADER_ELEMENT, timeout=wait_time)
-        time.sleep(3)
-        driver.wait_for_element_visible(HEADER_ELEMENT, timeout=wait_time)
-
-        if (
-            driver.get_text(HEADER_ELEMENT)
-            .lower()
-            .startswith("a quick note about your microsoft account")
-        ):
-            BUTTON_ELEMENT = 'div[id="StickyFooter"]>button'
-            driver.wait_for_element_visible(BUTTON_ELEMENT, timeout=wait_time)
-            driver.click(BUTTON_ELEMENT)
-            time.sleep(1)
-            driver.wait_for_element_visible(BUTTON_ELEMENT, timeout=wait_time)
-            driver.click(BUTTON_ELEMENT)
-            return True
-        return False
-    except:
-        return False
-
-
-def click_next_if_is_updating_terms_page_sb(driver):
-    try:
-        TITLE_ELEMENT = 'h1[data-testid="title"]'
-        driver.wait_for_element_visible(TITLE_ELEMENT, timeout=wait_time / 3)
-        time.sleep(3)
-        driver.wait_for_element_visible(TITLE_ELEMENT, timeout=2)
-
-        if (
-            driver.get_text(TITLE_ELEMENT)
-            .lower()
-            .startswith("we're updating our terms")
-        ):
-            NEXT_BUTTON_ELEMENT = 'button[type="submit"]'
-            driver.wait_for_element_visible(NEXT_BUTTON_ELEMENT, timeout=2)
-            driver.click(NEXT_BUTTON_ELEMENT)
-            return True
         return True
     except:
         return False
@@ -6278,7 +6213,7 @@ def is_your_account_has_been_locked_page_sb(driver):
     try:
         TITLE_ELEMENT = 'div[role="heading"]'
         title_element = driver.wait_for_element_visible(
-            TITLE_ELEMENT, timeout=wait_time
+            TITLE_ELEMENT, timeout=wait_time / 2
         )
         time.sleep(2)
         if "your account has been locked" in title_element.text.lower():
@@ -6466,7 +6401,7 @@ def close_other_tabs(driver):
 def click_looks_good_button_sb(driver):
     try:
         BUTTON_ELEMENT = 'input[id="iLooksGood"]'
-        driver.wait_for_element_visible(BUTTON_ELEMENT, timeout=wait_time / 2)
+        driver.wait_for_element_visible(BUTTON_ELEMENT, timeout=wait_time / 3)
         time.sleep(2)
         driver.click(BUTTON_ELEMENT)
         return True
@@ -6477,19 +6412,19 @@ def click_looks_good_button_sb(driver):
 def click_next_if_a_quick_note_page_sb(driver):
     try:
         HEADER_ELEMENT = 'span[role="heading"]'
-        driver.wait_for_element_visible(HEADER_ELEMENT, timeout=wait_time)
-        time.sleep(3)
-        driver.wait_for_element_visible(HEADER_ELEMENT, timeout=wait_time)
+        driver.wait_for_element_visible(HEADER_ELEMENT, timeout=wait_time / 3)
+        time.sleep(2)
+        driver.wait_for_element_visible(HEADER_ELEMENT, timeout=wait_time / 5)
         if (
             driver.get_text(HEADER_ELEMENT)
             .lower()
             .startswith("a quick note about your microsoft account")
         ):
             BUTTON_ELEMENT = 'div[id="StickyFooter"]>button'
-            driver.wait_for_element_visible(BUTTON_ELEMENT, timeout=wait_time)
+            driver.wait_for_element_visible(BUTTON_ELEMENT, timeout=wait_time / 5)
             driver.click(BUTTON_ELEMENT)
             time.sleep(1)
-            driver.wait_for_element_visible(BUTTON_ELEMENT, timeout=wait_time)
+            driver.wait_for_element_visible(BUTTON_ELEMENT, timeout=wait_time / 5)
             driver.click(BUTTON_ELEMENT)
             return True
         return False
@@ -6500,7 +6435,7 @@ def click_next_if_a_quick_note_page_sb(driver):
 def click_stay_signed_in_button_sb(driver):
     try:
         BUTTON_ELEMENT = 'button[data-testid="primaryButton"]'
-        driver.wait_for_element_visible(BUTTON_ELEMENT, timeout=wait_time)
+        driver.wait_for_element_visible(BUTTON_ELEMENT, timeout=wait_time / 3)
         driver.click(BUTTON_ELEMENT)
         return True
     except:
@@ -6668,7 +6603,7 @@ def cancel_setup_passkey_sb(driver):
     """
     try:
         retries = 0
-        while retries < 5:
+        while retries < 2:
             try:
                 bring_to_front_sb(driver)
                 time.sleep(1)
@@ -6679,11 +6614,11 @@ def cancel_setup_passkey_sb(driver):
                 TITLE_ELEMENT = 'div[id="title"]'
                 CANCEL_BTN_ELEMENT = 'input[value="Cancel"]'
                 title_element = driver.wait_for_element_visible(
-                    TITLE_ELEMENT, timeout=wait_time
+                    TITLE_ELEMENT, timeout=wait_time / 3
                 )
                 if "setting up your passkey" in title_element.text.lower():
                     driver.wait_for_element_visible(
-                        CANCEL_BTN_ELEMENT, timeout=wait_time
+                        CANCEL_BTN_ELEMENT, timeout=wait_time / 5
                     )
                     time.sleep(2)
                     driver.click(CANCEL_BTN_ELEMENT)
