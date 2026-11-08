@@ -7104,11 +7104,11 @@ def initialize_new_profile_sb(new_profile_data):
             print(
                 f"{email_address}: Error getting email token for recovery email: {email_token}"
             )
-            new_profile_logger(
-                email_address,
-                "FAIL",
-                "Error getting email token for recovery email",
-            )
+            # new_profile_logger(
+            #     email_address,
+            #     "FAIL",
+            #     "Error getting email token for recovery email",
+            # )
             return False, "Error getting email token for recovery email"
         print(f"{email_address}: Got email token for recovery email")
         new_profile_data["email_token"] = email_token
@@ -7137,53 +7137,53 @@ def initialize_new_profile_sb(new_profile_data):
         _check_shutdown_requested()
         if not driver_success:
             print(f"{email_address}: Error initializing new browser driver")
-            new_profile_logger(
-                email_address,
-                "FAIL",
-                "Error initializing new browser driver. Network or proxy error",
-            )
+            # new_profile_logger(
+            #     email_address,
+            #     "FAIL",
+            #     "Error initializing new browser driver. Network or proxy error",
+            # )
             return False, "Error initializing new browser driver instance"
         _check_shutdown_requested()
         if not enter_email_sb(driver=driver, email_address=email_address):
             print(f"{email_address}: Error entering email")
-            new_profile_logger(email_address, "FAIL", "Error loading login page")
+            # new_profile_logger(email_address, "FAIL", "Error loading login page")
             return False, "Error loading login page"
         time.sleep(1)
         _check_shutdown_requested()
         if not click_next_button_sb(driver=driver):
             print(f"{email_address}: Error clicking next button after entering email")
-            new_profile_logger(
-                email_address, "FAIL", "Error clicking next button after entering email"
-            )
+            # new_profile_logger(
+            #     email_address, "FAIL", "Error clicking next button after entering email"
+            # )
             return False, "Error clicking next button after entering email"
         time.sleep(2)
         _check_shutdown_requested()
         if not enter_recovery_email_2_sb(driver, recovery_email):
             print(f"{email_address}: Failed to enter recovery email")
-            new_profile_logger(
-                email_address, "FAIL", "Error clicking next button after entering email"
-            )
+            # new_profile_logger(
+            #     email_address, "FAIL", "Error clicking next button after entering email"
+            # )
             return False, "Error clicking next button after entering email"
         time.sleep(2)
         _check_shutdown_requested()
         if not click_send_code_button_sb(driver):
             print(f"{email_address}: Failed to click send code button")
-            new_profile_logger(email_address, "FAIL", "Error clicking send code button")
+            # new_profile_logger(email_address, "FAIL", "Error clicking send code button")
             return False, "Error clicking send code button"
         _check_shutdown_requested()
         code_status, code = wait_for_code_sb(email_token=email_token)
         _check_shutdown_requested()
         if not code_status:
             print(f"{email_address}: Failed to get code from recovery email")
-            new_profile_logger(
-                email_address, "FAIL", "Error getting code from recovery email"
-            )
+            # new_profile_logger(
+            #     email_address, "FAIL", "Error getting code from recovery email"
+            # )
             return False, "Error getting code from recovery email"
         print(f"{email_address}: Got code from recovery email: {code}")
         _check_shutdown_requested()
         if not enter_code_and_click_next_after_pass_change_sb(driver, code):
             print(f"{email_address}: Failed to enter code")
-            new_profile_logger(email_address, "FAIL", "Error entering code")
+            # new_profile_logger(email_address, "FAIL", "Error entering code")
             return False, "Error entering code"
         _check_shutdown_requested()
         print(f"{email_address}: Checking if updating terms page is present")
@@ -7197,9 +7197,9 @@ def initialize_new_profile_sb(new_profile_data):
         time.sleep(1)
         if is_your_account_has_been_locked_page_sb(driver):
             print(f"{email_address}: Account has been locked page found")
-            new_profile_logger(
-                email_address, "FAIL", "Account has been locked page found"
-            )
+            # new_profile_logger(
+            #     email_address, "FAIL", "Account has been locked page found"
+            # )
             return False, "ACCOUNT_LOCKED"
         time.sleep(1)
         print(f"{email_address}: Is your security info")
@@ -7259,11 +7259,11 @@ def initialize_new_profile_sb(new_profile_data):
             new_profile_data["pass"] = error
         else:
             print(f"{email_address}: Error changing password: {error}")
-            new_profile_logger(
-                email_address,
-                "FAIL",
-                f"Error changing password: {error}",
-            )
+            # new_profile_logger(
+            #     email_address,
+            #     "FAIL",
+            #     f"Error changing password: {error}",
+            # )
             return False, f"Error changing password: {error}"
         print(f"{email_address}: Joining microsoft premium")
         driver.refresh()
@@ -7280,11 +7280,11 @@ def initialize_new_profile_sb(new_profile_data):
             return False, "NO_LINK"
         else:
             print(f"{email_address}: Unable to join microsoft premium after 3 retries.")
-            new_profile_logger(
-                email_address,
-                "FAIL",
-                "Unable to join microsoft premium after 3 retries",
-            )
+            # new_profile_logger(
+            #     email_address,
+            #     "FAIL",
+            #     "Unable to join microsoft premium after 3 retries",
+            # )
             return False, "Unable to join microsoft premium after 3 retries"
         update_accounts_data(
             email=email_address,
@@ -7296,26 +7296,26 @@ def initialize_new_profile_sb(new_profile_data):
         status, error = smtp_process_sb(driver, new_profile_data)
         if status:
             print(f"{email_address}: Finalising")
-            new_profile_logger(
-                email_address,
-                "SUCCESS",
-                "Login successfull",
-            )
+            # new_profile_logger(
+            #     email_address,
+            #     "SUCCESS",
+            #     "Login successfull",
+            # )
             update_accounts_data(email=email_address, save_smtp="YES")
             print(f"{email_address}: Successfully set up SMTP")
             return True, driver
         else:
             print(f"{email_address}: Error setting up SMTP: {error}")
-            new_profile_logger(
-                email_address,
-                "FAIL",
-                f"Error setting up SMTP: {error}",
-            )
+            # new_profile_logger(
+            #     email_address,
+            #     "FAIL",
+            #     f"Error setting up SMTP: {error}",
+            # )
             failed_smtp(email_address, password, temp_email)
             return False, f"Error setting up SMTP: {error}"
     except Exception as E:
         try:
-            new_profile_logger(email_address, "FAIL", f"EXCEPTION_ERROR: {E}")
+            return False, f"EXCEPTION_ERROR: {E}"
         except:
             pass
         return False, f"Undocumented_error: {E}"
