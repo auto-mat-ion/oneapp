@@ -6667,6 +6667,7 @@ def cancel_setup_passkey_sb(driver):
         retries = 0
         while retries < 5:
             try:
+                bring_to_front(driver)
                 driver.gui_press_key("ESC")
                 print("Clicked ESC key to cancel passkey setup if it appeared.")
                 time.sleep(1)
