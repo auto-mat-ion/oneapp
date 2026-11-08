@@ -7366,7 +7366,7 @@ def run_hotmailbot2(country=None):
                 elif initialize_result == "ACCOUNT_LOCKED":
                     locked_acc_sb(new_profile_data)
 
-                if status:
+                if _:
                     new_profile_logger(
                         new_profile_data.get("email"),
                         "SUCCESS",
