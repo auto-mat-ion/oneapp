@@ -6757,6 +6757,7 @@ def cancel_setup_passkey_sb(driver):
         retries = 0
         while retries < 5:
             try:
+                driver.gui_press_key("ESC")
                 TITLE_ELEMENT = 'div[id="title"]'
                 CANCEL_BTN_ELEMENT = 'input[value="Cancel"]'
                 if "setting up your passkey" in driver.get_text(TITLE_ELEMENT).lower():
