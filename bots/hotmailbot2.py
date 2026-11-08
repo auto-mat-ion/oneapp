@@ -6661,10 +6661,10 @@ def password_use_unavailable_sb(driver):
 
 def click_join_family_link_btn_sb(driver, new_profile_data):
     try:
-        wait_time = 15
+        wait_time = 5
         button = 'button[aria-label="Join now"]'
         driver.wait_for_element_visible(button, timeout=wait_time)
-        time.sleep(3)
+        time.sleep(2)
         driver.click(button)
         time.sleep(5)
         return True
@@ -6713,11 +6713,7 @@ def click_join_family_link_btn_sb(driver, new_profile_data):
                 enter_password_sb(driver, password=password)
                 click_password_next_button_sb(driver)
             click_looks_good_button_sb(driver)
-            button = WebDriverWait(driver, 5).until(
-                EC.element_to_be_clickable(
-                    (By.CSS_SELECTOR, 'button[aria-label="Join now"]')
-                )
-            )
+            button = driver.wait_for_element_visible('button[aria-label="Join now"]', 5)
             time.sleep(1)
             button.click()
             time.sleep(5)
