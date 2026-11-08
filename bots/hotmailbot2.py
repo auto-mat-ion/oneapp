@@ -6936,8 +6936,7 @@ def link_is_full_sb(driver):
 
 def use_link_to_join_family_acc_sb(driver, new_profile_data):
     try:
-        # status, invite_url = get_family_link()
-        status, invite_url = True, "https://aka.ms/5411d1e75ea64dfa839a0e53"
+        status, invite_url = get_family_link()
         email_address = new_profile_data.get("email")
         if status:
             _check_shutdown_requested()
