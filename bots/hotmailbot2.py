@@ -2310,7 +2310,7 @@ def processed_email(email_data):
             (
                 SERVER_IP,
                 BOT_TYPE,
-                datetime.now(),
+                datetime.now(timezone.utc),
                 email_data.get("email"),
                 email_data.get("pass"),
             ),
@@ -7412,7 +7412,8 @@ def run_hotmailbot2(country=None):
     """
     Creates threads and signs in simultaneously
     """
-    global PREFERRED_SMS_COUNTRY, SHUTDOWN_REQUESTED, PAUSE_REQUESTED
+    global PREFERRED_SMS_COUNTRY, SHUTDOWN_REQUESTED, PAUSE_REQUESTED, BOT_TYPE
+    BOT_TYPE = "hotmailbot2"
     if country:
         PREFERRED_SMS_COUNTRY = str(country).lower()
     SHUTDOWN_REQUESTED = False
@@ -7441,6 +7442,17 @@ def run_hotmailbot2(country=None):
                     return "NO_LINKS"
                 elif initialize_result == "ACCOUNT_LOCKED":
                     locked_acc_sb(new_profile_data)
+
+                if status:
+                    new_profile_logger(
+                        new_profile_data.get("email"),
+                        "SUCCESS",
+                        "PROCESSED SUCCESSFULLY",
+                    )
+                else:
+                    new_profile_logger(
+                        new_profile_data.get("email"), "FAIL", initialize_result
+                    )
 
             except InterruptedError:
                 return True
