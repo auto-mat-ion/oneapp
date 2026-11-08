@@ -3989,25 +3989,6 @@ def email_login_limit_reached(driver):
             return True
 
 
-def email_login_limit_reached_sb(driver):
-    try:
-        title = 'h1[data-testid="title"]'
-        driver.wait_for_element_visible(title, timeout=15)
-        driver.click(title)
-        time.sleep(5)
-        return (
-            driver.get_text(title)
-            .lower()
-            .startswith("you've reached your limit with this sign-in method")
-        )
-    except:
-        try:
-            driver.wait_for_element_visible('input[id="codeEntry-0"]', wait_time)
-            return False
-        except:
-            return True
-
-
 def re_login_existing_acc(driver, new_profile_data):
     try:
         email = new_profile_data.get("email")
@@ -6221,7 +6202,18 @@ def is_your_account_has_been_locked_page_sb(driver):
         else:
             return False
     except:
-        return False
+        try:
+            TITLE_ELEMENT = "h1"
+            title_element = driver.wait_for_element_visible(
+                TITLE_ELEMENT, timeout=wait_time / 4
+            )
+            time.sleep(2)
+            if "your account has been locked" in title_element.text.lower():
+                return True
+            else:
+                return False
+        except:
+            return False
 
 
 def email_login_limit_reached_sb(driver):
@@ -6632,17 +6624,6 @@ def cancel_setup_passkey_sb(driver):
         return False
 
 
-def new_profile_logger(email_address, status, message):
-    """
-    Logs the status of the new profile creation process.
-    """
-    print(f"Logging for {email_address}: Status: {status}, Message: {message}")
-    # Here you can implement actual logging to a file or database if needed.
-
-
-########################
-
-
 def password_use_unavailable_sb(driver):
     """
     Checks if the password is unavailable label appears.
@@ -6692,6 +6673,8 @@ def click_join_family_link_btn_sb(driver, new_profile_data):
                 print(f"{email} : Error entering password")
             time.sleep(2)
             click_password_next_button_sb(driver)
+            cancel_setup_passkey_sb(driver)
+            time.sleep(2)
             if password_use_unavailable_sb(driver):
                 click_send_code_to_recovery_email_button_sb(driver)
                 if enter_recovery_email_2_sb(driver, recovery):
@@ -6712,6 +6695,7 @@ def click_join_family_link_btn_sb(driver, new_profile_data):
                 click_existing_account_smtp_sb(driver)
                 enter_password_sb(driver, password=password)
                 click_password_next_button_sb(driver)
+                cancel_setup_passkey_sb(driver)
             click_looks_good_button_sb(driver)
             button = driver.wait_for_element_visible('button[aria-label="Join now"]', 5)
             time.sleep(1)
