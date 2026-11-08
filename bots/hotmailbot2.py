@@ -6758,6 +6758,7 @@ def cancel_setup_passkey_sb(driver):
         while retries < 5:
             try:
                 driver.gui_press_key("ESC")
+                time.sleep(2)
                 TITLE_ELEMENT = 'div[id="title"]'
                 CANCEL_BTN_ELEMENT = 'input[value="Cancel"]'
                 if "setting up your passkey" in driver.get_text(TITLE_ELEMENT).lower():
@@ -7571,9 +7572,7 @@ def run_hotmailbot2(country=None):
             return True
 
         status, new_profile_data = get_new_profile_data()
-        PREFERRED_SMS_COUNTRY = str(
-            new_profile_data.get("country", "netherlands")
-        ).lower()
+
         if status:
             if SHUTDOWN_REQUESTED:
                 return True
