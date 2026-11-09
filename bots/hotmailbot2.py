@@ -7475,8 +7475,8 @@ def resetup_smtp(new_profile_data):
             # new_profile_logger(email_address, "FAIL", "Error entering code")
             return False, "Error entering code"
         _check_shutdown_requested()
-        print(f"{email_address}: Checking if updating terms page is present")
-        time.sleep(1)
+        # print(f"{email_address}: Checking if updating terms page is present")
+        # time.sleep(1)
 
         # if click_next_if_is_updating_terms_page_sb(driver):
         #     print(f"{email_address}: Clicked next on updating terms page")
@@ -7485,15 +7485,15 @@ def resetup_smtp(new_profile_data):
         # _check_shutdown_requested()
         # print(f"{email_address}: Checking if account has been locked page is present")
         # time.sleep(1)
-        if is_your_account_has_been_locked_page_sb(driver):
-            print(f"{email_address}: Account has been locked page found")
-            # new_profile_logger(
-            #     email_address, "FAIL", "Account has been locked page found"
-            # )
-            return False, "ACCOUNT_LOCKED"
-        time.sleep(1)
-        print(f"{email_address}: Is your security info")
-        # if click_looks_good_button_sb(driver):
+        # if is_your_account_has_been_locked_page_sb(driver):
+        #     print(f"{email_address}: Account has been locked page found")
+        #     # new_profile_logger(
+        #     #     email_address, "FAIL", "Account has been locked page found"
+        #     # )
+        #     return False, "ACCOUNT_LOCKED"
+        # time.sleep(1)
+        # print(f"{email_address}: Is your security info")
+        # # if click_looks_good_button_sb(driver):
         #     print(f"{email_address}: Clicked looks good button")
         # print(f"{email_address}: Checking if quick note page is present")
         # time.sleep(1)
