@@ -5625,7 +5625,7 @@ def login_test(new_profile_data):
                 status, driverdata, error = True, "", ""
                 print(f"{email_address} : Driver status: {status}, error: {error}")
                 if status:
-                    driver, user_path, proxy = sb_cdp.Chrome(incognito=True), "", ""
+                    driver, user_path, proxy = Driver(), "", ""
 
                     time.sleep(0.5)
                     driver.maximize_window()
@@ -5705,15 +5705,16 @@ def login_test(new_profile_data):
         return driver, "success"
     except Exception as E:
         try:
-            new_profile_logger(email_address, "FAIL", f"EXCEPTION_ERROR: {E}")
+            # new_profile_logger(email_address, "FAIL", f"EXCEPTION_ERROR: {E}")
+            pass
         except:
             pass
         return False, f"Undocumented_error: {E}"
     finally:
         try:
             # driver.quit()
-            processed_email(new_profile_data_original)
-            processed_email2(new_profile_data_original)
+            # processed_email(new_profile_data_original)
+            # processed_email2(new_profile_data_original)
             pass
         except:
             pass
@@ -5786,6 +5787,66 @@ def get_new_profile_data():
             "pass": password,
             "recovery": recovery,
             "country": country,
+        }
+
+    try:
+        return execute_db_action(db_action, retries=5, delay=10)
+    except Exception as e:
+        print(f"Error getting email from db after retries: {e}")
+        return False, {"email": "", "pass": "", "recovery": "", "country": ""}
+
+
+def get_new_profile_data3():
+    def db_action():
+        conn = mysql.connector.connect(
+            host=DB_HOST, user=DB_USER, password=DB_PASSWORD, database=DB_NAME
+        )
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT email, pass, recovery FROM processing_emails "
+            "WHERE server_ip = %s AND bot_type = %s LIMIT 1",
+            (SERVER_IP, BOT_TYPE),
+        )
+        row = cursor.fetchone()
+        if row:
+            print(f"Found processing email for this server: {row[0]}. Using it.")
+            cursor.close()
+            conn.close()
+            return True, {
+                "email": row[0],
+                "pass": row[1],
+                "recovery": row[2],
+                "country": "Poland",
+            }
+        cursor.execute("SELECT email, pass, recovery FROM input_emails3 LIMIT 1")
+        row = cursor.fetchone()
+        if not row:
+            cursor.close()
+            conn.close()
+            return False, {"email": "", "pass": "", "recovery": "", "country": ""}
+        email, password, recovery = row
+        cursor.execute(
+            "INSERT INTO processing_emails (email, pass, recovery, server_ip, bot_type, date_time) VALUES (%s, %s, %s, %s, %s, %s)",
+            (
+                email,
+                password,
+                recovery,
+                SERVER_IP,
+                BOT_TYPE,
+                datetime.now(tz=timezone.utc),
+            ),
+        )
+        cursor.execute(
+            "DELETE FROM input_emails3 WHERE email = %s AND pass = %s",
+            (email, password),
+        )
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return True, {
+            "email": email,
+            "pass": password,
+            "recovery": recovery,
         }
 
     try:
@@ -7330,6 +7391,169 @@ def initialize_new_profile_sb(new_profile_data):
         print("\n--------------------------------------\n")
 
 
+def resetup_smtp(new_profile_data):
+    """
+    Creating a new chrome profile.
+    A dictionary with email_address, and password
+    """
+    try:
+        _check_shutdown_requested()
+        print("\n")
+        connect_new_random()
+        time.sleep(0.5)
+        _check_shutdown_requested()
+        email_address = new_profile_data.get("email")
+        password = new_profile_data.get("pass")
+        recovery = new_profile_data.get("recovery")
+        recovery_email = recovery
+        status, email_token = get_email_token_sb(recovery_email=recovery)
+        if not status:
+            print(
+                f"{email_address}: Error getting email token for recovery email: {email_token}"
+            )
+            return False, "Error getting email token for recovery email"
+        print(f"{email_address}: Got email token for recovery email")
+        new_profile_data["email_token"] = email_token
+        new_profile_data_original = new_profile_data.copy()
+        retries = 0
+        driver_success = False
+        print(f"{email_address}: Initializing browser driver")
+        while (retries < 3) and (not driver_success):
+            try:
+                status, driverdata, error = initialize_new_profile_driver()
+                if status:
+                    print(f"{email_address}: Driver initialized successfully")
+                    driver, user_path, proxy = driverdata.values()
+                    time.sleep(0.5)
+                    driver.maximize()
+                    time.sleep(0.5)
+                    driver.get(MICROSOFT_LOGIN_URL)
+                    time.sleep(0.5)
+                    driver_success = True
+            except:
+                try:
+                    driver.quit()
+                except:
+                    pass
+                retries += 1
+        _check_shutdown_requested()
+        if not driver_success:
+            print(f"{email_address}: Error initializing new browser driver")
+            return False, "Error initializing new browser driver instance"
+        _check_shutdown_requested()
+        if not enter_email_sb(driver=driver, email_address=email_address):
+            print(f"{email_address}: Error entering email")
+            return False, "Error loading login page"
+        time.sleep(1)
+        _check_shutdown_requested()
+        if not click_next_button_sb(driver=driver):
+            print(f"{email_address}: Error clicking next button after entering email")
+            return False, "Error clicking next button after entering email"
+        time.sleep(2)
+        _check_shutdown_requested()
+        if not enter_recovery_email_2_sb(driver, recovery_email):
+            print(f"{email_address}: Failed to enter recovery email")
+            return False, "Error clicking next button after entering email"
+        time.sleep(2)
+        _check_shutdown_requested()
+        if not click_send_code_button_sb(driver):
+            print(f"{email_address}: Failed to click send code button")
+            return False, "Error clicking send code button"
+        _check_shutdown_requested()
+        code_status, code = wait_for_code_sb(email_token=email_token)
+        _check_shutdown_requested()
+        if not code_status:
+            print(f"{email_address}: Failed to get code from recovery email")
+            # new_profile_logger(
+            #     email_address, "FAIL", "Error getting code from recovery email"
+            # )
+            return False, "Error getting code from recovery email"
+        print(f"{email_address}: Got code from recovery email: {code}")
+        _check_shutdown_requested()
+        if not enter_code_and_click_next_after_pass_change_sb(driver, code):
+            print(f"{email_address}: Failed to enter code")
+            # new_profile_logger(email_address, "FAIL", "Error entering code")
+            return False, "Error entering code"
+        _check_shutdown_requested()
+        print(f"{email_address}: Checking if updating terms page is present")
+        time.sleep(1)
+
+        # if click_next_if_is_updating_terms_page_sb(driver):
+        #     print(f"{email_address}: Clicked next on updating terms page")
+        # else:
+        #     print(f"{email_address}: No updating terms page found")
+        # _check_shutdown_requested()
+        # print(f"{email_address}: Checking if account has been locked page is present")
+        # time.sleep(1)
+        if is_your_account_has_been_locked_page_sb(driver):
+            print(f"{email_address}: Account has been locked page found")
+            # new_profile_logger(
+            #     email_address, "FAIL", "Account has been locked page found"
+            # )
+            return False, "ACCOUNT_LOCKED"
+        time.sleep(1)
+        print(f"{email_address}: Is your security info")
+        # if click_looks_good_button_sb(driver):
+        #     print(f"{email_address}: Clicked looks good button")
+        # print(f"{email_address}: Checking if quick note page is present")
+        # time.sleep(1)
+        # if click_next_if_a_quick_note_page_sb(driver):
+        #     print(f"{email_address}: Clicked next on quick note page")
+        # else:
+        #     print(f"{email_address}: No quick note page found")
+        # _check_shutdown_requested()
+        # print(f"{email_address}: Checking if passkey setup page is present")
+        # time.sleep(1)
+        # if cancel_setup_passkey_sb(driver):
+        #     print(f"{email_address}: Cancelled passkey setup page")
+        # else:
+        #     print(f"{email_address}: No passkey setup page found")
+        # _check_shutdown_requested()
+        time.sleep(1)
+        print(f"{email_address}: Checking if stay signed in page is present")
+        if click_stay_signed_in_button_sb(driver):
+            print(f"{email_address}: Clicked stay signed in button")
+        else:
+            print(f"{email_address}: No stay signed in button/btn found")
+
+        ### NEW
+        status, error = smtp_process_sb(driver, new_profile_data)
+        if status:
+            print(f"{email_address}: Finalising")
+            # new_profile_logger(
+            #     email_address,
+            #     "SUCCESS",
+            #     "Login successfull",
+            # )
+            update_accounts_data(email=email_address, save_smtp="YES")
+            print(f"{email_address}: Successfully set up SMTP")
+            return True, driver
+        else:
+            print(f"{email_address}: Error setting up SMTP: {error}")
+            # new_profile_logger(
+            #     email_address,
+            #     "FAIL",
+            #     f"Error setting up SMTP: {error}",
+            # )
+            failed_smtp(email_address, password, recovery_email)
+            return False, f"Error setting up SMTP: {error}"
+    except Exception as E:
+        try:
+            return False, f"EXCEPTION_ERROR: {E}"
+        except:
+            pass
+        return False, f"Undocumented_error: {E}"
+    finally:
+        try:
+            # time.sleep(60)
+            driver.quit()
+            processed_email(new_profile_data_original)
+            pass
+        except:
+            pass
+        print("\n--------------------------------------\n")
+
+
 @_run_lifecycle
 def run_hotmailbot2(country=None):
     """
@@ -7350,14 +7574,14 @@ def run_hotmailbot2(country=None):
         if SHUTDOWN_REQUESTED:
             return True
 
-        status, new_profile_data = get_new_profile_data()
+        status, new_profile_data = get_new_profile_data3()
 
         if status:
             if SHUTDOWN_REQUESTED:
                 return True
             try:
                 _check_shutdown_requested()
-                _, initialize_result = initialize_new_profile_sb(new_profile_data)
+                _, initialize_result = resetup_smtp(new_profile_data)
                 if initialize_result == "NO_LINK":
                     current_action = "No more links, waiting for signal"
                     print(current_action)
@@ -7384,3 +7608,58 @@ def run_hotmailbot2(country=None):
         else:
             print("No input emails in database...")
             return True
+
+
+# def run_hotmailbot2(country=None):
+#     """
+#     Creates threads and signs in simultaneously
+#     """
+#     global PREFERRED_SMS_COUNTRY, SHUTDOWN_REQUESTED, PAUSE_REQUESTED, BOT_TYPE
+#     BOT_TYPE = "hotmailbot2"
+#     if country:
+#         PREFERRED_SMS_COUNTRY = str(country).lower()
+#     SHUTDOWN_REQUESTED = False
+#     PAUSE_REQUESTED = False
+#     _start_shutdown_watcher()
+
+#     print(
+#         f"Starting Hotmailbot for country: {PREFERRED_SMS_COUNTRY} and IP: {SERVER_IP}"
+#     )
+#     while True:
+#         if SHUTDOWN_REQUESTED:
+#             return True
+
+#         status, new_profile_data = get_new_profile_data()
+
+#         if status:
+#             if SHUTDOWN_REQUESTED:
+#                 return True
+#             try:
+#                 _check_shutdown_requested()
+#                 _, initialize_result = initialize_new_profile_sb(new_profile_data)
+#                 if initialize_result == "NO_LINK":
+#                     current_action = "No more links, waiting for signal"
+#                     print(current_action)
+#                     keep_alive(current_action=current_action)
+#                     return "NO_LINKS"
+#                 elif initialize_result == "ACCOUNT_LOCKED":
+#                     locked_acc_sb(new_profile_data)
+
+#                 if _:
+#                     new_profile_logger(
+#                         new_profile_data.get("email"),
+#                         "SUCCESS",
+#                         "PROCESSED SUCCESSFULLY",
+#                     )
+#                 else:
+#                     new_profile_logger(
+#                         new_profile_data.get("email"), "FAIL", initialize_result
+#                     )
+
+#             except InterruptedError:
+#                 return True
+#             if SHUTDOWN_REQUESTED:
+#                 return True
+#         else:
+#             print("No input emails in database...")
+#             return True
