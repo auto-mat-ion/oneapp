@@ -707,7 +707,7 @@ def connect_new_random():
 
     try:
         # vpn_country = PREFERRED_SMS_COUNTRY.lower()
-        vpn_country = "netherlans"
+        vpn_country = "netherlands"
         if vpn_country == "poland2":
             vpn_country = "poland"
 
