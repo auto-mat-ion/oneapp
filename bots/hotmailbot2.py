@@ -4384,7 +4384,7 @@ def load_cache():
                 raise RuntimeError("Unable to connect to database")
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT cache_bin_file FROM cache_bins2 WHERE server_ip = %s AND bot_type = %s ORDER BY date_time DESC LIMIT 1",
+                "SELECT cache_bin_file FROM cache_bins WHERE server_ip = %s AND bot_type = %s ORDER BY date_time DESC LIMIT 1",
                 (SERVER_IP, BOT_TYPE),
             )
             result = cursor.fetchone()
