@@ -2979,6 +2979,8 @@ def _main_batches(
     content_part = SERVER_IP if SERVER_IP in NEW_TEST else part
     content = ContentManager(content_part)
     run_state["content"] = content
+    if SERVER_IP in OLD_SENDERS_SERVERS:
+        content.links = ["meetsingles.info"]
 
     if not content.is_valid():
         log("✗ Missing content (need subjects, texts, links). Exiting.")
@@ -3288,8 +3290,3 @@ def run_smtp_bot(app_choice: int = 1):
             log(f"ERRORR WHEN RUNNING BATCH: {eee}")
         log("SMTP batch finished. Returning to signal wait loop.")
         time.sleep(5)
-
-
-# log("Load cache start")
-# load_cache()
-# log("Load cache end")
