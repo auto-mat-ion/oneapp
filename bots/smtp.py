@@ -35,7 +35,9 @@ import subprocess
 
 SMTP_VERSION = "v1.0.9"
 
-APP2_SERVERS = ["162.19.229.114", "57.129.184.183"]
+# APP2_SERVERS = ["162.19.229.114", "57.129.184.183"]
+APP2_SERVERS = []
+OLD_SENDERS_SERVERS = ["91.134.90.41"]
 
 SETTINGS_PATH = Path(__file__).resolve().parent / "settings.json"
 SENDER_LOG_DIR = Path(__file__).resolve().parent.parent / "sender_logs"
@@ -684,57 +686,24 @@ def log(msg: str):
 
 def load_cache() -> bool:
     def _load_once():
-        log(f"Loading cache from {_get_cache_bins_table()} table...")
+        log(f"Loading cache")
         conn = None
         cursor = None
         try:
-            conn = _get_db_connection()
-            if conn is None:
-                raise RuntimeError("unable to connect to database for cache")
-
-            cursor = conn.cursor()
-            cursor.execute(
-                f"SELECT cache_bin_file FROM {_get_cache_bins_table()} WHERE SERVER_IP = %s",
-                ("0.1.0.1",),
+            resp = requests.get(
+                "http://68.183.208.150:8000/cache-bin",
+                params={
+                    "x_api_ key": "WALANGOLO",
+                },
+                headers={"x-api-key": "WALANGOLO"},
             )
-            results = cursor.fetchall()
 
-            combined_data = {
-                "Account": {},
-                "IdToken": {},
-                "AccessToken": {},
-                "RefreshToken": {},
-                "AppMetadata": {},
-            }
-
-            for result in results:
-                if result and result[0]:
-                    temp_cache = msal.SerializableTokenCache()
-                    temp_cache.deserialize(result[0].decode("utf-8"))
-                    raw_data = json.loads(temp_cache.serialize())
-                    for category in combined_data.keys():
-                        if category in raw_data:
-                            combined_data[category].update(raw_data[category])
-
-            num_accounts = len(combined_data.get("Account", {}))
+            combined_data = resp.json()
             _shared_cache.deserialize(json.dumps(combined_data))
-
-            log(
-                f"Cache loaded from database: {len(results)} servers caches, {num_accounts} accounts"
-            )
+            num_accounts = len(combined_data.get("Account", {}))
+            log(f"Cache loaded: {num_accounts} accounts")
         except Exception as exc:
             raise RuntimeError(f"cache load failed: {exc}") from exc
-        finally:
-            try:
-                if cursor is not None:
-                    cursor.close()
-            except Exception:
-                pass
-            try:
-                if conn is not None:
-                    conn.close()
-            except Exception:
-                pass
 
     total_attempts = CACHE_LOAD_RETRIES + 1
     for attempt in range(1, total_attempts + 1):
@@ -1217,19 +1186,16 @@ class RecipientManager:
         self._sent_count = 0
         self._total_loaded = 0
         self.account_count = max(0, account_count)
-        # self.recipients_needed = round(
-        #     self.account_count
-        #     * (SUBSEQUENT_BATCHES + 1)
-        #     * SUBSEQUENT_BATCH_BCC
-        #     * EMAIL_ROUNDS
-        # )
-        self.recipients_needed = round(
-            self.account_count
-            * (SUBSEQUENT_BATCHES + 1)
-            * sum([SUBSEQUENT_BATCH_BCC, SUBSEQUENT_BATCH_BCC_LOWER])
-            / len([SUBSEQUENT_BATCH_BCC, SUBSEQUENT_BATCH_BCC_LOWER])
-            * EMAIL_ROUNDS
-        )
+        if SERVER_IP in OLD_SENDERS_SERVERS:
+            self.recipients_needed = round(self.account_count * 320)
+        else:
+            self.recipients_needed = round(
+                self.account_count
+                * (SUBSEQUENT_BATCHES + 1)
+                * sum([SUBSEQUENT_BATCH_BCC, SUBSEQUENT_BATCH_BCC_LOWER])
+                / len([SUBSEQUENT_BATCH_BCC, SUBSEQUENT_BATCH_BCC_LOWER])
+                * EMAIL_ROUNDS
+            )
 
         self._load()
 
@@ -1758,22 +1724,42 @@ def process_account_batch(
         if not state.started:
             state.started = True
 
-        if state.batch_round == 0:
-            if mess_num == 0:
-                batch_size = 1
-                label = "warmup-m1"
+        if SERVER_IP in OLD_SENDERS_SERVERS:
+            if state.batch_round == 0:
+                if mess_num == 0:
+                    batch_size = 10
+                    label = "warmup-m1"
+                elif mess_num == 1:
+                    batch_size = 10
+                    label = "warmup-m2"
+                else:
+                    batch_size = 300
+                label = "warmup-m3"
             else:
-                batch_size = random.randint(FIRST_BATCH_BCC_LOWER, FIRST_BATCH_BCC)
-            label = "warmup-m2"
+                if mess_num == 0:
+                    batch_size = 0
+                    label = f"b{state.batch_round + 1}-m1"
+                else:
+                    batch_size = 0
+                    label = f"b{state.batch_round + 1}-m{mess_num + 1}"
+
         else:
-            if mess_num == 0:
-                batch_size = 1
-                label = f"b{state.batch_round + 1}-m1"
+            if state.batch_round == 0:
+                if mess_num == 0:
+                    batch_size = 1
+                    label = "warmup-m1"
+                else:
+                    batch_size = random.randint(FIRST_BATCH_BCC_LOWER, FIRST_BATCH_BCC)
+                label = "warmup-m2"
             else:
-                batch_size = random.randint(
-                    SUBSEQUENT_BATCH_BCC_LOWER, SUBSEQUENT_BATCH_BCC
-                )
-                label = f"b{state.batch_round + 1}-m{mess_num + 1}"
+                if mess_num == 0:
+                    batch_size = 1
+                    label = f"b{state.batch_round + 1}-m1"
+                else:
+                    batch_size = random.randint(
+                        SUBSEQUENT_BATCH_BCC_LOWER, SUBSEQUENT_BATCH_BCC
+                    )
+                    label = f"b{state.batch_round + 1}-m{mess_num + 1}"
 
         batch = recipients.get_batch(batch_size)
         if not batch:
@@ -2957,7 +2943,10 @@ def _main_batches(
 
     BATCH_NUMBER = str(batch_number)
     print(f"Selected batch: {BATCH_NUMBER}")
-    SUBSEQUENT_BATCHES = 5
+    if SERVER_IP in OLD_SENDERS_SERVERS:
+        SUBSEQUENT_BATCHES = 0
+    else:
+        SUBSEQUENT_BATCHES = 5
     EMAIL_ROUNDS = 3
     time.sleep(5)
 
@@ -3056,7 +3045,7 @@ def _main_batches(
         log("✗ No recipients. Exiting.")
         return
 
-    if (SERVER_IP in APP2_SERVERS) or (SERVER_IP in TEST_2_S):
+    if SERVER_IP in OLD_SENDERS_SERVERS:
         if not load_cache():
             return
     else:
@@ -3302,6 +3291,16 @@ def run_smtp_bot(app_choice: int = 1):
                             batch_number = int(batch_value)
                         except Exception:
                             batch_number = 1
+
+                if SERVER_IP in OLD_SENDERS_SERVERS and batch_number not in [
+                    2,
+                    "2",
+                    4,
+                    "4",
+                    6,
+                    "6",
+                ]:
+                    continue  # Skip processing if the server is in OLD_SENDERS_SERVERS and batch_number is not 2, 4, or 6
                 signal_time = data.get("signal_timestamp")
 
                 part = 1
@@ -3311,33 +3310,20 @@ def run_smtp_bot(app_choice: int = 1):
                 break
 
             scheduler_signal = get_due_smtp_schedule()
-            # scheduler_signal = {
-            #     "status": True,
-            #     "batch": 1,
-            #     "signal_timestamp": datetime.now(UTC),
-            # }
             if scheduler_signal.get("status"):
-                # batch_number = int(scheduler_signal.get("batch", 1))
-                batch_number = 1
-                part = 1
-                signal_time = scheduler_signal.get("signal_timestamp")
-                break
+                if (
+                    SERVER_IP in OLD_SENDERS_SERVERS
+                    and scheduler_signal.get("batch") in [2, "2", 4, "4", 6, "6"]
+                ) or SERVER_IP not in OLD_SENDERS_SERVERS:
+                    log(
+                        f"Scheduler signal found for batch {scheduler_signal.get('batch')}, but server is in OLD_SENDERS_SERVERS. Skipping."
+                    )
+                    batch_number = 1
+                    part = 1
+                    signal_time = scheduler_signal.get("signal_timestamp")
+                    break
 
             time.sleep(30)
-            # scheduler_signal = get_due_smtp_schedule_1hr()
-            # if scheduler_signal.get("status"):
-            #     # batch_number = int(scheduler_signal.get("batch", 1))
-            #     batch_number = 1
-            #     part = 2
-            #     signal_time = datetime.now(UTC)
-            #     break
-            # time.sleep(20 * 1)
-            # scheduler_signal = get_due_smtp_schedule_2hr()
-            # if scheduler_signal.get("status"):
-            #     batch_number = 1
-            #     part = 3
-            #     signal_time = datetime.now(UTC)
-            #     break
 
             if SERVER_IP == "51.91.59.107":
                 update_schedule_smtp_1()
@@ -3358,15 +3344,6 @@ def run_smtp_bot(app_choice: int = 1):
         time.sleep(5)
 
 
-# recipients = RecipientManager(1000)
-# content = ContentManager(1)
-# email = "karlslbbroks8@outlook.com"
-# SAMPLE_RECIPIENT_EMAIL = ['darmbakamoro@gmail.com']
-# h, link, subj, body = content.get()
-# session = make_session()
-# token = get_token(email)
-# batch = recipients.get_batch(50)
-# html = build_html(body, h, link)
-# send_email(
-#             session, token, email, batch[0], batch[1:], subj, html
-#         )
+log("Load cache start")
+load_cache()
+log("Load cache end")

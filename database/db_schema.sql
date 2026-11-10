@@ -71,6 +71,14 @@ CREATE TABLE
   ) ENGINE = InnoDB;
 
 CREATE TABLE
+  IF NOT EXISTS input_emails3 (
+    email_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    email VARCHAR(255) NULL,
+    pass VARCHAR(255) NULL,
+    recovery VARCHAR(255) NULL
+  ) ENGINE = InnoDB;
+
+CREATE TABLE
   IF NOT EXISTS processing_emails (
     email_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
     server_ip VARCHAR(45) NULL,

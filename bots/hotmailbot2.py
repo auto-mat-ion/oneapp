@@ -7554,62 +7554,6 @@ def resetup_smtp(new_profile_data):
         print("\n--------------------------------------\n")
 
 
-@_run_lifecycle
-def run_hotmailbot2(country=None):
-    """
-    Creates threads and signs in simultaneously
-    """
-    global PREFERRED_SMS_COUNTRY, SHUTDOWN_REQUESTED, PAUSE_REQUESTED, BOT_TYPE
-    BOT_TYPE = "hotmailbot2"
-    if country:
-        PREFERRED_SMS_COUNTRY = str(country).lower()
-    SHUTDOWN_REQUESTED = False
-    PAUSE_REQUESTED = False
-    _start_shutdown_watcher()
-
-    print(
-        f"Starting Hotmailbot for country: {PREFERRED_SMS_COUNTRY} and IP: {SERVER_IP}"
-    )
-    while True:
-        if SHUTDOWN_REQUESTED:
-            return True
-
-        status, new_profile_data = get_new_profile_data3()
-
-        if status:
-            if SHUTDOWN_REQUESTED:
-                return True
-            try:
-                _check_shutdown_requested()
-                _, initialize_result = resetup_smtp(new_profile_data)
-                if initialize_result == "NO_LINK":
-                    current_action = "No more links, waiting for signal"
-                    print(current_action)
-                    keep_alive(current_action=current_action)
-                    return "NO_LINKS"
-                elif initialize_result == "ACCOUNT_LOCKED":
-                    locked_acc_sb(new_profile_data)
-
-                if _:
-                    new_profile_logger(
-                        new_profile_data.get("email"),
-                        "SUCCESS",
-                        "PROCESSED SUCCESSFULLY",
-                    )
-                else:
-                    new_profile_logger(
-                        new_profile_data.get("email"), "FAIL", initialize_result
-                    )
-
-            except InterruptedError:
-                return True
-            if SHUTDOWN_REQUESTED:
-                return True
-        else:
-            print("No input emails in database...")
-            return True
-
-
 # def run_hotmailbot2(country=None):
 #     """
 #     Creates threads and signs in simultaneously
@@ -7629,14 +7573,14 @@ def run_hotmailbot2(country=None):
 #         if SHUTDOWN_REQUESTED:
 #             return True
 
-#         status, new_profile_data = get_new_profile_data()
+#         status, new_profile_data = get_new_profile_data3()
 
 #         if status:
 #             if SHUTDOWN_REQUESTED:
 #                 return True
 #             try:
 #                 _check_shutdown_requested()
-#                 _, initialize_result = initialize_new_profile_sb(new_profile_data)
+#                 _, initialize_result = resetup_smtp(new_profile_data)
 #                 if initialize_result == "NO_LINK":
 #                     current_action = "No more links, waiting for signal"
 #                     print(current_action)
@@ -7663,3 +7607,59 @@ def run_hotmailbot2(country=None):
 #         else:
 #             print("No input emails in database...")
 #             return True
+
+
+@_run_lifecycle
+def run_hotmailbot2(country=None):
+    """
+    Creates threads and signs in simultaneously
+    """
+    global PREFERRED_SMS_COUNTRY, SHUTDOWN_REQUESTED, PAUSE_REQUESTED, BOT_TYPE
+    BOT_TYPE = "hotmailbot2"
+    if country:
+        PREFERRED_SMS_COUNTRY = str(country).lower()
+    SHUTDOWN_REQUESTED = False
+    PAUSE_REQUESTED = False
+    _start_shutdown_watcher()
+
+    print(
+        f"Starting Hotmailbot for country: {PREFERRED_SMS_COUNTRY} and IP: {SERVER_IP}"
+    )
+    while True:
+        if SHUTDOWN_REQUESTED:
+            return True
+
+        status, new_profile_data = get_new_profile_data()
+
+        if status:
+            if SHUTDOWN_REQUESTED:
+                return True
+            try:
+                _check_shutdown_requested()
+                _, initialize_result = initialize_new_profile_sb(new_profile_data)
+                if initialize_result == "NO_LINK":
+                    current_action = "No more links, waiting for signal"
+                    print(current_action)
+                    keep_alive(current_action=current_action)
+                    return "NO_LINKS"
+                elif initialize_result == "ACCOUNT_LOCKED":
+                    locked_acc_sb(new_profile_data)
+
+                if _:
+                    new_profile_logger(
+                        new_profile_data.get("email"),
+                        "SUCCESS",
+                        "PROCESSED SUCCESSFULLY",
+                    )
+                else:
+                    new_profile_logger(
+                        new_profile_data.get("email"), "FAIL", initialize_result
+                    )
+
+            except InterruptedError:
+                return True
+            if SHUTDOWN_REQUESTED:
+                return True
+        else:
+            print("No input emails in database...")
+            return True
