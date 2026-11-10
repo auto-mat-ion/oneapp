@@ -171,13 +171,7 @@ SUBSEQUENT_BATCHES = 2
 
 MAX_CONCURRENT_ACCOUNTS = 2
 
-SMTP_MAILER = {
-    # "164.132.106.191": "smtp1@affworker.com",
-    # "164.132.110.218": "smtp2@affworker.com",
-    # "54.39.109.62": "smtp3@affworker.com",
-    # "62.171.186.151": "smtp4@affworker.com",
-    # "57.129.184.183": "smtp5@affworker.com",
-}
+SMTP_MAILER = {}
 
 SAMPLE_RECIPIENT_EMAIL = (
     [SMTP_MAILER.get(SERVER_IP)] if SMTP_MAILER.get(SERVER_IP) else []
@@ -209,14 +203,12 @@ elif SERVER_IP in ["162.19.26.217"]:
         "mitestingacc.04@gmail.com",
     ]
 
-elif SERVER_IP in ["164.132.110.218"]:
+elif SERVER_IP in ["91.134.90.41"]:
     SAMPLE_RECIPIENT_EMAIL += ["stacho1988@gmail.com", "dover.miranach@gmail.com"]
 
 elif SERVER_IP in ["146.59.196.225"]:
     SAMPLE_RECIPIENT_EMAIL += ["aidanmotthews986@gmail.com", "bradley.konsa@gmail.com"]
 
-# else:
-#     SAMPLE_RECIPIENT_EMAIL = []
 
 NEW_TEST = [
     "164.132.106.191",
@@ -684,7 +676,7 @@ def log(msg: str):
         _append_to_file(LOG_FILE, file_line)
 
 
-def load_cache() -> bool:
+def load_cache_apii() -> bool:
     def _load_once():
         log(f"Loading cache")
         conn = None
@@ -723,9 +715,9 @@ def load_cache() -> bool:
     return False
 
 
-def load_cache2() -> bool:
+def load_cache() -> bool:
     def _load_once():
-        log(f"Loading cache from {_get_cache_bins_table()} table...")
+        log(f"Loading cache from cache_bins table...")
         conn = None
         cursor = None
         try:
@@ -734,7 +726,7 @@ def load_cache2() -> bool:
                 raise RuntimeError("unable to connect to database for cache")
 
             cursor = conn.cursor()
-            cursor.execute(f"SELECT cache_bin_file FROM {_get_cache_bins_table()}")
+            cursor.execute(f"SELECT cache_bin_file FROM cache_bins")
             results = cursor.fetchall()
 
             combined_data = {
@@ -2988,52 +2980,6 @@ def _main_batches(
     content = ContentManager(content_part)
     run_state["content"] = content
 
-    if SERVER_IP == "164.132.110.218":
-        content.subjects = [
-            "There’s more to know about me than meets the eye, so feel free to {stop by | drop in | have a look} at my profile.",
-            "Sometimes a simple hello can lead to something wonderful. Why not {take a chance | say hello | start here}?",
-            "I enjoy discovering new personalities, sharing laughs, and making connections. Perhaps we could {get acquainted | exchange a few words | start chatting}.",
-            "My profile is a little window into who I am. Come {take a closer look | get a glimpse | see what you discover}.",
-            "Great conversations often begin unexpectedly. I’d be delighted if you {stopped by | reached out | dropped me a message}.",
-            "If making new acquaintances sounds appealing, you might find something interesting when you {visit | check out | browse} my profile.",
-            "I believe every person has a unique story. Perhaps yours and mine could make an interesting conversation.",
-            "A little curiosity can open the door to new possibilities. Feel free to {find me | explore my page | have a look around}.",
-            "I’m always fascinated by different personalities, fresh perspectives, and unexpected conversations.",
-            "Perhaps today is a good day to meet someone different. You can {start by visiting | begin with exploring | take a look at} my profile.",
-            "New faces and interesting minds are always welcome around here. Don't hesitate to {reach out | introduce yourself | get in touch}.",
-            "There’s nothing better than connecting with someone who knows how to keep a conversation interesting.",
-            "If you appreciate genuine people and spontaneous chats, we might have something to talk about.",
-            "Why let a good opportunity pass by? Come {check my page | discover my profile | get to know me}.",
-            "I’m always interested in crossing paths with people who bring positive energy and interesting ideas.",
-            "Every new connection starts somewhere. Maybe ours begins with a visit to my profile.",
-            "Have a little time to spare? Come {browse my page | get a glimpse of my world | see what I'm about}.",
-            "I enjoy meeting people who can turn an ordinary chat into an enjoyable experience.",
-            "You never know who you might meet or what you might discover. Take a moment to {visit my page | explore my profile | stop by}.",
-            "If you're in the mood for something fresh and interesting, perhaps we should {connect | exchange greetings | get to know each other}.",
-        ]
-        content.texts = [
-            "I’m looking for someone who values honesty, enjoys a good conversation, and appreciates the little things in life.",
-            "I enjoy meeting people who are open-minded, kind-hearted, and have a good sense of humor.",
-            "I’m interested in connecting with someone who is genuine, thoughtful, and enjoys sharing experiences.",
-            "I appreciate people who are curious, adventurous, and enjoy exploring new ideas and perspectives.",
-            "I’m {open | ready | happy} to seeing where a genuine conversation might take us when two people are interested in learning about each other.",
-            "I’m looking for someone who is respectful, kind, and enjoys meaningful conversations that can lead to a deeper connection.",
-            "I enjoy meeting people who are passionate about their interests, open to new experiences, and value good communication.",
-            "I’m interested in connecting with someone who is thoughtful, considerate, and enjoys sharing their thoughts and ideas.",
-            "I appreciate people who are authentic, sincere, and enjoy building a connection based on mutual respect and understanding.",
-        ]
-        content.links = ["alicias-ruby.findhotlady.info"]
-        content.hyperlinks = [
-            "Uncover My Hidden Charms",
-            "Explore My World of Fun",
-            "Step Into My Secret Life",
-            "Unveil My Mysterious Side",
-            "Discover My Hidden Desires",
-            "Explore My Playful World",
-            "Uncover My Secret Passions",
-            "Step Into My Enchanting World",
-            "Discover My Hidden Charms",
-        ]
     if not content.is_valid():
         log("✗ Missing content (need subjects, texts, links). Exiting.")
         return
@@ -3344,6 +3290,6 @@ def run_smtp_bot(app_choice: int = 1):
         time.sleep(5)
 
 
-log("Load cache start")
-load_cache()
-log("Load cache end")
+# log("Load cache start")
+# load_cache()
+# log("Load cache end")
