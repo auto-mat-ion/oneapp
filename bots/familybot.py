@@ -8188,6 +8188,19 @@ def regroup_for_reauthentication(driver, new_profile_data):
         element_retries = 5
         while element_retries > 0:
             try:
+                driver.refresh()
+            except:
+                pass
+        _check_shutdown_requested()
+    except:
+        pass
+
+
+def regroup_for_reauthentication_old(driver, new_profile_data):
+    try:
+        element_retries = 5
+        while element_retries > 0:
+            try:
                 if PREFERRED_SMS_COUNTRY.lower() == "italy":
                     driver.get("https://www.microsoft.com/it-it/microsoft-365/try")
                     time.sleep(3)
@@ -8781,7 +8794,8 @@ def get__premium_italy(driver, new_profile_data):
                         f"{email_address} : Card not authorised. Retrying card auth. retries left: {retries}"
                     )
                     retries -= 1
-                    regroup_for_reauthentication(driver, new_profile_data)
+                    driver.refresh()
+                    # regroup_for_reauthentication(driver, new_profile_data)
 
                 else:
                     card_success = True
@@ -8794,7 +8808,8 @@ def get__premium_italy(driver, new_profile_data):
                 print(
                     f"{email_address} : Card not authorised.Retrying card auth. retries left: {retries}"
                 )
-                regroup_for_reauthentication(driver, new_profile_data)
+                # regroup_for_reauthentication(driver, new_profile_data)
+                driver.refresh()
                 retries -= 1
 
         if not card_success:
