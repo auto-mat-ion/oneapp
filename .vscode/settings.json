@@ -1,3 +1,7 @@
 {
-  "python-envs.defaultEnvManager": "ms-python.python:venv"
+  "python-envs.defaultEnvManager": "ms-python.python:venv",
+  "workbench.editorAssociations": {
+    "file:/C:/Users/USER/Downloads/redist 10-11.csv": "default",
+    "file:/c:/Users/USER/Desktop/serious/freelance/oneapp/to_redo_cache.csv": "default"
+  }
 }

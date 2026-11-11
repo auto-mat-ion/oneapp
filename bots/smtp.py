@@ -1362,9 +1362,10 @@ class RecipientManager:
 
 
 class AccountManager:
-    def __init__(self, part: int):
+    def __init__(self, part: int, batch_num: Optional[int] = None):
         self.part = part
         self.accounts: List[Dict] = []
+        self.batch_number = batch_num
         self._load()
 
     def _load(self):
@@ -1380,9 +1381,9 @@ class AccountManager:
                     "WHERE server_ip = %s AND COALESCE(country, '') = %s "
                 )
                 params = [SERVER_IP, COUNTRY]
-                if BATCH_NUMBER:
-                    query += " AND batch = %s "
-                    params.append(f"batch_{BATCH_NUMBER}")
+                # if BATCH_NUMBER:
+                #     query += " AND batch = %s "
+                #     params.append(f"batch_{BATCH_NUMBER}")
                 query += " LIMIT 2000 OFFSET 0"
                 cursor.execute(query, params)
                 rows = cursor.fetchall()
@@ -1409,10 +1410,11 @@ class AccountManager:
                             "creation_date": "",
                         }
                     )
-                # if self.part in {1, 2, 3}:
-                #     start = len(accounts) * (self.part - 1) // 3
-                #     end = len(accounts) * self.part // 3
-                #     accounts = accounts[start:end]
+                if self.batch_number in {1, 2, 3}:
+                    accounts = accounts[: round(len(accounts) / 2)]
+                elif self.batch_number in {4, 5, 6}:
+                    accounts = accounts[round(len(accounts) / 2) :]
+
                 self.accounts = accounts
                 log(f"Accounts: {len(self.accounts)}")
             except Exception as exc:
@@ -2968,8 +2970,15 @@ def _main_batches(
     log(f"PART: {part} | EMAIL_ROUNDS: {EMAIL_ROUNDS}")
 
     log("Loading senders. Please wait...")
-
-    accounts = AccountManager(part)
+    if SERVER_IP in OLD_SENDERS_SERVERS:
+        if batch_number < 7:
+            accounts = AccountManager(part, batch_number)
+            log(f"Loading accounts for batch {batch_number}.")
+        else:
+            log("✗ Not running batch 7. Exiting.")
+            return
+    else:
+        accounts = AccountManager(part)
     run_state["accounts"] = accounts
     if not accounts.accounts:
         log("✗ No accounts. Exiting.")
@@ -3240,36 +3249,22 @@ def run_smtp_bot(app_choice: int = 1):
                         except Exception:
                             batch_number = 1
 
-                if SERVER_IP in OLD_SENDERS_SERVERS and batch_number not in [
-                    2,
-                    "2",
-                    4,
-                    "4",
-                    6,
-                    "6",
-                ]:
-                    continue  # Skip processing if the server is in OLD_SENDERS_SERVERS and batch_number is not 2, 4, or 6
                 signal_time = data.get("signal_timestamp")
 
                 part = 1
                 if batch_number > 1:
                     batch_number = 1
                     part = 2
-                break
 
             scheduler_signal = get_due_smtp_schedule()
             if scheduler_signal.get("status"):
-                if (
-                    SERVER_IP in OLD_SENDERS_SERVERS
-                    and scheduler_signal.get("batch") in [2, "2", 4, "4", 6, "6"]
-                ) or SERVER_IP not in OLD_SENDERS_SERVERS:
-                    log(
-                        f"Scheduler signal found for batch {scheduler_signal.get('batch')}, but server is in OLD_SENDERS_SERVERS. Skipping."
-                    )
+                if SERVER_IP in OLD_SENDERS_SERVERS:
+                    batch_number = scheduler_signal.get("batch")
+                else:
                     batch_number = 1
-                    part = 1
-                    signal_time = scheduler_signal.get("signal_timestamp")
-                    break
+                part = 1
+                signal_time = scheduler_signal.get("signal_timestamp")
+                break
 
             time.sleep(30)
 
