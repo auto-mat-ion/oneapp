@@ -664,6 +664,16 @@ def delete_message(message_id: str):
         return False
 
 
+def clear_inbox(email_token):
+    try:
+        ok, messages = fetch_messages(email_token)
+        for message in messages:
+            message_id = message.get("id")
+            delete_message(message_id)
+    except:
+        return False
+
+
 def wait_for_code(email_token, timeout=360, poll_interval=3):
     deadline = time.time() + timeout
     while time.time() < deadline:
@@ -679,8 +689,8 @@ def wait_for_code(email_token, timeout=360, poll_interval=3):
                 match = re.search(r"\s*(\d{6})", plain)
                 if match:
                     try:
-                        if message_id:
-                            delete_message(message_id)
+                        # if message_id:
+                        #     delete_message(message_id)
                         return True, match.group(1)
                     except:
                         pass
@@ -4650,6 +4660,7 @@ def change_acc_pass(driver, new_profile_data):
 
             click_send_code_to_recovery_email_button(driver)
             _check_shutdown_requested()
+            clear_inbox(email_token)
             enter_recovery_email_2(driver, recovery)
             # _check_shutdown_requested()
             click_password_next_button(driver)
@@ -4719,6 +4730,7 @@ def re_login_existing_acc(driver, new_profile_data):
         ) or enter_email_and_click_next(driver, email):
             click_personal_account_button(driver)
             click_send_code_to_recovery_email_button(driver)
+            clear_inbox(email_token)
             enter_recovery_email_2(driver, recovery)
             click_password_next_button(driver)
             if email_login_limit_reached(driver):
@@ -4790,6 +4802,7 @@ def re_login_existing_acc_mod(driver, new_profile_data):
             #     return True
 
             click_send_code_to_recovery_email_button(driver)
+            clear_inbox(email_token)
             enter_recovery_email_2(driver, recovery)
             click_password_next_button(driver)
             status, code = wait_for_code(email_token)
@@ -4823,8 +4836,8 @@ def logout_then_re_login_existing_acc(driver, new_profile_data):
         click_next_button(driver)
 
         click_send_code_to_recovery_email_button(driver)
+        clear_inbox(email_token)
         enter_recovery_email_2(driver, recovery)
-
         click_password_next_button(driver)
         status, code = wait_for_code(email_token)
         if not status:
@@ -4913,6 +4926,7 @@ def logout_then_re_login_existing_acc___(driver, new_profile_data):
         enter_email(driver, email)
         click_next_button(driver)
         click_send_code_to_recovery_email_button(driver)
+        clear_inbox(email_token)
         enter_recovery_email_2(driver, recovery)
         click_next_button(driver)
         click_password_next_button(driver)
@@ -10095,6 +10109,7 @@ def initialize(new_profile_data):
 
             else:
                 print(f"{email_address}: got email from temp-mail. Verifying..")
+                clear_inbox(email_token)
                 if enter_email(driver=driver, email_address=temp_email, timeout=3):
                     time.sleep(0.5)
                     bring_to_front(driver)
@@ -10249,6 +10264,7 @@ def initialize(new_profile_data):
 
                 else:
                     print(f"{email_address}: got email from temp-mail. Verifying..")
+                    clear_inbox(email_token)
                     if enter_email(driver=driver, email_address=temp_email):
                         time.sleep(0.5)
                         bring_to_front(driver)
