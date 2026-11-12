@@ -37,7 +37,13 @@ SMTP_VERSION = "v1.0.9"
 
 # APP2_SERVERS = ["162.19.229.114", "57.129.184.183"]
 APP2_SERVERS = []
-OLD_SENDERS_SERVERS = ["91.134.90.41"]
+OLD_SENDERS_SERVERS = [
+    "91.134.90.41",
+    "164.132.193.238",
+    "51.178.81.140",
+    "54.39.109.144",
+    "62.171.164.20",
+]
 
 SETTINGS_PATH = Path(__file__).resolve().parent / "settings.json"
 SENDER_LOG_DIR = Path(__file__).resolve().parent.parent / "sender_logs"
@@ -171,7 +177,16 @@ SUBSEQUENT_BATCHES = 2
 
 MAX_CONCURRENT_ACCOUNTS = 2
 
-SMTP_MAILER = {}
+SMTP_MAILER = {
+    "91.134.90.41": [],
+    "164.132.193.238": [],
+    "51.178.81.140": [
+        "mitestingacc.03@gmail.com",
+        "stacash.affiliate@gmail.com",
+    ],
+    "54.39.109.144": [],
+    "62.171.164.20": ["mitestingacc.05@gmail.com", "andrewsetup17@gmail.com"],
+}
 
 SAMPLE_RECIPIENT_EMAIL = (
     [SMTP_MAILER.get(SERVER_IP)] if SMTP_MAILER.get(SERVER_IP) else []
@@ -185,14 +200,14 @@ if SERVER_IP in ["51.91.59.107"]:
 elif SERVER_IP in ["162.19.229.114"]:
     SAMPLE_RECIPIENT_EMAIL += ["mitestingacc.02@gmail.com", "wrochna1988@gmail.com"]
 
-elif SERVER_IP in ["51.178.81.140"]:
-    SAMPLE_RECIPIENT_EMAIL += [
-        "mitestingacc.03@gmail.com",
-        "stacash.affiliate@gmail.com",
-    ]
+# elif SERVER_IP in ["51.178.81.140"]:
+#     SAMPLE_RECIPIENT_EMAIL += [
+#         "mitestingacc.03@gmail.com",
+#         "stacash.affiliate@gmail.com",
+#     ]
 
-elif SERVER_IP in ["164.132.105.244"]:
-    SAMPLE_RECIPIENT_EMAIL += ["andrewsetup17@gmail.com"]
+# elif SERVER_IP in ["164.132.105.244"]:
+#     SAMPLE_RECIPIENT_EMAIL += ["andrewsetup17@gmail.com"]
 
 elif SERVER_IP in ["51.161.34.220"]:
     SAMPLE_RECIPIENT_EMAIL += ["durwoodstacks100@gmail.com"]
@@ -673,7 +688,10 @@ def log(msg: str):
     file_line = f"[{full_ts}] {msg}"
     with _log_lock:
         print(console_line)
-        _append_to_file(LOG_FILE, file_line)
+        try:
+            _append_to_file(LOG_FILE, file_line)
+        except:
+            pass
 
 
 def load_cache_apii() -> bool:
