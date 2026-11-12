@@ -33,7 +33,7 @@ except ImportError:  # fallback if SQLAlchemy is unavailable
 import pandas as pd
 import subprocess
 
-SMTP_VERSION = "v1.0.9"
+SMTP_VERSION = "v1.0.10"
 
 # APP2_SERVERS = ["162.19.229.114", "57.129.184.183"]
 APP2_SERVERS = []
@@ -82,10 +82,6 @@ BOT_TYPE = "email_sender"
 BATCH_NUMBER: Optional[str] = None
 SENDER_APP = 1
 SAMPLE_RECIPIENT = 1
-
-TEST_2_S = [
-    "57.129.184.183",
-]
 
 
 def update():
