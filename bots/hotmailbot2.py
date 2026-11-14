@@ -6393,6 +6393,7 @@ def remove_from_family_page_sb(driver, new_profile_data):
         OPTION_ELEMET = 'button[data-bi-id="other-member-menu-button"]'
         YOUR_OPTION_ELEMET = 'button[data-bi-id="organizer-self-menu-button"]'
         REMOVE_BTN = 'button[aria-label="Remove from family group"]'
+        REMOVE2_BTN = 'button[aria-label="Leave family group"]'
         CONFIM_REMOVE = 'button[data-bi-id="remove-member-submit"]'
         REMOVE_DIALOG = 'div[id*="ModalFocusTrapZone"]'
 
@@ -6409,15 +6410,20 @@ def remove_from_family_page_sb(driver, new_profile_data):
             except:
                 print(f"{email_address} : No members found that need start sharing")
                 return True
-        total_members_buttons = (
-            [i for i in total_start_sharing_buttons]
-            if len(total_start_sharing_buttons) > 5
-            else total_start_sharing_buttons
+        # total_members_buttons = (
+        #     [i for i in total_start_sharing_buttons]
+        #     if len(total_start_sharing_buttons) > 5
+        #     else total_start_sharing_buttons
+        # )
+        print(
+            f"{email_address} : Found {len(total_start_sharing_buttons)} members that need removal"
         )
-        print(f"{email_address} : Found members that need removal")
         time.sleep(13)
-        for i in range(len(total_members_buttons) + 1):
+        for i in range(len(total_start_sharing_buttons) + 1):
             try:
+                print(
+                    f"{email_address} : Removing member {i + 1} of {len(total_start_sharing_buttons)}"
+                )
                 try:
                     all_options_buttons = driver.wait_for_element_visible(
                         OPTION_ELEMET, timeout=wait_time
@@ -6474,7 +6480,8 @@ def remove_from_family_page_sb(driver, new_profile_data):
                 time.sleep(15)
                 pass
 
-            ###############
+        ###############
+        print(f"{email_address} : Removing self from family page")
         try:
             all_options_buttons = driver.wait_for_element_visible(
                 YOUR_OPTION_ELEMET, timeout=wait_time
@@ -6490,7 +6497,7 @@ def remove_from_family_page_sb(driver, new_profile_data):
         time.sleep(2)
         try:
             remove_from_family_button = driver.wait_for_element_visible(
-                REMOVE_BTN, timeout=wait_time
+                REMOVE2_BTN, timeout=wait_time
             )
             time.sleep(1)
             remove_from_family_button.click()
