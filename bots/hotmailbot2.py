@@ -702,12 +702,12 @@ def keep_alive(retries=5, delay=3, current_action=None):
     return False
 
 
-def connect_new_random():
+def connect_new_random(vpn_country="poland"):
     global VPN_CONNECTION_STATUS, VPN_CONNECTION_WATCHDOG, VPN_CONNECTION_WATCHDOG_STOP
 
     try:
         # vpn_country = PREFERRED_SMS_COUNTRY.lower()
-        vpn_country = "netherlands"
+        # vpn_country = "poland"
         if vpn_country == "poland2":
             vpn_country = "poland"
 
@@ -6382,6 +6382,30 @@ def click_next_if_is_updating_terms_page_sb(driver):
         return False
 
 
+def cancel_subscription_m365(driver):
+    try:
+        driver.get(
+            "https://account.microsoft.com/services/microsoft365/cancel?cancelType=CancelImmediately&fref=billing-cancel"
+        )
+        CANCEL_BUTTON_ELEMENT = 'button[aria-label="Cancel subscription"]'
+        driver.wait_for_element_visible(CANCEL_BUTTON_ELEMENT, timeout=wait_time)
+        time.sleep(1)
+        driver.click(CANCEL_BUTTON_ELEMENT)
+        time.sleep(3)
+        retries = 0
+        while retries < 5:
+            if "you cancelled your microsoft 365 family subscription" in [
+                i.text.lower() for i in driver.find_elements("h1")
+            ]:
+                return True
+            retries += 1
+            time.sleep(2)
+
+        return False
+    except:
+        return False
+
+
 def close_other_tabs(driver):
     """
     Closes all other tabs
@@ -7153,7 +7177,9 @@ def initialize_new_profile_sb(new_profile_data):
     try:
         _check_shutdown_requested()
         print("\n")
-        connect_new_random()
+        vpn_country = new_profile_data.get("country")
+
+        connect_new_random(vpn_country)
         time.sleep(0.5)
         _check_shutdown_requested()
         email_address = new_profile_data.get("email")
@@ -7165,11 +7191,6 @@ def initialize_new_profile_sb(new_profile_data):
             print(
                 f"{email_address}: Error getting email token for recovery email: {email_token}"
             )
-            # new_profile_logger(
-            #     email_address,
-            #     "FAIL",
-            #     "Error getting email token for recovery email",
-            # )
             return False, "Error getting email token for recovery email"
         print(f"{email_address}: Got email token for recovery email")
         new_profile_data["email_token"] = email_token
@@ -7311,21 +7332,33 @@ def initialize_new_profile_sb(new_profile_data):
             recovery_phone_number=recovery_phone_number,
             joined_microsoft_premium=joined_microsoft_premium,
         )
-        _check_shutdown_requested()
-        status, error = change_acc_pass_sb(driver, new_profile_data)
-        _check_shutdown_requested()
-        if status:
-            print(f"{email_address}: Password changed successfully. New pass: {error}")
-            update_accounts_data(email=email_address, password=error)
-            new_profile_data["pass"] = error
-        else:
-            print(f"{email_address}: Error changing password: {error}")
+        # _check_shutdown_requested()
+        # status, error = change_acc_pass_sb(driver, new_profile_data)
+        # _check_shutdown_requested()
+        # if status:
+        #     print(f"{email_address}: Password changed successfully. New pass: {error}")
+        #     update_accounts_data(email=email_address, password=error)
+        #     new_profile_data["pass"] = error
+        # else:
+        #     print(f"{email_address}: Error changing password: {error}")
+        #     # new_profile_logger(
+        #     email_address,
+        #     "FAIL",
+        #     f"Error changing password: {error}",
+        # )
+        # return False, f"Error changing password: {error}"
+        status = cancel_subscription_m365(driver)
+        if not status:
+            print(f"{email_address}: Error cancelling subscription")
             # new_profile_logger(
             #     email_address,
             #     "FAIL",
-            #     f"Error changing password: {error}",
+            #     "Error cancelling subscription",
             # )
-            return False, f"Error changing password: {error}"
+            # return False, "Error cancelling subscription"
+        else:
+            print(f"{email_address}: Successfully cancelled subscription")
+
         print(f"{email_address}: Joining microsoft premium")
         driver.refresh()
         _check_shutdown_requested()
