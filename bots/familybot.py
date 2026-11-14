@@ -1750,11 +1750,6 @@ def remove_from_family_page(driver, new_profile_data):
                 element = WebDriverWait(driver, wait_time).until(
                     EC.element_to_be_clickable(OPTION_ELEMET)
                 )
-                # time.sleep(1)
-
-                # driver.execute_script(
-                #     "arguments[0].scrollIntoView({block:'center'});", element
-                # )
 
                 time.sleep(1)
                 element.click()
