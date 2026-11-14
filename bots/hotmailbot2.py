@@ -6382,8 +6382,158 @@ def click_next_if_is_updating_terms_page_sb(driver):
         return False
 
 
-def cancel_subscription_m365(driver, email_address):
+def remove_from_family_page_sb(driver, new_profile_data):
+    """
+    Removes members from the family page
+    """
     try:
+        email_address = new_profile_data.get("email")
+        print(f"{email_address} : Removing members from family page")
+        driver.get("https://account.microsoft.com/family/home")
+        OPTION_ELEMET = 'button[data-bi-id="other-member-menu-button"]'
+        YOUR_OPTION_ELEMET = 'button[data-bi-id="organizer-self-menu-button"]'
+        REMOVE_BTN = 'button[aria-label="Remove from family group"]'
+        CONFIM_REMOVE = 'button[data-bi-id="remove-member-submit"]'
+        REMOVE_DIALOG = 'div[id*="ModalFocusTrapZone"]'
+
+        try:
+            total_start_sharing_buttons = driver.wait_for_elements_visible(
+                OPTION_ELEMET, timeout=wait_time
+            )
+            time.sleep(1)
+            total_start_sharing_buttons = driver.find_elements(OPTION_ELEMET)
+
+        except:
+            try:
+                total_start_sharing_buttons = driver.find_elements(OPTION_ELEMET)
+            except:
+                print(f"{email_address} : No members found that need start sharing")
+                return True
+        total_members_buttons = (
+            [i for i in total_start_sharing_buttons]
+            if len(total_start_sharing_buttons) > 5
+            else total_start_sharing_buttons
+        )
+        print(f"{email_address} : Found members that need removal")
+        time.sleep(13)
+        for i in range(len(total_members_buttons) + 1):
+            try:
+                try:
+                    all_options_buttons = driver.wait_for_element_visible(
+                        OPTION_ELEMET, timeout=wait_time
+                    )
+
+                except:
+                    break
+
+                time.sleep(1)
+                element = driver.wait_for_element_visible(
+                    OPTION_ELEMET, timeout=wait_time
+                )
+
+                time.sleep(1)
+                driver.click(OPTION_ELEMET)
+                time.sleep(2)
+                try:
+                    remove_from_family_button = driver.wait_for_element_visible(
+                        REMOVE_BTN, timeout=wait_time
+                    )
+                    time.sleep(1)
+                    remove_from_family_button.click()
+                    time.sleep(2)
+                except:
+                    pass
+
+                confirm_remove_button = driver.wait_for_element_visible(
+                    CONFIM_REMOVE, timeout=wait_time
+                )
+                time.sleep(1.5)
+                confirm_remove_button.click()
+                time.sleep(1.5)
+
+                retries = 0
+                while retries < 5:
+                    try:
+                        remove_dialog = driver.wait_for_element_visible(
+                            REMOVE_DIALOG, timeout=3
+                        )
+                        time.sleep(1)
+                        if remove_dialog.is_displayed():
+                            time.sleep(2)
+                        else:
+                            break
+                    except:
+                        break
+                    retries += 1
+                time.sleep(4)
+            except:
+                print(
+                    f"{email_address} : Error clicking close button, refreshing instead and trying again"
+                )
+                driver.refresh()
+                time.sleep(15)
+                pass
+
+            ###############
+        try:
+            all_options_buttons = driver.wait_for_element_visible(
+                YOUR_OPTION_ELEMET, timeout=wait_time
+            )
+        except:
+            pass
+
+        time.sleep(1)
+        element = driver.wait_for_element_visible(YOUR_OPTION_ELEMET, timeout=wait_time)
+
+        time.sleep(1)
+        driver.click(YOUR_OPTION_ELEMET)
+        time.sleep(2)
+        try:
+            remove_from_family_button = driver.wait_for_element_visible(
+                REMOVE_BTN, timeout=wait_time
+            )
+            time.sleep(1)
+            remove_from_family_button.click()
+            time.sleep(2)
+        except:
+            pass
+
+        confirm_remove_button = driver.wait_for_element_visible(
+            CONFIM_REMOVE, timeout=wait_time
+        )
+        time.sleep(1.5)
+        confirm_remove_button.click()
+        time.sleep(1.5)
+
+        retries = 0
+        while retries < 5:
+            try:
+                remove_dialog = driver.wait_for_element_visible(
+                    REMOVE_DIALOG, timeout=3
+                )
+                time.sleep(1)
+                if remove_dialog.is_displayed():
+                    time.sleep(2)
+                else:
+                    break
+            except:
+                break
+            retries += 1
+        time.sleep(4)
+
+        return True
+    except:
+        return False
+
+
+def cancel_subscription_m365(driver, new_profile_data):
+    try:
+        email_address = new_profile_data.get("email")
+        print(f"{email_address}: Removing family members")
+
+        remove_from_family_page_sb(driver, new_profile_data)
+        print(f"{email_address}:Removed members!")
+        print("Cancelling subscription.")
         driver.get(
             "https://account.microsoft.com/services/microsoft365/cancel?cancelType=CancelImmediately&fref=billing-cancel"
         )
@@ -7356,7 +7506,7 @@ def initialize_new_profile_sb(new_profile_data):
         #     f"Error changing password: {error}",
         # )
         # return False, f"Error changing password: {error}"
-        status = cancel_subscription_m365(driver, email_address)
+        status = cancel_subscription_m365(driver, new_profile_data)
         if not status:
             print(f"{email_address}: Error cancelling subscription")
             # new_profile_logger(
