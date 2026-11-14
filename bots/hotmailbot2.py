@@ -6389,17 +6389,18 @@ def cancel_subscription_m365(driver):
         )
         CANCEL_BUTTON_ELEMENT = 'button[aria-label="Cancel subscription"]'
         driver.wait_for_element_visible(CANCEL_BUTTON_ELEMENT, timeout=wait_time)
-        time.sleep(1)
-        driver.click(CANCEL_BUTTON_ELEMENT)
+        time.sleep(5)
+        driver.click(CANCEL_BUTTON_ELEMENT, scroll=True)
         time.sleep(3)
         retries = 0
         while retries < 5:
             if "you cancelled your microsoft 365 family subscription" in [
                 i.text.lower() for i in driver.find_elements("h1")
             ]:
+                time.sleep(3)
                 return True
             retries += 1
-            time.sleep(2)
+            time.sleep(3)
 
         return False
     except:
