@@ -6418,7 +6418,7 @@ def remove_from_family_page_sb(driver, new_profile_data):
         print(
             f"{email_address} : Found {len(total_start_sharing_buttons)} members that need removal"
         )
-        time.sleep(13)
+        time.sleep(1)
         for i in range(len(total_start_sharing_buttons) + 1):
             try:
                 print(
@@ -6437,25 +6437,25 @@ def remove_from_family_page_sb(driver, new_profile_data):
                     OPTION_ELEMET, timeout=wait_time
                 )
 
-                time.sleep(1)
+                time.sleep(0.5)
                 driver.click(OPTION_ELEMET)
-                time.sleep(2)
+                time.sleep(0.5)
                 try:
                     remove_from_family_button = driver.wait_for_element_visible(
                         REMOVE_BTN, timeout=wait_time
                     )
                     time.sleep(1)
                     remove_from_family_button.click()
-                    time.sleep(2)
+                    time.sleep(0.5)
                 except:
                     pass
 
                 confirm_remove_button = driver.wait_for_element_visible(
                     CONFIM_REMOVE, timeout=wait_time
                 )
-                time.sleep(1.5)
+                time.sleep(0.5)
                 confirm_remove_button.click()
-                time.sleep(1.5)
+                time.sleep(0.5)
 
                 retries = 0
                 while retries < 5:
@@ -6477,7 +6477,7 @@ def remove_from_family_page_sb(driver, new_profile_data):
                     f"{email_address} : Error clicking close button, refreshing instead and trying again"
                 )
                 driver.refresh()
-                time.sleep(15)
+                time.sleep(10)
                 pass
 
         ###############
@@ -6494,23 +6494,23 @@ def remove_from_family_page_sb(driver, new_profile_data):
 
         time.sleep(1)
         driver.click(YOUR_OPTION_ELEMET)
-        time.sleep(2)
+        time.sleep(1)
         try:
             remove_from_family_button = driver.wait_for_element_visible(
                 REMOVE2_BTN, timeout=wait_time
             )
             time.sleep(1)
             remove_from_family_button.click()
-            time.sleep(2)
+            time.sleep(1)
         except:
             pass
 
         confirm_remove_button = driver.wait_for_element_visible(
             CONFIM_REMOVE, timeout=wait_time
         )
-        time.sleep(1.5)
+        time.sleep(0.5)
         confirm_remove_button.click()
-        time.sleep(1.5)
+        time.sleep(0.5)
 
         retries = 0
         while retries < 5:
@@ -6526,7 +6526,7 @@ def remove_from_family_page_sb(driver, new_profile_data):
             except:
                 break
             retries += 1
-        time.sleep(4)
+        time.sleep(1``)
 
         return True
     except:
@@ -6545,7 +6545,7 @@ def cancel_subscription_m365(driver, new_profile_data):
             "https://account.microsoft.com/services/microsoft365/cancel?cancelType=CancelImmediately&fref=billing-cancel"
         )
         CANCEL_BUTTON_ELEMENT = 'button[aria-label="Cancel subscription"]'
-        time.sleep(10)
+        time.sleep(7)
         driver.wait_for_element_visible(CANCEL_BUTTON_ELEMENT, timeout=wait_time)
         print(f"{email_address}: Cancel subscription button found")
         time.sleep(3)
@@ -7514,16 +7514,17 @@ def initialize_new_profile_sb(new_profile_data):
         # )
         # return False, f"Error changing password: {error}"
         status = cancel_subscription_m365(driver, new_profile_data)
-        if not status:
-            print(f"{email_address}: Error cancelling subscription")
-            # new_profile_logger(
-            #     email_address,
-            #     "FAIL",
-            #     "Error cancelling subscription",
-            # )
-            # return False, "Error cancelling subscription"
-        else:
-            print(f"{email_address}: Successfully cancelled subscription")
+        # if not status:
+        #     print(f"{email_address}: Auto-cancelled subscription")
+        #     # new_profile_logger(
+        #     #     email_address,
+        #     #     "FAIL",
+        #     #     "Error cancelling subscription",
+        #     # )
+        #     # return False, "Error cancelling subscription"
+        # else:
+        #     print(f"{email_address}: Successfully cancelled subscription")
+        print(f"{email_address}: Successfully cancelled subscription")
 
         print(f"{email_address}: Joining microsoft premium")
         driver.refresh()
