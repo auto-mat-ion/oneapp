@@ -6526,7 +6526,7 @@ def remove_from_family_page_sb(driver, new_profile_data):
             except:
                 break
             retries += 1
-        time.sleep(1``)
+        time.sleep(1)
 
         return True
     except:
