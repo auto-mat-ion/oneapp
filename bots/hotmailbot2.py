@@ -6398,8 +6398,8 @@ def remove_from_family_page_sb(driver, new_profile_data):
         REMOVE_DIALOG = 'div[id*="ModalFocusTrapZone"]'
 
         try:
-            total_start_sharing_buttons = driver.wait_for_elements_visible(
-                OPTION_ELEMET, timeout=wait_time
+            total_start_sharing_buttons = driver.wait_for_element_visible(
+                OPTION_ELEMET, timeout=wait_time * 2
             )
             time.sleep(1)
             total_start_sharing_buttons = driver.find_elements(OPTION_ELEMET)
