@@ -34,7 +34,7 @@ import pandas as pd
 import subprocess
 
 SMTP_VERSION = "v1.0.10"
-# SERVER_IP = "62.171.164.20"
+# SERVER_IP = "51.77.195.218"
 # APP2_SERVERS = ["162.19.229.114", "57.129.184.183"]
 # SAMPLE_RECIPIENT_EMAIL
 APP2_SERVERS = []
@@ -43,7 +43,7 @@ OLD_SENDERS_SERVERS = [
     "164.132.193.238",
     "51.178.81.140",
     "54.39.109.144",
-    "62.171.164.20",
+    "51.77.195.218",
 ]
 
 SETTINGS_PATH = Path(__file__).resolve().parent / "settings.json"
@@ -183,7 +183,7 @@ SMTP_MAILER = {
         "stacash.affiliate@gmail.com",
     ],
     "54.39.109.144": [],
-    "62.171.164.20": ["bradley.konsa@gmail.com", "andrewsetup17@gmail.com"],
+    "51.77.195.218": ["bradley.konsa@gmail.com", "andrewsetup17@gmail.com"],
 }
 
 SAMPLE_RECIPIENT_EMAIL = (
