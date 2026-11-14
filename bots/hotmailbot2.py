@@ -7355,7 +7355,7 @@ def initialize_new_profile_sb(new_profile_data):
         #     f"Error changing password: {error}",
         # )
         # return False, f"Error changing password: {error}"
-        status = cancel_subscription_m365(driver)
+        status = cancel_subscription_m365(driver, email_address)
         if not status:
             print(f"{email_address}: Error cancelling subscription")
             # new_profile_logger(
@@ -7417,6 +7417,7 @@ def initialize_new_profile_sb(new_profile_data):
             return False, f"Error setting up SMTP: {error}"
     except Exception as E:
         try:
+            print(f"{email_address}: Exception occurred: {E}")
             return False, f"EXCEPTION_ERROR: {E}"
         except:
             pass
