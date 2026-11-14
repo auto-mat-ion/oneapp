@@ -6382,23 +6382,30 @@ def click_next_if_is_updating_terms_page_sb(driver):
         return False
 
 
-def cancel_subscription_m365(driver):
+def cancel_subscription_m365(driver, email_address):
     try:
         driver.get(
             "https://account.microsoft.com/services/microsoft365/cancel?cancelType=CancelImmediately&fref=billing-cancel"
         )
         CANCEL_BUTTON_ELEMENT = 'button[aria-label="Cancel subscription"]'
         driver.wait_for_element_visible(CANCEL_BUTTON_ELEMENT, timeout=wait_time)
-        time.sleep(5)
-        driver.click(CANCEL_BUTTON_ELEMENT, scroll=True)
+        print(f"{email_address}: Cancel subscription button found")
+        time.sleep(10)
+        print(f"{email_address}: Clicking cancel subscription button")
+        driver.click(CANCEL_BUTTON_ELEMENT)
+        print(f"{email_address}: Clicked cancel subscription button")
         time.sleep(3)
         retries = 0
         while retries < 5:
-            if "you cancelled your microsoft 365 family subscription" in [
-                i.text.lower() for i in driver.find_elements("h1")
-            ]:
-                time.sleep(3)
-                return True
+            try:
+                if "you cancelled your microsoft 365 family subscription" in [
+                    i.text.lower() for i in driver.find_elements("h1")
+                ]:
+                    print(f"{email_address}: Subscription cancelled successfully")
+                    time.sleep(3)
+                    return True
+            except:
+                pass
             retries += 1
             time.sleep(3)
 
