@@ -34,7 +34,6 @@ import pandas as pd
 import subprocess
 
 SMTP_VERSION = "v1.0.11"
-# SERVER_IP = "51.77.195.218"
 # APP2_SERVERS = ["162.19.229.114", "57.129.184.183"]
 # SAMPLE_RECIPIENT_EMAIL
 APP2_SERVERS = []
@@ -79,6 +78,7 @@ COUNTRY = str(_EMAIL_SENDER_SETTINGS.get("COUNTRY", "")).strip()
 
 APP_SETTINGS = _load_settings().get("app")
 SERVER_IP = get_server_ip()
+# SERVER_IP = "51.178.81.140"
 BOT_TYPE = "email_sender"
 BATCH_NUMBER: Optional[str] = None
 SENDER_APP = 1
@@ -187,7 +187,7 @@ SMTP_MAILER = {
 }
 
 SAMPLE_RECIPIENT_EMAIL = (
-    [SMTP_MAILER.get(SERVER_IP)] if SMTP_MAILER.get(SERVER_IP) else []
+    SMTP_MAILER.get(SERVER_IP) if SMTP_MAILER.get(SERVER_IP) else []
 )
 SAMPLE_RECIPIENT_EMAIL2 = []
 SAMPLE_RECIPIENT_EMAIL3 = []
@@ -1732,7 +1732,7 @@ def process_account_batch(
     subj: str,
     body: str,
 ) -> Dict:
-
+    global SAMPLE_RECIPIENT_EMAIL
     if _shutdown.is_set() or state.failed or not recipients.has_more():
         if _shutdown.is_set():
             # log("Shutdown initiated!")
@@ -1758,12 +1758,10 @@ def process_account_batch(
                 if mess_num == 0:
                     batch_size = 10
                     SAMPLE_RECIPIENT_EMAIL = SAMPLE_RECIPIENT_EMAIL1
-
                     label = "warmup-m1"
                 elif mess_num == 1:
                     batch_size = 10
                     SAMPLE_RECIPIENT_EMAIL = SAMPLE_RECIPIENT_EMAIL2
-
                     label = "warmup-m2"
                 else:
                     SAMPLE_RECIPIENT_EMAIL = SAMPLE_RECIPIENT_EMAIL3
@@ -3037,6 +3035,7 @@ def _main_batches(
 
     log("Loading recipients. Please wait...")
     recipients = RecipientManager(len(accounts.accounts))
+    # recipients = RecipientManager(200)
     run_state["recipients"] = recipients
     if not recipients.queue:
         log("✗ No recipients. Exiting.")
