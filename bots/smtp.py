@@ -198,7 +198,7 @@ if SERVER_IP in ["51.91.59.107"]:
     ]
 
 elif SERVER_IP in ["162.19.229.114"]:
-    SAMPLE_RECIPIENT_EMAIL += ["mitestingacc.02@gmail.com", "wrochna1988@gmail.com"]
+    SAMPLE_RECIPIENT_EMAIL += ["mitestingacc.02@gmail.com"]
 
 # elif SERVER_IP in ["51.178.81.140"]:
 #     SAMPLE_RECIPIENT_EMAIL += [
@@ -233,7 +233,7 @@ if SERVER_IP in ["51.178.81.140"]:
         "mitestingacc.04@gmail.com",
     ]
     SAMPLE_RECIPIENT_EMAIL3 += [
-        "aidanmotthews986@gmail.com",
+        "wrochna1988@gmail.com",
         "mitestingacc.05@gmail.com",
     ]
 
