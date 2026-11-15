@@ -1766,7 +1766,7 @@ def process_account_batch(
                 else:
                     SAMPLE_RECIPIENT_EMAIL = SAMPLE_RECIPIENT_EMAIL3
                     batch_size = 300
-                label = "warmup-m3"
+                    label = "warmup-m3"
             else:
                 if mess_num == 0:
                     batch_size = 0
@@ -1782,7 +1782,7 @@ def process_account_batch(
                     label = "warmup-m1"
                 else:
                     batch_size = random.randint(FIRST_BATCH_BCC_LOWER, FIRST_BATCH_BCC)
-                label = "warmup-m2"
+                    label = "warmup-m2"
             else:
                 if mess_num == 0:
                     batch_size = 1
