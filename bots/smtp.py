@@ -33,7 +33,7 @@ except ImportError:  # fallback if SQLAlchemy is unavailable
 import pandas as pd
 import subprocess
 
-SMTP_VERSION = "v1.0.11"
+SMTP_VERSION = "v1.1.0"
 # APP2_SERVERS = ["162.19.229.114", "57.129.184.183"]
 # SAMPLE_RECIPIENT_EMAIL
 APP2_SERVERS = []
@@ -1756,24 +1756,30 @@ def process_account_batch(
         if SERVER_IP in OLD_SENDERS_SERVERS:
             if state.batch_round == 0:
                 if mess_num == 0:
-                    batch_size = 10
+                    batch_size = 50
                     SAMPLE_RECIPIENT_EMAIL = SAMPLE_RECIPIENT_EMAIL1
                     label = "warmup-m1"
                 elif mess_num == 1:
-                    batch_size = 10
+                    batch_size = 50
                     SAMPLE_RECIPIENT_EMAIL = SAMPLE_RECIPIENT_EMAIL2
                     label = "warmup-m2"
                 else:
                     SAMPLE_RECIPIENT_EMAIL = SAMPLE_RECIPIENT_EMAIL3
-                    batch_size = 300
+                    batch_size = 50
                     label = "warmup-m3"
             else:
                 if mess_num == 0:
-                    batch_size = 0
+                    batch_size = 50
+                    SAMPLE_RECIPIENT_EMAIL = SAMPLE_RECIPIENT_EMAIL1
                     label = f"b{state.batch_round + 1}-m1"
+                elif mess_num == 1:
+                    batch_size = 50
+                    SAMPLE_RECIPIENT_EMAIL = SAMPLE_RECIPIENT_EMAIL2
+                    label = f"b{state.batch_round + 1}-m2"
                 else:
-                    batch_size = 0
-                    label = f"b{state.batch_round + 1}-m{mess_num + 1}"
+                    SAMPLE_RECIPIENT_EMAIL = SAMPLE_RECIPIENT_EMAIL3
+                    batch_size = 50
+                    label = f"b{state.batch_round + 1}-m3"
 
         else:
             if state.batch_round == 0:
@@ -2976,7 +2982,7 @@ def _main_batches(
     BATCH_NUMBER = str(batch_number)
     print(f"Selected batch: {BATCH_NUMBER}")
     if SERVER_IP in OLD_SENDERS_SERVERS:
-        SUBSEQUENT_BATCHES = 0
+        SUBSEQUENT_BATCHES = 5
     else:
         SUBSEQUENT_BATCHES = 5
     EMAIL_ROUNDS = 3
@@ -3009,7 +3015,7 @@ def _main_batches(
 
     log("Loading senders. Please wait...")
     if SERVER_IP in OLD_SENDERS_SERVERS:
-        if batch_number < 7:
+        if batch_number <= 7:
             accounts = AccountManager(part, batch_number)
             log(f"Loading accounts for batch {batch_number}.")
         else:
