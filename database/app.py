@@ -4897,8 +4897,8 @@ def load_familybot_return_preview(country):
         # name_country = country
         # if country == "cyprus":
         #     name_country = "united states"
-        country = "italy"
-        country = "cyprus"
+        # country = "italy"
+        # country = "cyprus"
 
         name_and_address_country = (
             "poland" if country.lower() == "poland2" else country.lower()
@@ -4906,7 +4906,7 @@ def load_familybot_return_preview(country):
         name_country = (
             "poland"
             if country.lower() == "poland2"
-            else "a"
+            else "%a%"
             if country.lower() == "cyprus"
             else country.lower()
         )
