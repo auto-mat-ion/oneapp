@@ -1756,29 +1756,29 @@ def process_account_batch(
         if SERVER_IP in OLD_SENDERS_SERVERS:
             if state.batch_round == 0:
                 if mess_num == 0:
-                    batch_size = 50
+                    batch_size = 10
                     SAMPLE_RECIPIENT_EMAIL = SAMPLE_RECIPIENT_EMAIL1
                     label = "warmup-m1"
                 elif mess_num == 1:
-                    batch_size = 50
+                    batch_size = 10
                     SAMPLE_RECIPIENT_EMAIL = SAMPLE_RECIPIENT_EMAIL2
                     label = "warmup-m2"
                 else:
                     SAMPLE_RECIPIENT_EMAIL = SAMPLE_RECIPIENT_EMAIL3
-                    batch_size = 50
+                    batch_size = 10
                     label = "warmup-m3"
             else:
                 if mess_num == 0:
-                    batch_size = 50
+                    batch_size = 10
                     SAMPLE_RECIPIENT_EMAIL = SAMPLE_RECIPIENT_EMAIL1
                     label = f"b{state.batch_round + 1}-m1"
                 elif mess_num == 1:
-                    batch_size = 50
+                    batch_size = 10
                     SAMPLE_RECIPIENT_EMAIL = SAMPLE_RECIPIENT_EMAIL2
                     label = f"b{state.batch_round + 1}-m2"
                 else:
                     SAMPLE_RECIPIENT_EMAIL = SAMPLE_RECIPIENT_EMAIL3
-                    batch_size = 50
+                    batch_size = 10
                     label = f"b{state.batch_round + 1}-m3"
 
         else:
