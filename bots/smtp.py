@@ -3330,3 +3330,11 @@ def run_smtp_bot(app_choice: int = 1):
             log(f"ERRORR WHEN RUNNING BATCH: {eee}")
         log("SMTP batch finished. Returning to signal wait loop.")
         time.sleep(5)
+
+
+main_batches(
+    batch_number=1,
+    app_choice=1,
+    signal_timestamp=datetime.now(UTC),
+    part=1,
+)
