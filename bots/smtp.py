@@ -3239,10 +3239,22 @@ def _main_batches(
                     batch_recipients_sent += max(0, int(result.get("sent", 0) or 0))
 
                     if result.get("failed") and not state.finalized:
-                        state.finalized = True
-                        accounts.mark_failed(state.account, result.get("error", ""))
-                        stats.update(state.account, False, state.sent)
-                        continue
+                        try:
+                            if result.get("error").startswith("THROTTLE_FAIL"):
+                                state.finalized = True
+                                stats.update(state.account, False, state.sent)
+                                pass
+                            else:
+                                state.finalized = True
+                                accounts.mark_failed(
+                                    state.account, result.get("error", "")
+                                )
+                                stats.update(state.account, False, state.sent)
+                                continue
+                        except:
+                            log(
+                                f"Error marking account {state.account} as failed: {result.get('error', '')}"
+                            )
 
                     if result.get("completed") and not state.finalized:
                         state.finalized = True
