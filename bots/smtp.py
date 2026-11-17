@@ -33,16 +33,59 @@ except ImportError:  # fallback if SQLAlchemy is unavailable
 import pandas as pd
 import subprocess
 
-SMTP_VERSION = "v1.1.0"
+SMTP_VERSION = "v1.1.2"
 # APP2_SERVERS = ["162.19.229.114", "57.129.184.183"]
 # SAMPLE_RECIPIENT_EMAIL
 APP2_SERVERS = []
 OLD_SENDERS_SERVERS = [
+    "51.178.81.140",
+    "57.129.184.182",
+    "57.129.184.183",
+    "57.129.184.181",
+    "57.129.184.185",
+    "57.129.184.184",
+    "54.39.109.65",
+    "54.39.109.66",
+    "54.39.109.63",
+    "54.39.109.68",
+    "162.19.229.114",
+    "158.69.197.228",
+    "137.74.115.164",
+    "193.70.87.230",
     "91.134.90.41",
     "164.132.193.238",
-    "51.178.81.140",
-    "54.39.109.144",
+    "51.38.71.212",
+    "164.132.197.54",
+    "164.132.197.59",
+    "51.91.59.107",
+    "79.137.75.57",
+    "51.91.56.36",
+    "193.70.86.209",
     "51.77.195.218",
+    "51.91.97.55",
+]
+
+OLD_MOTHER = [
+    "54.39.109.64",
+    "54.39.109.60",
+    "54.39.109.69",
+    "54.39.109.67",
+    "54.39.109.61",
+    "54.39.109.62",
+    "54.39.109.136",
+    "54.39.109.142",
+    "54.39.109.140",
+    "51.75.122.121",
+    "152.228.130.230",
+    "54.37.41.171",
+    "144.217.85.183",
+    "152.228.137.224",
+    "217.182.71.146",
+    "146.59.196.225",
+    "51.254.222.49",
+    "162.19.26.243",
+    "162.19.26.44",
+    "162.19.27.233",
 ]
 
 SETTINGS_PATH = Path(__file__).resolve().parent / "settings.json"
@@ -150,10 +193,10 @@ def _get_cache_bins_table() -> str:
     return "cache_bins2" if SERVER_IP in APP2_SERVERS else "cache_bins"
 
 
-FIRST_BATCH_BCC = 10
-FIRST_BATCH_BCC_LOWER = 9
-SUBSEQUENT_BATCH_BCC = 10
-SUBSEQUENT_BATCH_BCC_LOWER = 9
+FIRST_BATCH_BCC = 19
+FIRST_BATCH_BCC_LOWER = 19
+SUBSEQUENT_BATCH_BCC = 19
+SUBSEQUENT_BATCH_BCC_LOWER = 19
 MAX_CONCURRENT_BATCHES = int(_EMAIL_SENDER_SETTINGS.get("MAX_CONCURRENT_BATCHES", 1))
 
 BATCH_DELAY_MIN = float(_EMAIL_SENDER_SETTINGS.get("BATCH_DELAY_MIN", 1.0))
@@ -197,7 +240,7 @@ if SERVER_IP in ["51.91.59.107"]:
         "mitestingacc.01@gmail.com",
     ]
 
-elif SERVER_IP in ["162.19.229.114"]:
+elif SERVER_IP in ["162.19.27.76"]:
     SAMPLE_RECIPIENT_EMAIL += ["mitestingacc.02@gmail.com"]
 
 # elif SERVER_IP in ["51.178.81.140"]:
@@ -210,7 +253,7 @@ elif SERVER_IP in ["162.19.229.114"]:
 #     SAMPLE_RECIPIENT_EMAIL += ["andrewsetup17@gmail.com"]
 
 
-elif SERVER_IP in ["51.161.34.220"]:
+elif SERVER_IP in ["162.19.26.195"]:
     SAMPLE_RECIPIENT_EMAIL += ["durwoodstacks100@gmail.com"]
 
 # elif SERVER_IP in ["162.19.26.217"]:
@@ -219,11 +262,8 @@ elif SERVER_IP in ["51.161.34.220"]:
 #         "mitestingacc.04@gmail.com",
 #     ]
 
-elif SERVER_IP in ["91.134.90.41"]:
+elif SERVER_IP in ["144.217.85.183"]:
     SAMPLE_RECIPIENT_EMAIL += ["stacho1988@gmail.com", "dover.miranach@gmail.com"]
-
-# elif SERVER_IP in ["146.59.196.225"]:
-#     SAMPLE_RECIPIENT_EMAIL += ["aidanmotthews986@gmail.com", "bradley.konsa@gmail.com"]
 
 
 if SERVER_IP in ["51.178.81.140"]:
@@ -1213,17 +1253,22 @@ class RecipientManager:
         self._sent_count = 0
         self._total_loaded = 0
         self.account_count = max(0, account_count)
-        if SERVER_IP in OLD_SENDERS_SERVERS:
-            self.recipients_needed = round(self.account_count * 320)
-        else:
-            self.recipients_needed = round(
-                self.account_count
-                * (SUBSEQUENT_BATCHES + 1)
-                * sum([SUBSEQUENT_BATCH_BCC, SUBSEQUENT_BATCH_BCC_LOWER])
-                / len([SUBSEQUENT_BATCH_BCC, SUBSEQUENT_BATCH_BCC_LOWER])
-                * EMAIL_ROUNDS
-            )
-
+        # if SERVER_IP in OLD_SENDERS_SERVERS:
+        #     self.recipients_needed = round(self.account_count * 320)
+        # else:
+        #     self.recipients_needed = round(
+        #         self.account_count
+        #         * (SUBSEQUENT_BATCHES + 1)
+        #         * sum([SUBSEQUENT_BATCH_BCC, SUBSEQUENT_BATCH_BCC_LOWER])
+        #         / len([SUBSEQUENT_BATCH_BCC, SUBSEQUENT_BATCH_BCC_LOWER])
+        #         * EMAIL_ROUNDS
+        #     )
+        self.recipients_needed = round(
+            self.account_count
+            * (SUBSEQUENT_BATCHES + 1)
+            * SUBSEQUENT_BATCH_BCC_LOWER
+            * EMAIL_ROUNDS
+        )
         self._load()
 
     def _load(self):
@@ -1578,15 +1623,16 @@ def send_email(
         body = r.text[:300] if r.text else ""
 
         if r.status_code == 429:
-            for attempt in range(2):
+            for attempt in range(1):
                 try:
                     wait = min(
                         int(r.headers.get("Retry-After", str(5 * (attempt + 1)))), 60
                     )
-                    wait = 30
+                    wait = 0
                 except:
-                    wait = 30
-                log(f"    ⏳ throttled, wait {wait}s (retry {attempt + 1}/1)")
+                    wait = 0
+                log(f"    ⏳ throttled")
+                # log(f"    ⏳ throttled, wait {wait}s (retry {attempt + 1}/1)")
                 time.sleep(wait)
                 r = session.post(
                     f"{GRAPH_ENDPOINT}/users/{from_email}/sendMail",
@@ -1684,17 +1730,17 @@ def process_account_batch_looper(
     state: AccountState,
     recipients: "RecipientManager",
     content: "ContentManager",
+    accounts: AccountManager,
 ) -> Dict:
     total_sent = 0
-    h, link, subj, body = content.get()
+
     for mess_num in range(EMAIL_ROUNDS):
-        # process account 10 times if everything ok, keeping track of sent count and failed status. if failed, break and return the status, else continue to next iteration. if sent count is 0, break and return the status. if completed, break and return the status. if shutdown, break and return the status.
-        # The 10 rounds are not for fail mitigation. They ensure sending 10 times the batch size of emails per account, as per the EMAIL_ROUNDS constant. The loop should not exit early, but run all 10 rounds.
-        # Exit only in case of error, shutdown, or if the account has completed its sending quota.
+        h, link, subj, body = content.get()
         result = process_account_batch(
             state,
             recipients,
             content,
+            accounts,
             mess_num=mess_num,
             h=h,
             link=link,
@@ -1726,6 +1772,7 @@ def process_account_batch(
     state: AccountState,
     recipients: "RecipientManager",
     content: "ContentManager",
+    accounts: AccountManager,
     mess_num: int,
     h: str,
     link: str,
@@ -1756,29 +1803,29 @@ def process_account_batch(
         if SERVER_IP in OLD_SENDERS_SERVERS:
             if state.batch_round == 0:
                 if mess_num == 0:
-                    batch_size = 10
+                    batch_size = SUBSEQUENT_BATCH_BCC
                     SAMPLE_RECIPIENT_EMAIL = SAMPLE_RECIPIENT_EMAIL1
                     label = "warmup-m1"
                 elif mess_num == 1:
-                    batch_size = 10
+                    batch_size = SUBSEQUENT_BATCH_BCC
                     SAMPLE_RECIPIENT_EMAIL = SAMPLE_RECIPIENT_EMAIL2
                     label = "warmup-m2"
                 else:
                     SAMPLE_RECIPIENT_EMAIL = SAMPLE_RECIPIENT_EMAIL3
-                    batch_size = 10
+                    batch_size = SUBSEQUENT_BATCH_BCC
                     label = "warmup-m3"
             else:
                 if mess_num == 0:
-                    batch_size = 10
+                    batch_size = SUBSEQUENT_BATCH_BCC
                     SAMPLE_RECIPIENT_EMAIL = SAMPLE_RECIPIENT_EMAIL1
                     label = f"b{state.batch_round + 1}-m1"
                 elif mess_num == 1:
-                    batch_size = 10
+                    batch_size = SUBSEQUENT_BATCH_BCC
                     SAMPLE_RECIPIENT_EMAIL = SAMPLE_RECIPIENT_EMAIL2
                     label = f"b{state.batch_round + 1}-m2"
                 else:
                     SAMPLE_RECIPIENT_EMAIL = SAMPLE_RECIPIENT_EMAIL3
-                    batch_size = 10
+                    batch_size = SUBSEQUENT_BATCH_BCC
                     label = f"b{state.batch_round + 1}-m3"
 
         else:
@@ -2982,9 +3029,9 @@ def _main_batches(
     BATCH_NUMBER = str(batch_number)
     print(f"Selected batch: {BATCH_NUMBER}")
     if SERVER_IP in OLD_SENDERS_SERVERS:
-        SUBSEQUENT_BATCHES = 5
+        SUBSEQUENT_BATCHES = 10
     else:
-        SUBSEQUENT_BATCHES = 5
+        SUBSEQUENT_BATCHES = 10
     EMAIL_ROUNDS = 3
     time.sleep(5)
 
@@ -3014,15 +3061,17 @@ def _main_batches(
     log(f"PART: {part} | EMAIL_ROUNDS: {EMAIL_ROUNDS}")
 
     log("Loading senders. Please wait...")
-    if SERVER_IP in OLD_SENDERS_SERVERS:
-        if batch_number <= 7:
-            accounts = AccountManager(part, batch_number)
-            log(f"Loading accounts for batch {batch_number}.")
-        else:
-            log("✗ Not running batch 7. Exiting.")
-            return
-    else:
-        accounts = AccountManager(part)
+    # if SERVER_IP in OLD_SENDERS_SERVERS:
+    #     if batch_number <= 7:
+    #         accounts = AccountManager(part, batch_number)
+    #         log(f"Loading accounts for batch {batch_number}.")
+    #     else:
+    #         log("✗ Not running batch 7. Exiting.")
+    #         return
+    # else:
+    #     accounts = AccountManager(part)
+
+    accounts = AccountManager(part)
     run_state["accounts"] = accounts
     if not accounts.accounts:
         log("✗ No accounts. Exiting.")
@@ -3047,7 +3096,7 @@ def _main_batches(
         log("✗ No recipients. Exiting.")
         return
 
-    if SERVER_IP in OLD_SENDERS_SERVERS:
+    if SERVER_IP in OLD_SENDERS_SERVERS or SERVER_IP in OLD_MOTHER:
         if not load_cache():
             return
     else:
@@ -3141,7 +3190,11 @@ def _main_batches(
                     break
                 futures[
                     executor.submit(
-                        process_account_batch_looper, state, recipients, content
+                        process_account_batch_looper,
+                        state,
+                        recipients,
+                        content,
+                        accounts,
                     )
                 ] = state
             print(f"Submitted {len(futures)} accounts for processing.")
@@ -3332,9 +3385,10 @@ def run_smtp_bot(app_choice: int = 1):
         time.sleep(5)
 
 
-# main_batches(
-#     batch_number=1,
-#     app_choice=1,
-#     signal_timestamp=datetime.now(UTC),
-#     part=1,
-# )
+accounts.accounts.remove(account)
+
+
+remove_acc = [
+    a for a in accounts.accounts if a.get("email") == "hamerlxherrel7m5@outlook.com"
+]
+accounts.accounts.remove(remove_acc[0]) if remove_acc else None
