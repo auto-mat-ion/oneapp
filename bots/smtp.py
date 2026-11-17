@@ -240,7 +240,7 @@ if SERVER_IP in ["51.91.59.107"]:
         "mitestingacc.01@gmail.com",
     ]
 
-elif SERVER_IP in ["162.19.27.76"]:
+elif SERVER_IP in ["162.19.26.195"]:
     SAMPLE_RECIPIENT_EMAIL += ["mitestingacc.02@gmail.com"]
 
 # elif SERVER_IP in ["51.178.81.140"]:
