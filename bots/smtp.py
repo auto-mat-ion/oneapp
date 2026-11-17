@@ -193,10 +193,10 @@ def _get_cache_bins_table() -> str:
     return "cache_bins2" if SERVER_IP in APP2_SERVERS else "cache_bins"
 
 
-FIRST_BATCH_BCC = 19
-FIRST_BATCH_BCC_LOWER = 19
-SUBSEQUENT_BATCH_BCC = 19
-SUBSEQUENT_BATCH_BCC_LOWER = 19
+FIRST_BATCH_BCC = 9
+FIRST_BATCH_BCC_LOWER = 8
+SUBSEQUENT_BATCH_BCC = 9
+SUBSEQUENT_BATCH_BCC_LOWER = 8
 MAX_CONCURRENT_BATCHES = int(_EMAIL_SENDER_SETTINGS.get("MAX_CONCURRENT_BATCHES", 1))
 
 BATCH_DELAY_MIN = float(_EMAIL_SENDER_SETTINGS.get("BATCH_DELAY_MIN", 1.0))
@@ -3358,6 +3358,7 @@ def run_smtp_bot(app_choice: int = 1):
                 if batch_number > 1:
                     batch_number = 1
                     part = 2
+                break
 
             scheduler_signal = get_due_smtp_schedule()
             if scheduler_signal.get("status"):
