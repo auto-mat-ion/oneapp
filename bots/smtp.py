@@ -33,7 +33,7 @@ except ImportError:  # fallback if SQLAlchemy is unavailable
 import pandas as pd
 import subprocess
 
-SMTP_VERSION = "v1.3.0"
+SMTP_VERSION = "v1.4.0"
 # APP2_SERVERS = ["162.19.229.114", "57.129.184.183"]
 # SAMPLE_RECIPIENT_EMAIL
 APP2_SERVERS = []
