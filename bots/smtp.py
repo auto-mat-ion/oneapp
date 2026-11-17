@@ -33,7 +33,7 @@ except ImportError:  # fallback if SQLAlchemy is unavailable
 import pandas as pd
 import subprocess
 
-SMTP_VERSION = "v1.1.3"
+SMTP_VERSION = "v1.3.0"
 # APP2_SERVERS = ["162.19.229.114", "57.129.184.183"]
 # SAMPLE_RECIPIENT_EMAIL
 APP2_SERVERS = []
@@ -3059,7 +3059,11 @@ def _main_batches(
     log(f"        account_threads={MAX_CONCURRENT_ACCOUNTS}")
     log("=" * 55)
     log(f"PART: {part} | EMAIL_ROUNDS: {EMAIL_ROUNDS}")
-
+    _start_runtime_watchdog()
+    global _shutdown_watcher_started
+    if not _shutdown_watcher_started:
+        threading.Thread(target=_manual_shutdown_watcher, daemon=True).start()
+        _shutdown_watcher_started = True
     log("Loading senders. Please wait...")
     # if SERVER_IP in OLD_SENDERS_SERVERS:
     #     if batch_number <= 7:
@@ -3096,12 +3100,13 @@ def _main_batches(
         log("✗ No recipients. Exiting.")
         return
 
-    if SERVER_IP in OLD_SENDERS_SERVERS or SERVER_IP in OLD_MOTHER:
-        if not load_cache():
-            return
-    else:
-        if not load_cache_local(os.path.join(utils_dir, "cache.bin")):
-            return
+    # if SERVER_IP in OLD_SENDERS_SERVERS or SERVER_IP in OLD_MOTHER:
+    #     if not load_cache():
+    #         return
+    # else:
+    #     if not load_cache_local(os.path.join(utils_dir, "cache.bin")):
+    #         return
+    load_cache_local(os.path.join(utils_dir, "cache.bin"))
 
     print("Loaded cache successfully.")
 
@@ -3134,11 +3139,11 @@ def _main_batches(
 
     log("Run signal synced. Starting batch processing...")
 
-    _start_runtime_watchdog()
-    global _shutdown_watcher_started
-    if not _shutdown_watcher_started:
-        threading.Thread(target=_manual_shutdown_watcher, daemon=True).start()
-        _shutdown_watcher_started = True
+    # _start_runtime_watchdog()
+    # global _shutdown_watcher_started
+    # if not _shutdown_watcher_started:
+    #     threading.Thread(target=_manual_shutdown_watcher, daemon=True).start()
+    #     _shutdown_watcher_started = True
 
     stats = StatsTracker(total_acc, total_rcpt, accounts.accounts)
     run_state["stats"] = stats
