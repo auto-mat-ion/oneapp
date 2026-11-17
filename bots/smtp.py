@@ -3383,12 +3383,3 @@ def run_smtp_bot(app_choice: int = 1):
             log(f"ERRORR WHEN RUNNING BATCH: {eee}")
         log("SMTP batch finished. Returning to signal wait loop.")
         time.sleep(5)
-
-
-accounts.accounts.remove(account)
-
-
-remove_acc = [
-    a for a in accounts.accounts if a.get("email") == "hamerlxherrel7m5@outlook.com"
-]
-accounts.accounts.remove(remove_acc[0]) if remove_acc else None
