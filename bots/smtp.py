@@ -220,14 +220,22 @@ MAX_CONCURRENT_ACCOUNTS = 2
 
 
 SMTP_MAILER = {
-    "91.134.90.41": [],
-    "164.132.193.238": [],
     "51.178.81.140": [
-        "mitestingacc.03@gmail.com",
+        "wrochna1988@gmail.com",
+        "mitestingacc.01@gmail.com",
+    ],
+    "51.91.59.107": [
+        "mitestingacc.02@gmail.com",
         "stacash.affiliate@gmail.com",
     ],
-    "54.39.109.144": [],
-    "51.77.195.218": ["bradley.konsa@gmail.com", "andrewsetup17@gmail.com"],
+    "162.19.229.114": [
+        "marcusfrancis0227@gmail.com",
+        "mitestingacc.03@gmail.com",
+    ],
+    "54.39.109.69": ["mitestingacc.04@gmail.com", "andrewsetup17@gmail.com"],
+    "54.39.109.140": ["mitestingacc.05@gmail.com", "durwoodstacks100@gmail.com"],
+    "162.19.26.195": ["stacho1988@gmail.com", "dover.miranach@gmail.com"],
+    "144.217.85.183": ["bradley.konsa@gmail.com", "aidanmotthews986@gmail.com"],
 }
 
 SAMPLE_RECIPIENT_EMAIL = (
@@ -236,13 +244,13 @@ SAMPLE_RECIPIENT_EMAIL = (
 SAMPLE_RECIPIENT_EMAIL2 = []
 SAMPLE_RECIPIENT_EMAIL3 = []
 SAMPLE_RECIPIENT_EMAIL1 = []
-if SERVER_IP in ["51.91.59.107"]:
-    SAMPLE_RECIPIENT_EMAIL += [
-        "mitestingacc.01@gmail.com",
-    ]
+# if SERVER_IP in ["51.91.59.107"]:
+#     SAMPLE_RECIPIENT_EMAIL += [
+#         "mitestingacc.05@gmail.com",
+#     ]
 
-elif SERVER_IP in ["162.19.26.195"]:
-    SAMPLE_RECIPIENT_EMAIL += ["mitestingacc.02@gmail.com"]
+# elif SERVER_IP in ["162.19.26.195"]:
+#     SAMPLE_RECIPIENT_EMAIL += ["bradley.konsa@gmail.com"]
 
 # elif SERVER_IP in ["51.178.81.140"]:
 #     SAMPLE_RECIPIENT_EMAIL += [
@@ -254,8 +262,8 @@ elif SERVER_IP in ["162.19.26.195"]:
 #     SAMPLE_RECIPIENT_EMAIL += ["andrewsetup17@gmail.com"]
 
 
-elif SERVER_IP in ["162.19.26.195"]:
-    SAMPLE_RECIPIENT_EMAIL += ["durwoodstacks100@gmail.com"]
+# elif SERVER_IP in ["162.19.26.195"]:
+#     SAMPLE_RECIPIENT_EMAIL += []
 
 # elif SERVER_IP in ["162.19.26.217"]:
 #     SAMPLE_RECIPIENT_EMAIL += [
@@ -263,25 +271,19 @@ elif SERVER_IP in ["162.19.26.195"]:
 #         "mitestingacc.04@gmail.com",
 #     ]
 
-elif SERVER_IP in ["144.217.85.183"]:
-    SAMPLE_RECIPIENT_EMAIL += ["stacho1988@gmail.com", "dover.miranach@gmail.com"]
 
+# if SERVER_IP in ["51.178.81.140"]:
+#     SAMPLE_RECIPIENT_EMAIL1 = SAMPLE_RECIPIENT_EMAIL
+#     SAMPLE_RECIPIENT_EMAIL2 += [
+#         "marcusfrancis0227@gmail.com",
+#         "mitestingacc.04@gmail.com",
+#     ]
+# SAMPLE_RECIPIENT_EMAIL3 +=
 
-if SERVER_IP in ["51.178.81.140"]:
-    SAMPLE_RECIPIENT_EMAIL1 = SAMPLE_RECIPIENT_EMAIL
-    SAMPLE_RECIPIENT_EMAIL2 += [
-        "marcusfrancis0227@gmail.com",
-        "mitestingacc.04@gmail.com",
-    ]
-    SAMPLE_RECIPIENT_EMAIL3 += [
-        "wrochna1988@gmail.com",
-        "mitestingacc.05@gmail.com",
-    ]
-
-else:
-    SAMPLE_RECIPIENT_EMAIL1 = SAMPLE_RECIPIENT_EMAIL
-    SAMPLE_RECIPIENT_EMAIL2 = SAMPLE_RECIPIENT_EMAIL
-    SAMPLE_RECIPIENT_EMAIL3 = SAMPLE_RECIPIENT_EMAIL
+# else:
+SAMPLE_RECIPIENT_EMAIL1 = SAMPLE_RECIPIENT_EMAIL
+SAMPLE_RECIPIENT_EMAIL2 = SAMPLE_RECIPIENT_EMAIL
+SAMPLE_RECIPIENT_EMAIL3 = SAMPLE_RECIPIENT_EMAIL
 
 NEW_TEST = [
     "164.132.106.191",
