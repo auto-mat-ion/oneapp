@@ -223,19 +223,28 @@ SMTP_MAILER = {
     "51.178.81.140": [
         "wrochna1988@gmail.com",
         "mitestingacc.01@gmail.com",
-    ],
+    ],  # debian1
     "51.91.59.107": [
         "mitestingacc.02@gmail.com",
         "stacash.affiliate@gmail.com",
-    ],
+    ],  # smtp1
     "162.19.229.114": [
         "marcusfrancis0227@gmail.com",
         "mitestingacc.03@gmail.com",
-    ],
-    "54.39.109.69": ["mitestingacc.04@gmail.com", "andrewsetup17@gmail.com"],
-    "54.39.109.140": ["mitestingacc.05@gmail.com", "durwoodstacks100@gmail.com"],
-    "162.19.26.195": ["stacho1988@gmail.com", "dover.miranach@gmail.com"],
-    "144.217.85.183": ["bradley.konsa@gmail.com", "aidanmotthews986@gmail.com"],
+    ],  # hotmail4
+    "54.39.109.69": [
+        "mitestingacc.04@gmail.com",
+        "andrewsetup17@gmail.com",
+    ],  # debian13
+    "54.39.109.140": [
+        "mitestingacc.05@gmail.com",
+        "durwoodstacks100@gmail.com",
+    ],  # debian19
+    "54.39.109.60": ["stacho1988@gmail.com", "dover.miranach@gmail.com"],  # debian12
+    "144.217.85.183": [
+        "bradley.konsa@gmail.com",
+        "aidanmotthews986@gmail.com",
+    ],  # smtp35
 }
 
 SAMPLE_RECIPIENT_EMAIL = (
@@ -3114,9 +3123,9 @@ def _main_batches(
     BATCH_NUMBER = str(batch_number)
     print(f"Selected batch: {BATCH_NUMBER}")
     if SERVER_IP in OLD_SENDERS_SERVERS:
-        SUBSEQUENT_BATCHES = 15
+        SUBSEQUENT_BATCHES = 12
     else:
-        SUBSEQUENT_BATCHES = 15
+        SUBSEQUENT_BATCHES = 12
     EMAIL_ROUNDS = 1
     time.sleep(5)
 
