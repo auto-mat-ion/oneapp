@@ -99,6 +99,7 @@ STATS_FILE = SENDER_LOG_DIR / "stats.json"
 _deferred_sent_recipients: List[str] = []
 _deferred_account_updates: List[Tuple[str, datetime, str, str]] = []
 _deferred_failed_accounts: List[Tuple[str, str, str, str, str, str, datetime]] = []
+_deferred_throttled_senders: List[Tuple[str, str, str, str, str, str, datetime]] = []
 
 
 def _load_settings() -> dict:
@@ -859,6 +860,76 @@ def load_cache() -> bool:
     return False
 
 
+def load_cache2() -> bool:
+    def _load_once():
+        log(f"Loading cache from cache_bins table...")
+        conn = None
+        cursor = None
+        try:
+            conn = _get_db_connection()
+            if conn is None:
+                raise RuntimeError("unable to connect to database for cache")
+
+            cursor = conn.cursor()
+
+            cursor.execute(f"SELECT cache_bin_file FROM cache_bins2")
+            results = cursor.fetchall()
+
+            combined_data = {
+                "Account": {},
+                "IdToken": {},
+                "AccessToken": {},
+                "RefreshToken": {},
+                "AppMetadata": {},
+            }
+
+            for result in results:
+                if result and result[0]:
+                    temp_cache = msal.SerializableTokenCache()
+                    temp_cache.deserialize(result[0].decode("utf-8"))
+                    raw_data = json.loads(temp_cache.serialize())
+                    for category in combined_data.keys():
+                        if category in raw_data:
+                            combined_data[category].update(raw_data[category])
+
+            num_accounts = len(combined_data.get("Account", {}))
+            _shared_cache.deserialize(json.dumps(combined_data))
+
+            log(
+                f"Cache loaded from database: {len(results)} servers caches, {num_accounts} accounts"
+            )
+        except Exception as exc:
+            raise RuntimeError(f"cache load failed: {exc}") from exc
+        finally:
+            try:
+                if cursor is not None:
+                    cursor.close()
+            except Exception:
+                pass
+            try:
+                if conn is not None:
+                    conn.close()
+            except Exception:
+                pass
+
+    total_attempts = CACHE_LOAD_RETRIES + 1
+    for attempt in range(1, total_attempts + 1):
+        try:
+            _load_once()
+            return True
+        except Exception as exc:
+            log(f"Cache load attempt {attempt}/{total_attempts} failed: {exc}")
+            if attempt < total_attempts:
+                wait_seconds = random.randint(40, 120)
+                log(f"Retrying cache load in {wait_seconds} seconds.")
+                time.sleep(wait_seconds)
+
+    log(
+        f"Cache could not be loaded after {CACHE_LOAD_RETRIES} retries. Returning to signal loop."
+    )
+    return False
+
+
 def load_cache_local(cache_path: Optional[str] = None) -> bool:
     """Load an MSAL token cache from a local file into the shared cache."""
     global _shared_cache
@@ -1208,7 +1279,7 @@ class ContentManager:
         if SPINNER_TIME <= 0:
             return
 
-        now = datetime.now()
+        now = datetime.now(UTC)
         elapsed_seconds = (now - self._last_spinner_change).total_seconds()
         interval_seconds = SPINNER_TIME * 60
         if elapsed_seconds < interval_seconds:
@@ -1831,14 +1902,14 @@ def process_account_batch(
         else:
             if state.batch_round == 0:
                 if mess_num == 0:
-                    batch_size = 1
+                    batch_size = FIRST_BATCH_BCC
                     label = "warmup-m1"
                 else:
                     batch_size = random.randint(FIRST_BATCH_BCC_LOWER, FIRST_BATCH_BCC)
                     label = "warmup-m2"
             else:
                 if mess_num == 0:
-                    batch_size = 1
+                    batch_size = FIRST_BATCH_BCC
                     label = f"b{state.batch_round + 1}-m1"
                 else:
                     batch_size = random.randint(
@@ -2252,6 +2323,18 @@ class StatsTracker:
 def flush_db_operations():
     batch_size = 10000
     with _file_lock:
+        try:
+            if _deferred_throttled_senders:
+                throttled_emails = {sender[0] for sender in _deferred_throttled_senders}
+                _deferred_failed_accounts[:] = [
+                    account
+                    for account in _deferred_failed_accounts
+                    if account[0] not in throttled_emails
+                ]
+                _deferred_throttled_senders.clear()
+        except Exception as exc:
+            log(f"Error isolating throttled senders from flushing: {exc}")
+
         if not (
             _deferred_account_updates
             or _deferred_failed_accounts
@@ -3029,10 +3112,10 @@ def _main_batches(
     BATCH_NUMBER = str(batch_number)
     print(f"Selected batch: {BATCH_NUMBER}")
     if SERVER_IP in OLD_SENDERS_SERVERS:
-        SUBSEQUENT_BATCHES = 10
+        SUBSEQUENT_BATCHES = 15
     else:
-        SUBSEQUENT_BATCHES = 10
-    EMAIL_ROUNDS = 3
+        SUBSEQUENT_BATCHES = 15
+    EMAIL_ROUNDS = 1
     time.sleep(5)
 
     log("Current settings:")
@@ -3065,15 +3148,6 @@ def _main_batches(
         threading.Thread(target=_manual_shutdown_watcher, daemon=True).start()
         _shutdown_watcher_started = True
     log("Loading senders. Please wait...")
-    # if SERVER_IP in OLD_SENDERS_SERVERS:
-    #     if batch_number <= 7:
-    #         accounts = AccountManager(part, batch_number)
-    #         log(f"Loading accounts for batch {batch_number}.")
-    #     else:
-    #         log("✗ Not running batch 7. Exiting.")
-    #         return
-    # else:
-    #     accounts = AccountManager(part)
 
     accounts = AccountManager(part)
     run_state["accounts"] = accounts
@@ -3085,7 +3159,7 @@ def _main_batches(
     content_part = SERVER_IP if SERVER_IP in NEW_TEST else part
     content = ContentManager(content_part)
     run_state["content"] = content
-    if SERVER_IP in OLD_SENDERS_SERVERS:
+    if SERVER_IP in OLD_MOTHER:
         content.links = ["meetsingles.info"]
 
     if not content.is_valid():
@@ -3094,25 +3168,18 @@ def _main_batches(
 
     log("Loading recipients. Please wait...")
     recipients = RecipientManager(len(accounts.accounts))
-    # recipients = RecipientManager(200)
     run_state["recipients"] = recipients
     if not recipients.queue:
         log("✗ No recipients. Exiting.")
         return
 
-    # if SERVER_IP in OLD_SENDERS_SERVERS or SERVER_IP in OLD_MOTHER:
-    #     if not load_cache():
-    #         return
-    # else:
-    #     if not load_cache_local(os.path.join(utils_dir, "cache.bin")):
-    #         return
     load_cache_local(os.path.join(utils_dir, "cache.bin"))
 
     print("Loaded cache successfully.")
 
     total_acc = len(accounts.accounts)
     total_rcpt = recipients._total_loaded
-    batch_count = SUBSEQUENT_BATCHES + 1
+    batch_count = SUBSEQUENT_BATCHES
     if batch_count <= 0:
         log("Invalid number of subsequent batches. Exiting.")
         return
@@ -3156,7 +3223,7 @@ def _main_batches(
     batch_slot_seconds = MAX_RUNTIME_SECONDS / batch_count
     round_idx = 0
     batch_start_time = time.monotonic()
-    while round_idx <= SUBSEQUENT_BATCHES:
+    while round_idx < SUBSEQUENT_BATCHES:
         batch_start_time = time.monotonic()
         update_server_status(f"Running - b{round_idx + 1}")
         if _shutdown.is_set() and _shutdown_reason:
@@ -3173,7 +3240,7 @@ def _main_batches(
         log("=" * 55)
 
         log(
-            f"Starting batch {round_idx + 1}/{SUBSEQUENT_BATCHES + 1} || Threads: {MAX_CONCURRENT_ACCOUNTS}"
+            f"Starting batch {round_idx + 1}/{SUBSEQUENT_BATCHES} || Threads: {MAX_CONCURRENT_ACCOUNTS}"
         )
 
         _reset_account_status()
@@ -3240,10 +3307,23 @@ def _main_batches(
 
                     if result.get("failed") and not state.finalized:
                         try:
-                            if result.get("error").startswith("THROTTLE_FAIL"):
+                            error = str(result.get("error") or "")
+                            if "THROTTLE" in error.upper():
+                                state.failed = False
                                 state.finalized = True
                                 stats.update(state.account, False, state.sent)
-                                pass
+                                now = datetime.now()
+                                _deferred_throttled_senders.append(
+                                    (
+                                        state.account["email"],
+                                        state.account["password"],
+                                        state.account.get("recovery", ""),
+                                        COUNTRY,
+                                        SERVER_IP,
+                                        error,
+                                        now,
+                                    )
+                                )
                             else:
                                 state.finalized = True
                                 accounts.mark_failed(
@@ -3267,7 +3347,7 @@ def _main_batches(
             executor.shutdown(wait=True)
 
             log(
-                f"\n{'=' * 55}\n\nBatch {round_idx + 1}/{SUBSEQUENT_BATCHES + 1} Finished\n"
+                f"\n{'=' * 55}\n\nBatch {round_idx + 1}/{SUBSEQUENT_BATCHES} Finished\n"
             )
             log(f"Sent:       {total_rcpt - recipients.remaining()}/{total_rcpt}\n\n")
             final_stats = stats.get_stats()
@@ -3289,7 +3369,7 @@ def _main_batches(
             log(
                 f"Batch {round_idx + 1} used its slot for: {batch_elapsed:.1f}s = {batch_elapsed / 60:.1f} minutes"
             )
-            batch_wait_time = max(random.randint(45, 80), batch_deadline - batch_now)
+            batch_wait_time = max(random.randint(5, 10), batch_deadline - batch_now)
             if batch_wait_time > 0 and round_idx < SUBSEQUENT_BATCHES:
                 log(
                     f"Waiting {batch_wait_time:.1f}s = {batch_wait_time / 60:.1f} minutes before next batch..."
