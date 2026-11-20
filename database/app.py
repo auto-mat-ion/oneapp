@@ -2968,6 +2968,7 @@ def get_undistributed_sender_accounts():
             "sender_failed_accounts",
             "familybot_removed_family_members",
             "invalid_senders",
+            "old_sendors_removed",
             # "sender2_failed_accounts",
             # "manualbot_sender_emails",
         ]
