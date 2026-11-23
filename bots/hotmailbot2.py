@@ -6943,6 +6943,9 @@ def sucessfully_joined_microsoft_premium_sb(driver):
             .lower()
             .startswith("hmm... it looks like you're already in a family group")
         ):
+            if click_join_fahm_2_sb(driver):
+                time.sleep(20)
+                return False
             return True
         elif label_element.text.lower().startswith(
             "looks like there aren't any subscriptions available"
