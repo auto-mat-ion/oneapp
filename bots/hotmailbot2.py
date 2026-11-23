@@ -6411,11 +6411,7 @@ def remove_from_family_page_sb(driver, new_profile_data):
             except:
                 print(f"{email_address} : No members found that need start sharing")
                 return True
-        # total_members_buttons = (
-        #     [i for i in total_start_sharing_buttons]
-        #     if len(total_start_sharing_buttons) > 5
-        #     else total_start_sharing_buttons
-        # )
+
         print(
             f"{email_address} : Found {len(total_start_sharing_buttons)} members that need removal"
         )
@@ -6425,6 +6421,8 @@ def remove_from_family_page_sb(driver, new_profile_data):
                 print(
                     f"{email_address} : Removing member {i + 1} of {len(total_start_sharing_buttons)}"
                 )
+                _check_shutdown_requested()
+
                 try:
                     all_options_buttons = driver.wait_for_element_visible(
                         OPTION_ELEMET, timeout=wait_time
@@ -6477,6 +6475,8 @@ def remove_from_family_page_sb(driver, new_profile_data):
                 print(
                     f"{email_address} : Error clicking close button, refreshing instead and trying again"
                 )
+                _check_shutdown_requested()
+
                 driver.refresh()
                 time.sleep(10)
                 pass
@@ -6484,6 +6484,7 @@ def remove_from_family_page_sb(driver, new_profile_data):
         ###############
         print(f"{email_address} : Removing self from family page")
         for i in range(2):
+            _check_shutdown_requested()
             try:
                 try:
                     all_options_buttons = driver.wait_for_element_visible(
@@ -6536,6 +6537,7 @@ def remove_from_family_page_sb(driver, new_profile_data):
                 pass
         return True
     except:
+        _check_shutdown_requested()
         return False
 
 
@@ -6545,6 +6547,7 @@ def cancel_subscription_m365(driver, new_profile_data):
         print(f"{email_address}: Removing family members")
 
         remove_from_family_page_sb(driver, new_profile_data)
+        _check_shutdown_requested()
         print(f"{email_address}:Removed members!")
         print("Cancelling subscription.")
         driver.get(
@@ -6562,6 +6565,8 @@ def cancel_subscription_m365(driver, new_profile_data):
         retries = 0
         while retries < 5:
             try:
+                _check_shutdown_requested()
+
                 if (
                     "you cancelled your microsoft 365 family subscription"
                     in [i.text.lower() for i in driver.find_elements("h1")]
