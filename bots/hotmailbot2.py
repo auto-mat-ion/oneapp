@@ -2472,6 +2472,9 @@ def sucessfully_joined_microsoft_premium(driver):
             )
         ):
             # time.sleep(1)
+            if click_join_fahm_2_sb(driver):
+                time.sleep(20)
+                return False
             return True
 
         elif label_element.text.lower().startswith(
@@ -6014,7 +6017,7 @@ def click_join_fahm_2_sb(driver):
     """
     try:
         NEXT_BUTTON_ELEMENT = 'button[data-bi-id*="join-family-button"]'
-        driver.wait_for_element_visible(NEXT_BUTTON_ELEMENT, timeout=20)
+        driver.wait_for_element_visible(NEXT_BUTTON_ELEMENT, timeout=10)
         driver.click(NEXT_BUTTON_ELEMENT)
         return True
     except:
@@ -7042,8 +7045,7 @@ def use_link_to_join_family_acc_sb(driver, new_profile_data):
                         f"{email_address}: Successfully joined premium using family link"
                     )
                     return True
-                elif click_join_fahm_2_sb(driver):
-                    print(f"{email_address}: Continued2")
+
                 elif looks_like_there_arent_microsoft_premium_sb(driver):
                     print(
                         f"{email_address}: 'Looks like there aren't any subscriptions available' displayed. "
