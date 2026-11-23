@@ -5702,6 +5702,7 @@ def login_test(new_profile_data):
         _check_shutdown_requested()
         click_stay_signed_in_button(driver)
         _check_shutdown_requested()
+        # driver.get(OUTLOOK_URL)
         return driver, "success"
     except Exception as E:
         try:
@@ -6419,7 +6420,7 @@ def remove_from_family_page_sb(driver, new_profile_data):
             f"{email_address} : Found {len(total_start_sharing_buttons)} members that need removal"
         )
         time.sleep(1)
-        for i in range(len(total_start_sharing_buttons) + 1):
+        for i in range(len(total_start_sharing_buttons) + 2):
             try:
                 print(
                     f"{email_address} : Removing member {i + 1} of {len(total_start_sharing_buttons)}"
@@ -6482,52 +6483,57 @@ def remove_from_family_page_sb(driver, new_profile_data):
 
         ###############
         print(f"{email_address} : Removing self from family page")
-        try:
-            all_options_buttons = driver.wait_for_element_visible(
-                YOUR_OPTION_ELEMET, timeout=wait_time
-            )
-        except:
-            pass
-
-        time.sleep(1)
-        element = driver.wait_for_element_visible(YOUR_OPTION_ELEMET, timeout=wait_time)
-
-        time.sleep(1)
-        driver.click(YOUR_OPTION_ELEMET)
-        time.sleep(1)
-        try:
-            remove_from_family_button = driver.wait_for_element_visible(
-                REMOVE2_BTN, timeout=wait_time
-            )
-            time.sleep(1)
-            remove_from_family_button.click()
-            time.sleep(1)
-        except:
-            pass
-
-        confirm_remove_button = driver.wait_for_element_visible(
-            CONFIM_REMOVE, timeout=wait_time
-        )
-        time.sleep(0.5)
-        confirm_remove_button.click()
-        time.sleep(0.5)
-
-        retries = 0
-        while retries < 5:
+        for i in range(2):
             try:
-                remove_dialog = driver.wait_for_element_visible(
-                    REMOVE_DIALOG, timeout=3
-                )
-                time.sleep(1)
-                if remove_dialog.is_displayed():
-                    time.sleep(2)
-                else:
-                    break
-            except:
-                break
-            retries += 1
-        time.sleep(1)
+                try:
+                    all_options_buttons = driver.wait_for_element_visible(
+                        YOUR_OPTION_ELEMET, timeout=wait_time
+                    )
+                except:
+                    pass
 
+                time.sleep(1)
+                element = driver.wait_for_element_visible(
+                    YOUR_OPTION_ELEMET, timeout=wait_time
+                )
+
+                time.sleep(1)
+                driver.click(YOUR_OPTION_ELEMET)
+                time.sleep(1)
+                try:
+                    remove_from_family_button = driver.wait_for_element_visible(
+                        REMOVE2_BTN, timeout=wait_time
+                    )
+                    time.sleep(1)
+                    remove_from_family_button.click()
+                    time.sleep(1)
+                except:
+                    pass
+
+                confirm_remove_button = driver.wait_for_element_visible(
+                    CONFIM_REMOVE, timeout=wait_time
+                )
+                time.sleep(0.5)
+                confirm_remove_button.click()
+                time.sleep(0.5)
+
+                retries = 0
+                while retries < 5:
+                    try:
+                        remove_dialog = driver.wait_for_element_visible(
+                            REMOVE_DIALOG, timeout=3
+                        )
+                        time.sleep(1)
+                        if remove_dialog.is_displayed():
+                            time.sleep(2)
+                        else:
+                            break
+                    except:
+                        break
+                    retries += 1
+                time.sleep(1)
+            except:
+                pass
         return True
     except:
         return False
