@@ -6551,10 +6551,10 @@ def cancel_subscription_m365(driver, new_profile_data):
             "https://account.microsoft.com/services/microsoft365/cancel?cancelType=CancelImmediately&fref=billing-cancel"
         )
         CANCEL_BUTTON_ELEMENT = 'button[aria-label="Cancel subscription"]'
-        time.sleep(7)
-        driver.wait_for_element_visible(CANCEL_BUTTON_ELEMENT, timeout=wait_time)
+        time.sleep(8)
+        driver.wait_for_element_visible(CANCEL_BUTTON_ELEMENT, timeout=15)
         print(f"{email_address}: Cancel subscription button found")
-        time.sleep(3)
+        time.sleep(7)
         print(f"{email_address}: Clicking cancel subscription button")
         driver.click(CANCEL_BUTTON_ELEMENT)
         print(f"{email_address}: Clicked cancel subscription button")
