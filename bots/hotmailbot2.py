@@ -7519,15 +7519,23 @@ def initialize_new_profile_sb(new_profile_data):
         #     f"Error changing password: {error}",
         # )
         # return False, f"Error changing password: {error}"
-        status = cancel_subscription_m365(driver, new_profile_data)
-        # if not status:
-        #     print(f"{email_address}: Auto-cancelled subscription")
-        #     # new_profile_logger(
-        #     #     email_address,
-        #     #     "FAIL",
-        #     #     "Error cancelling subscription",
-        #     # )
-        #     # return False, "Error cancelling subscription"
+        retriess = 0
+        status = False
+        while retriess < 3:
+            status = cancel_subscription_m365(driver, new_profile_data)
+            if not status:
+                print(f"{email_address}: Subscription not cancelled. retrying...")
+                retriess += 1
+            else:
+                break
+        if not status:
+            print(f"{email_address}: Subscription not cancelled. ")
+            new_profile_logger(
+                email_address,
+                "FAIL",
+                "Error cancelling subscription",
+            )
+            return False, "Error cancelling subscription"
         # else:
         #     print(f"{email_address}: Successfully cancelled subscription")
         print(f"{email_address}: Successfully cancelled subscription")
