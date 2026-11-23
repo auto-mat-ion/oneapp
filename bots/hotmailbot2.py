@@ -6562,9 +6562,13 @@ def cancel_subscription_m365(driver, new_profile_data):
         retries = 0
         while retries < 5:
             try:
-                if "you cancelled your microsoft 365 family subscription" in [
-                    i.text.lower() for i in driver.find_elements("h1")
-                ]:
+                if (
+                    "you cancelled your microsoft 365 family subscription"
+                    in [i.text.lower() for i in driver.find_elements("h1")]
+                ) or (
+                    "you've already cancelled your subscription"
+                    in [i.text.lower() for i in driver.find_elements("h1")]
+                ):
                     print(f"{email_address}: Subscription cancelled successfully")
                     time.sleep(3)
                     return True
