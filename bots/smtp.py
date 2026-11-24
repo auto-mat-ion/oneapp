@@ -3173,10 +3173,10 @@ def _main_batches(
         SUBSEQUENT_BATCHES = 12
 
     EMAIL_ROUNDS = 1
-    if SERVER_IP in TESTY_SE:
-        MAX_CONCURRENT_ACCOUNTS = 2
-        EMAIL_ROUNDS = 2
-        SUBSEQUENT_BATCHES = 8
+    # if SERVER_IP in TESTY_SE:
+    #     MAX_CONCURRENT_ACCOUNTS = 2
+    #     EMAIL_ROUNDS = 2
+    #     SUBSEQUENT_BATCHES = 8
 
     time.sleep(5)
 
@@ -3300,7 +3300,7 @@ def _main_batches(
         if round_idx > 0:
             MAX_CONCURRENT_ACCOUNTS = 1
         if SERVER_IP in TESTY_SE:
-            MAX_CONCURRENT_ACCOUNTS = 2
+            MAX_CONCURRENT_ACCOUNTS = 1
         log("=" * 55)
 
         log(
