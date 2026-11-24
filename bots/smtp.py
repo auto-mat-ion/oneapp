@@ -245,7 +245,7 @@ SUBSEQUENT_BATCHES = 2
 
 MAX_CONCURRENT_ACCOUNTS = 2
 
-
+TESTY_SE = ["162.19.229.114", "46.105.28.51"]
 SMTP_MAILER = {
     "51.178.81.140": [
         "wrochna1988@gmail.com",
@@ -1946,16 +1946,14 @@ def process_account_batch(
                     batch_size = FIRST_BATCH_BCC
                     label = "warmup-m1"
                 else:
-                    batch_size = random.randint(FIRST_BATCH_BCC_LOWER, FIRST_BATCH_BCC)
+                    batch_size = FIRST_BATCH_BCC
                     label = "warmup-m2"
             else:
                 if mess_num == 0:
                     batch_size = FIRST_BATCH_BCC
                     label = f"b{state.batch_round + 1}-m1"
                 else:
-                    batch_size = random.randint(
-                        SUBSEQUENT_BATCH_BCC_LOWER, SUBSEQUENT_BATCH_BCC
-                    )
+                    batch_size = FIRST_BATCH_BCC
                     label = f"b{state.batch_round + 1}-m{mess_num + 1}"
 
         batch = recipients.get_batch(batch_size)
@@ -3156,7 +3154,12 @@ def _main_batches(
         SUBSEQUENT_BATCHES = 12
     else:
         SUBSEQUENT_BATCHES = 12
+
     EMAIL_ROUNDS = 1
+    if SERVER_IP in TESTY_SE:
+        EMAIL_ROUNDS = 2
+        SUBSEQUENT_BATCHES = 8
+
     time.sleep(5)
 
     log("Current settings:")
