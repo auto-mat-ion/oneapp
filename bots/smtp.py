@@ -3300,7 +3300,7 @@ def _main_batches(
         if round_idx > 0:
             MAX_CONCURRENT_ACCOUNTS = 1
         if SERVER_IP in TESTY_SE:
-            MAX_CONCURRENT_ACCOUNTS = 1
+            MAX_CONCURRENT_ACCOUNTS = 2
         log("=" * 55)
 
         log(
