@@ -3174,6 +3174,7 @@ def _main_batches(
 
     EMAIL_ROUNDS = 1
     if SERVER_IP in TESTY_SE:
+        MAX_CONCURRENT_ACCOUNTS = 2
         EMAIL_ROUNDS = 2
         SUBSEQUENT_BATCHES = 8
 
@@ -3298,6 +3299,8 @@ def _main_batches(
         MAX_CONCURRENT_ACCOUNTS = 1
         if round_idx > 0:
             MAX_CONCURRENT_ACCOUNTS = 1
+        if SERVER_IP in TESTY_SE:
+            MAX_CONCURRENT_ACCOUNTS = 2
         log("=" * 55)
 
         log(
