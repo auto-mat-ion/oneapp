@@ -7321,6 +7321,20 @@ def entire_smtp_process_sb(driver, new_profile_data):
         time.sleep(1)
         _check_shutdown_requested()
         time.sleep(1)
+        if cancel_setup_passkey_sb(driver):
+            print(f"{email_address}: Cancelled passkey setup page")
+        else:
+            print(f"{email_address}: No passkey setup page found")
+        _check_shutdown_requested()
+        time.sleep(1)
+        print(f"{email_address}: Checking if stay signed in page is present")
+        if click_stay_signed_in_button_sb(driver):
+            print(f"{email_address}: Clicked stay signed in button")
+        else:
+            print(f"{email_address}: No stay signed in button/btn found")
+        _check_shutdown_requested()
+        time.sleep(1)
+
         if is_let_this_app_access_your_info_page_sb(driver):
             print(f"{email_address} : Accept access page displayed")
             if smtp_accept_access_sb(driver):
