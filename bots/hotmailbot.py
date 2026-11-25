@@ -5273,7 +5273,7 @@ def get_new_profile_data():
             conn.close()
             return True, {"email": row[0], "pass": row[1]}
 
-        cursor.execute("SELECT email, pass FROM input_emails LIMIT 1")
+        cursor.execute("SELECT email, pass FROM input_emails2 LIMIT 1")
         row = cursor.fetchone()
         if not row:
             cursor.close()
@@ -5286,7 +5286,8 @@ def get_new_profile_data():
             (email, password, SERVER_IP, BOT_TYPE, datetime.now(tz=timezone.utc)),
         )
         cursor.execute(
-            "DELETE FROM input_emails WHERE email = %s AND pass = %s", (email, password)
+            "DELETE FROM input_emails2 WHERE email = %s AND pass = %s",
+            (email, password),
         )
         conn.commit()
         cursor.close()

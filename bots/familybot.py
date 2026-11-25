@@ -2677,10 +2677,9 @@ def processed_extractor_email(email_data):
                 host=DB_HOST, user=DB_USER, password=DB_PASSWORD, database=DB_NAME
             )
             cursor = conn.cursor()
-
             # Insert into processed_emails
             insert_query = """
-            INSERT INTO processed_emails (server_ip, bot_type,date_time, email, pass)
+            INSERT INTO processed_emails(server_ip, bot_type,date_time,email, pass)
             VALUES (%s, %s, %s, %s, %s)
             """
             cursor.execute(
@@ -2693,7 +2692,6 @@ def processed_extractor_email(email_data):
                     email_data.get("pass"),
                 ),
             )
-
             # Delete from processing_family_extractor
             delete_query = """
             DELETE FROM processing_family_extractor
@@ -2703,10 +2701,8 @@ def processed_extractor_email(email_data):
                 delete_query,
                 (SERVER_IP, BOT_TYPE, email_data.get("email")),
             )
-
             conn.commit()
             cursor.close()
-
             print(
                 f"{email_data.get('email')} : Updated database status as successfully processed."
             )
@@ -6826,10 +6822,10 @@ def store_re_extracted_link(new_profile_data, link, removed_emails):
         )
 
         # print(f"Deleted records for link: {link} from familybot_extracted_family_links")
-        cursor.execute(
-            "DELETE FROM familybot_extracted_family_links_history WHERE link = %s",
-            (link,),
-        )
+        # cursor.execute(
+        #     "DELETE FROM familybot_extracted_family_links_history WHERE link = %s",
+        #     (link,),
+        # )
 
         # print(
         #     f"Deleted records for link: {link} from familybot_extracted_family_links_history"
@@ -6857,12 +6853,12 @@ def store_re_extracted_link(new_profile_data, link, removed_emails):
         #     f"Inserted record for link: {link} into familybot_extracted_family_links_history"
         # )
 
-        for i in insert_removed_members_values:
-            cursor.execute(
-                "INSERT INTO familybot_removed_family_members (server_ip, bot_type, date_time, email) VALUES (%s, %s, %s, %s)",
-                i,
-            )
-            # print(f"Inserted record for insert_removed_members_values: {i[-1]}")
+        # for i in insert_removed_members_values:
+        #     cursor.execute(
+        #         "INSERT INTO familybot_removed_family_members (server_ip, bot_type, date_time, email) VALUES (%s, %s, %s, %s)",
+        #         i,
+        #     )
+        # print(f"Inserted record for insert_removed_members_values: {i[-1]}")
         conn.commit()
         print(f"{email} : Committed changes for link: {link} into DB")
 
@@ -6875,6 +6871,77 @@ def store_re_extracted_link(new_profile_data, link, removed_emails):
         email = "unidentified"
         email = new_profile_data.get("email")
 
+        return execute_db_action(db_action)
+    except Exception as db_e:
+        print(
+            f"Error inserting extracted link into DB for {email}. Link: {link}\nDB Error: {db_e}"
+        )
+
+
+def store_re_extracted_link_sb(new_profile_data, link, removed_emails):
+    def db_action():
+        email = new_profile_data.get("email")
+        recovery_email = new_profile_data.get("recovery")
+        password = new_profile_data.get("pass")
+        times_used = 0
+        conn = mysql.connector.connect(
+            host=DB_HOST,
+            user=DB_USER,
+            password=DB_PASSWORD,
+            database=DB_NAME,
+        )
+        cursor = conn.cursor()
+        insert_values = (
+            SERVER_IP,
+            BOT_TYPE,
+            datetime.now(tz=timezone.utc),
+            email,
+            password,
+            recovery_email,
+            link,
+            PREFERRED_SMS_COUNTRY,
+        )
+        insert_values_history = (
+            SERVER_IP,
+            BOT_TYPE,
+            datetime.now(tz=timezone.utc),
+            email,
+            password,
+            recovery_email,
+            link,
+            PREFERRED_SMS_COUNTRY,
+            "re_extracted",
+        )
+        insert_removed_members_values = [
+            (SERVER_IP, BOT_TYPE, datetime.now(tz=timezone.utc), i)
+            for i in removed_emails
+        ]
+        cursor.execute(
+            "DELETE FROM familybot_extracted_family_links WHERE link = %s",
+            (link,),
+        )
+        cursor.execute("DELETE FROM link_stats WHERE link = %s", (link,))
+        cursor.execute(
+            "INSERT INTO link_stats(server_ip, bot_type, date_time, link, times_used) VALUES(%s,%s,%s,%s,%s)",
+            (SERVER_IP, BOT_TYPE, datetime.now(tz=timezone.utc), link, times_used),
+        )
+        cursor.execute(
+            "INSERT INTO familybot_extracted_family_links (server_ip, bot_type, date_time, email, pass, recovery, link, country) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+            insert_values,
+        )
+        cursor.execute(
+            "INSERT INTO familybot_extracted_family_links_history (server_ip, bot_type, date_time, email, pass, recovery, link, country, card_number) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
+            insert_values_history,
+        )
+        conn.commit()
+        print(f"{email} : Committed changes for link: {link} into DB")
+        if conn is not None:
+            conn.close()
+        return True
+
+    try:
+        email = "unidentified"
+        email = new_profile_data.get("email")
         return execute_db_action(db_action)
     except Exception as db_e:
         print(
@@ -10574,6 +10641,492 @@ def run_familybot_share():
             break
 
 
+# import time
+# import platform
+# from datetime import timedelta, datetime, timezone
+# import os
+# import sys
+# from selenium.webdriver.common.by import By
+# from selenium.webdriver.support.ui import Select
+# from selenium.webdriver.common.keys import Keys
+# from selenium.webdriver.support.wait import WebDriverWait
+# from selenium.webdriver.support import expected_conditions as EC
+
+
+# from seleniumbase import Driver
+# from seleniumbase import sb_cdp
+# import pandas as pd
+# import requests
+# from dotenv import load_dotenv
+# import threading
+# from concurrent.futures import ThreadPoolExecutor
+# import re
+# import json
+# import subprocess
+# import mysql.connector
+# import weakref
+# from functools import wraps
+
+# import random
+# import msal
+
+# SERVER_IP, BOT_TYPE = "1.1.1.1", "FAMILY_REXTRACT"
+# PREFERRED_SMS_COUNTRY = "Netherlands"
+# DB_HOST = "68.183.208.150"
+# DB_USER = "root"
+# DB_PASSWORD = "root101."
+# DB_NAME = "oneapp"
+# BASE_URL = "https://affworker.com"
+# TEMPMAIL_API_KEY = "jcfPNcqnl7GZoYYBUp9gTHObSIQaRnwIIBtNRd5J"
+wait_time = 10
+
+ACTIVE_DRIVERS = weakref.WeakSet()
+
+
+def _track_driver(driver):
+    ACTIVE_DRIVERS.add(driver)
+    return driver
+
+
+def initialize_new_profile_driver_sbb():
+    try:
+        user_data_dir = ""
+        proxy = "NO PROXY USED"
+        user_data_dir = "Cookies not saved. SAVE_COOKIES option turned off."
+        driver = sb_cdp.Chrome()
+        driver.maximize()
+        return driver
+    except Exception as E:
+        try:
+            pass
+        except:
+            pass
+        return False, f"Driver_init_error: {E}", None
+
+
+def create_email_sb():
+    url = f"{BASE_URL}/api/email/create/{TEMPMAIL_API_KEY}"
+    try:
+        resp = requests.post(url, timeout=15)
+        data = resp.json()
+        if data.get("status") == "success":
+            return True, data["data"]["email"], data["data"]["email_token"]
+        return False, "", ""
+    except:
+        return False, "", ""
+
+
+def get_email_token_sb(recovery_email: str):
+    try:
+        status, temp_email, email_token = create_email_sb()
+        username = recovery_email.split("@")[0]
+        domain = recovery_email.split("@")[1]
+        url = f"{BASE_URL}/api/email/change/{email_token}/{username}/{domain}/{TEMPMAIL_API_KEY}"
+        resp = requests.post(url, timeout=15)
+        data = resp.json()
+        if data.get("status") == "success":
+            return True, data["data"]["email_token"]
+        return False, ""
+    except Exception as e:
+        return False, e
+
+
+def enter_email_sb(driver: sb_cdp.Chrome, email_address: str, timeout: int = 10):
+    try:
+        """
+        Enters the email address in the email input box
+        """
+        wait_time = timeout
+        EMAIL_INPUT_ELEMENT = 'input[type="email"]'
+        driver.wait_for_element_visible(EMAIL_INPUT_ELEMENT, timeout=wait_time)
+        driver.type(EMAIL_INPUT_ELEMENT, email_address, timeout=wait_time)
+        return True
+    except:
+        return False
+
+
+def click_next_button_sb(driver):
+    """
+    Clicks the next button
+    """
+    try:
+        NEXT_BUTTON_ELEMENT = 'input[type="submit"]'
+        driver.wait_for_element_visible(NEXT_BUTTON_ELEMENT, timeout=wait_time)
+        time.sleep(2)
+        driver.click(NEXT_BUTTON_ELEMENT)
+        return True
+    except:
+        return False
+
+
+def enter_recovery_email_2_sb(driver, recovery_email):
+    try:
+        input_element = 'input[type="text"]'
+        driver.wait_for_element_visible(input_element, timeout=wait_time)
+        time.sleep(3)
+        driver.type(input_element, recovery_email)
+        return True
+    except:
+        return False
+
+
+def click_send_code_button_sb(driver):
+    """
+    Clicks the next button on gmail login
+    """
+    try:
+        NEXT_BUTTON_ELEMENT = 'button[type="submit"]'
+        driver.wait_for_element_visible(NEXT_BUTTON_ELEMENT, timeout=10)
+        time.sleep(2)
+        driver.click(NEXT_BUTTON_ELEMENT)
+        return True
+    except Exception as E:
+        print(f"Exception: {E}")
+        return False
+
+
+def fetch_messages_sb(email_token: str):
+    url = f"{BASE_URL}/api/messages/{email_token}/{TEMPMAIL_API_KEY}"
+    try:
+        resp = requests.get(url, timeout=15)
+        data = resp.json()
+        if data.get("status") == "success":
+            return True, data["data"]["messages"]
+        return False, []
+    except:
+        return False, []
+
+
+def delete_message_sb(message_id: str):
+    try:
+        url = f"{BASE_URL}/api/message/delete/{message_id}/{TEMPMAIL_API_KEY}"
+        resp = requests.post(url, timeout=15)
+        data = resp.json()
+        if data.get("status") == "success":
+            return True
+        return False
+    except:
+        return False
+
+
+def wait_for_code_sb(email_token, timeout=120, poll_interval=3):
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            message_id = None
+            ok, messages = fetch_messages_sb(email_token)
+            last_message = messages[0]
+            message_id = last_message.get("id")
+            try:
+                plain = re.sub(r"<[^>]+>", " ", last_message.get("content"))
+                match = re.search(r"\s*(\d{6})", plain)
+                if match:
+                    try:
+                        if message_id:
+                            delete_message_sb(message_id)
+                        return True, match.group(1)
+                    except:
+                        pass
+            except:
+                pass
+            if message_id:
+                delete_message_sb(message_id)
+            time.sleep(poll_interval)
+        except:
+            pass
+    return False, ""
+
+
+def enter_code_and_click_next_after_pass_change_sb(driver, code):
+    try:
+        input_element = 'input[id="codeEntry-0"]'
+        driver.wait_for_element_visible(input_element, timeout=wait_time)
+        driver.clear_input(input_element)
+        driver.type(input_element, code)
+        time.sleep(0.5)
+        return True
+    except:
+        return False
+
+
+def login_test_sb(new_profile_data):
+    driver = initialize_new_profile_driver_sbb()
+    email = new_profile_data.get("email")
+    recovery_email = new_profile_data.get("recovery")
+    password = new_profile_data.get("pass")
+    status, email_token = get_email_token_sb(recovery_email=recovery_email)
+    if not status:
+        print(f"{email}: Error getting email token for recovery email")
+        return False, "Error getting email token for recovery email"
+    print(f"{email}: Got email token for recovery email")
+    driver.get("https://login.microsoftonline.com/")
+    if not enter_email_sb(driver, email):
+        print(f"{email}: Failed to enter email")
+        return False
+    if not click_next_button_sb(driver):
+        print(f"{email}: Failed to click next button")
+        return False
+    time.sleep(2)
+    if not enter_recovery_email_2_sb(driver, recovery_email):
+        print(f"{email}: Failed to enter recovery email")
+        return False
+    time.sleep(2)
+    if not click_send_code_button_sb(driver):
+        print(f"{email}: Failed to click send code button")
+        return False
+    code_status, code = wait_for_code_sb(email_token=email_token)
+    if not code_status:
+        print(f"{email}: Failed to get code from recovery email")
+        return False
+    print(f"{email}: Got code from recovery email: {code}")
+    if not enter_code_and_click_next_after_pass_change_sb(driver, code):
+        print(f"{email}: Failed to enter code")
+        return False
+    return True, driver
+
+
+def execute_db_action(action, retries=5, delay=5):
+    attempt = 1
+    while attempt <= retries:
+        try:
+            return action()
+        except Exception as exc:
+            if attempt == retries:
+                raise
+            print(
+                f"Database action failed (attempt {attempt}/{retries}): {exc}. Retrying in {delay} seconds..."
+            )
+            time.sleep(delay)
+            attempt += 1
+
+
+def store_re_extracted_link_sb(new_profile_data, link):
+    def db_action():
+        email = new_profile_data.get("email")
+        recovery_email = new_profile_data.get("recovery")
+        password = new_profile_data.get("pass")
+        times_used = 0
+        conn = mysql.connector.connect(
+            host=DB_HOST,
+            user=DB_USER,
+            password=DB_PASSWORD,
+            database=DB_NAME,
+        )
+        cursor = conn.cursor()
+        insert_values = (
+            SERVER_IP,
+            BOT_TYPE,
+            datetime.now(tz=timezone.utc),
+            email,
+            password,
+            recovery_email,
+            link,
+            PREFERRED_SMS_COUNTRY,
+        )
+        insert_values_history = (
+            SERVER_IP,
+            BOT_TYPE,
+            datetime.now(tz=timezone.utc),
+            email,
+            password,
+            recovery_email,
+            link,
+            PREFERRED_SMS_COUNTRY,
+            "re_extracted",
+        )
+        cursor.execute(
+            "DELETE FROM familybot_extracted_family_links WHERE link = %s",
+            (link,),
+        )
+        cursor.execute("DELETE FROM link_stats WHERE link = %s", (link,))
+        cursor.execute(
+            "INSERT INTO link_stats(server_ip, bot_type, date_time, link, times_used) VALUES(%s,%s,%s,%s,%s)",
+            (SERVER_IP, BOT_TYPE, datetime.now(tz=timezone.utc), link, times_used),
+        )
+        cursor.execute(
+            "INSERT INTO familybot_extracted_family_links (server_ip, bot_type, date_time, email, pass, recovery, link, country) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+            insert_values,
+        )
+        cursor.execute(
+            "INSERT INTO familybot_extracted_family_links_history (server_ip, bot_type, date_time, email, pass, recovery, link, country, card_number) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
+            insert_values_history,
+        )
+        conn.commit()
+        print(f"{email} : Committed changes for link: {link} into DB")
+        if conn is not None:
+            conn.close()
+        return True
+
+    try:
+        email = "unidentified"
+        email = new_profile_data.get("email")
+        return execute_db_action(db_action)
+    except Exception as db_e:
+        print(
+            f"Error inserting extracted link into DB for {email}. Link: {link}\nDB Error: {db_e}"
+        )
+
+
+def get_share_link(driver, new_profile_data):
+    try:
+        driver.get("https://account.microsoft.com/services/microsoft365/details")
+        time.sleep(2)
+        email_address = new_profile_data.get("email").strip()
+        current_status = "clicking share button"
+        SHARE_ELEMENT = 'button[aria-label="Share subscription"]'
+        COPY_BUTTON_ELEMENT = 'button[aria-label="Copy link"]'
+        LINK_INPUT_ELEMENT = 'input[aria-label="Sharing link"]'
+        share_btn_element = driver.wait_for_element_visible(
+            SHARE_ELEMENT, timeout=wait_time * 3
+        )
+        driver.click(SHARE_ELEMENT, timeout=wait_time, scroll=True)
+        print(f"{email_address} : Clicked share button")
+        time.sleep(2)
+        current_status = "clicking copy link button"
+        copy_btn_element = driver.wait_for_element_visible(
+            COPY_BUTTON_ELEMENT, timeout=wait_time
+        )
+        driver.click(COPY_BUTTON_ELEMENT, timeout=wait_time, scroll=True)
+        copy_btn_element.click()
+        print(f"{email_address} : Clicked copy link button")
+        time.sleep(5)
+        current_status = "retrieving sharing link"
+        link_input_element = driver.wait_for_element_visible(
+            LINK_INPUT_ELEMENT, timeout=wait_time
+        )
+        link = link_input_element.get_attribute("value")
+        print(f"{email_address} : Retrieved sharing link: {link}")
+        if not store_re_extracted_link_sb(new_profile_data, link):
+            print(f"{email_address} : Error updating removal status in database")
+            return False, "Error updating removal status in database", driver
+        else:
+            print(f"{email_address} : Updated removal status in database successfully")
+        print(f"{email_address} : Stored extracted link successfully")
+        return True, link
+    except Exception as E:
+        print(f"{email_address} : Error copying sharing link: {E}")
+        return False, "Error copying sharing link"
+
+
+def processed_extractor_email(email_data):
+    def db_action():
+        import mysql.connector
+
+        conn = None
+        try:
+            conn = mysql.connector.connect(
+                host=DB_HOST, user=DB_USER, password=DB_PASSWORD, database=DB_NAME
+            )
+            cursor = conn.cursor()
+            # Insert into processed_emails
+            insert_query = """
+            INSERT INTO processed_emails(server_ip, bot_type,date_time,email, pass)
+            VALUES (%s, %s, %s, %s, %s)
+            """
+            cursor.execute(
+                insert_query,
+                (
+                    SERVER_IP,
+                    BOT_TYPE,
+                    datetime.now(tz=timezone.utc),
+                    email_data.get("email"),
+                    email_data.get("pass"),
+                ),
+            )
+            # Delete from processing_family_extractor
+            delete_query = """
+            DELETE FROM processing_family_extractor
+            WHERE server_ip = %s AND bot_type = %s AND email = %s 
+            """
+            cursor.execute(
+                delete_query,
+                (SERVER_IP, BOT_TYPE, email_data.get("email")),
+            )
+            conn.commit()
+            cursor.close()
+            print(
+                f"{email_data.get('email')} : Updated database status as successfully processed."
+            )
+        finally:
+            if conn is not None:
+                conn.close()
+
+    try:
+        execute_db_action(db_action)
+    except Exception as e:
+        print(f"Error in processed_email: {e}")
+        pass
+
+
+def click_stay_signed_in_button_sb(driver):
+    try:
+        BUTTON_ELEMENT = 'button[data-testid="primaryButton"]'
+        driver.wait_for_element_visible(BUTTON_ELEMENT, timeout=wait_time / 3)
+        driver.click(BUTTON_ELEMENT)
+        return True
+    except:
+        return False
+
+
+def remove_family_sb(new_profile_data):
+    try:
+        driver = initialize_new_profile_driver_sbb()
+        _check_shutdown_requested()
+        email = new_profile_data.get("email")
+        email_address = email
+        recovery_email = new_profile_data.get("recovery")
+        password = new_profile_data.get("pass")
+        status, email_token = get_email_token_sb(recovery_email=recovery_email)
+        _check_shutdown_requested()
+        if not status:
+            print(f"{email}: Error getting email token for recovery email")
+            return False, "Error getting email token for recovery email"
+        print(f"{email}: Got email token for recovery email")
+        driver.get("https://login.microsoftonline.com/")
+        _check_shutdown_requested()
+        if not enter_email_sb(driver, email):
+            print(f"{email}: Failed to enter email")
+            return False
+        if not click_next_button_sb(driver):
+            print(f"{email}: Failed to click next button")
+            return False
+        time.sleep(2)
+        _check_shutdown_requested()
+        if not enter_recovery_email_2_sb(driver, recovery_email):
+            print(f"{email}: Failed to enter recovery email")
+            return False
+        time.sleep(2)
+        if not click_send_code_button_sb(driver):
+            print(f"{email}: Failed to click send code button")
+            return False
+        code_status, code = wait_for_code_sb(email_token=email_token)
+        _check_shutdown_requested()
+        if not code_status:
+            print(f"{email}: Failed to get code from recovery email")
+            return False
+        print(f"{email}: Got code from recovery email: {code}")
+        _check_shutdown_requested()
+        if not enter_code_and_click_next_after_pass_change_sb(driver, code):
+            print(f"{email}: Failed to enter code")
+            return False
+        time.sleep(3)
+        _check_shutdown_requested()
+        click_stay_signed_in_button_sb(driver)
+        time.sleep(3)
+        get_share_link(driver, new_profile_data)
+        return True
+    except Exception as E:
+        print(f"{email_address} : Exception error occurred: {E}")
+        return False, f"Error occurred: {E}", driver
+    finally:
+        try:
+            driver.quit()
+            processed_extractor_email(new_profile_data)
+            pass
+        except:
+            pass
+
+
 @_run_lifecycle
 def run_family_link_extractor():
     """
@@ -10597,16 +11150,16 @@ def run_family_link_extractor():
     global BOT_TYPE
     BOT_TYPE = "family_link_extractor"
     print(f"Starting Family extractor for IP: {SERVER_IP}")
-    if not load_valid_senders_list():
-        print("Failed to load valid senders list.")
-        return
+    # if not load_valid_senders_list():
+    #     print("Failed to load valid senders list.")
+    #     return
 
     while True:
         if SHUTDOWN_REQUESTED:
             return True
         status, new_profile_data = get_new_family_extractor_data()
         if status:
-            d = remove_family(new_profile_data)
+            d = remove_family_sb(new_profile_data)
         else:
             print("No unshared family acc in database...")
             break

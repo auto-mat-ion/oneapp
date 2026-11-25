@@ -3407,9 +3407,9 @@ def insert_into_db(
 def validate_dataframe(table_name, df):
     if df.empty:
         return False, "No valid data was found in the uploaded file."
-    if table_name == "input_emails":
+    if table_name in ["input_emails", "input_emails2"]:
         if not all(col in df.columns for col in ["email", "pass"]):
-            return False, "Table input_emails requires columns: email, pass"
+            return False, f"Table {table_name} requires columns: email, pass"
     if table_name == "sender_input_accounts":
         if not all(col in df.columns for col in ["email", "pass", "recovery"]):
             return (
@@ -3515,6 +3515,7 @@ def validate_dataframe(table_name, df):
 def general_uploader():
     table_options = {
         "input_emails": "Email Accounts",
+        "input_emails2": "Hotmail Emails",
         "familybot_first_names": "First Names",
         "familybot_surnames": "Surnames",
         "familybot_card_details": "Card Details",
@@ -3582,7 +3583,7 @@ def general_uploader():
     )
 
     if uploaded_file is not None:
-        if table_name == "input_emails":
+        if table_name in ["input_emails", "input_emails2"]:
             df = parse_email_file(uploaded_file)
         elif table_name == "familybot_first_names":
             df = parse_text_list(uploaded_file, "firstnames")

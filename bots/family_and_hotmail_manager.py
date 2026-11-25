@@ -354,7 +354,7 @@ def runner():
             print(
                 f"Signal received: {action} for country: {country}\n ============================================================================="
             )
-            result = run_hotmailbot2(country)
+            result = run_hotmailbot(country)
             current_action = (
                 "No more links, waiting for signal"
                 if result == "NO_LINKS"

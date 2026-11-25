@@ -1069,10 +1069,10 @@ def initialize_new_profile_driver():
         user_data_dir = ""
         proxy = "NO PROXY USED"
         if SAVE_COOKIES:
-            driver = sb_cdp.Chrome()
+            driver = Driver()
         else:
             user_data_dir = "Cookies not saved. SAVE_COOKIES option turned off."
-            driver = sb_cdp.Chrome()
+            driver = Driver()
         return (
             True,
             {
@@ -6349,7 +6349,7 @@ def _track_driver(driver):
     return driver
 
 
-def initialize_new_profile_driver():
+def initialize_new_profile_driver_sb():
     try:
         user_data_dir = ""
         proxy = "NO PROXY USED"
@@ -7415,7 +7415,7 @@ def initialize_new_profile_sb(new_profile_data):
         print(f"{email_address}: Initializing browser driver")
         while (retries < 3) and (not driver_success):
             try:
-                status, driverdata, error = initialize_new_profile_driver()
+                status, driverdata, error = initialize_new_profile_driver_sb()
                 if status:
                     print(f"{email_address}: Driver initialized successfully")
                     driver, user_path, proxy = driverdata.values()
@@ -7678,7 +7678,7 @@ def resetup_smtp(new_profile_data):
         print(f"{email_address}: Initializing browser driver")
         while (retries < 3) and (not driver_success):
             try:
-                status, driverdata, error = initialize_new_profile_driver()
+                status, driverdata, error = initialize_new_profile_driver_sb()
                 if status:
                     print(f"{email_address}: Driver initialized successfully")
                     driver, user_path, proxy = driverdata.values()
@@ -7921,3 +7921,94 @@ def run_hotmailbot2(country=None):
         else:
             print("No input emails in database...")
             return True
+
+
+# td = """vicki6850mreyes@outlook.com	tFYmHXNQtiJN5.	ueuxpiq999@affworker.com
+# carolina24709cperalta@outlook.com	xXKLFOgTaDX6.	lguyirf480@mailkrank.com
+# carolina547936holgun@outlook.com	kEhqzbzUez1.	nyycwqu667@imailito.com
+# carolinei235richards@outlook.com	kMIYPbMiqmHU3.	iufubzs504@affworker.com
+# eric5205218craig@outlook.com	gHlnrtvHZTS9.	guscfys408@mailfrid.com
+# robertonqw624vergara@outlook.com	xJYysARmOAX1.	sxyexnw391@mailkrank.com
+# rodrigo2971bmota@outlook.com	fJHAEKExuMi3.	invoonz503@imailito.com
+# jessicai4446wagner@outlook.com	sBybQIoHPzC1.	uqvbwkm399@mailkrank.com
+# emilyi4059chen@outlook.com	gKUnyCZmPQ6.	ltotezb106@mailkrank.com
+# roberto97hc755regalado@outlook.com	rHZScexOlfP6.	gbleqsv739@mailkrank.com
+# robinbyo674bates@outlook.com	fNHDMzqpQzel0.	vfeohhh688@mailkrank.com
+# rodneyb4232johnson@outlook.com	mUMdLqRLNDN0.	erxhfjh919@affworker.com
+# joanned37163diaz@outlook.com	uCurcDzagSh9.	hyszpfz563@imailito.com
+# erinx19233bishop@outlook.com	gXAbKLMNPs1.	uwzsqzf879@mailhuba.com
+# rodolfof4930carrera@outlook.com	kQmHfmrLRPZo4.	ombrvff005@mailhuba.com
+# laurie5958924williams@outlook.com	vILjAZuiHR6.	xlvemiv937@affworker.com
+# andreaeff719fields@outlook.com	bXcuFeHsDZ7.	wwspumn458@mailkrank.com
+# amy81393gtremblay@outlook.com	rVMUXbqPrbB1.	kywktpv690@mailfrid.com
+# marksbq358walker@outlook.com	iBdkfJjeFG9.	rofverm865@mailkrank.com
+# marshall6662752rhodes@outlook.com	zChPVrJjszkD8.	btxjomg350@mailkrank.com
+# josemilioc9838valencia@outlook.com	bRJAugIxMrbs5.	cvtrnog119@imailito.com
+# josemilior5293holgun@outlook.com	iZTsHsPSPGkn6.	jfddbad095@imailito.com
+# josmarad27735zapata@outlook.com	lLCvmccZyo8.	taeydun006@imailito.com
+# josv4329paredes@outlook.com	dORXHIckmpYo4.	gzamiwg777@mailhuba.com
+# lea97ba938lavigne@outlook.com	nBJicqHDIkxR3.	vlmeyde494@mailfrid.com
+# lawrenceygf390morrison@outlook.com	jXBtTMMVUQB8.	dtpzgbj433@mailfrid.com
+# andrea6654110stevens@outlook.com	bPOkvhYmdC1.	qxpxzdd639@mailfrid.com
+# josefina99bk835meraz@outlook.com	fJypINeUnM0.	dpmowfc143@mailfrid.com
+# joshua29nz727allen@outlook.com	qUlvllIbHp4.	jucbdgc647@mailkrank.com
+# lea327671jean-baptiste@outlook.com	gTtqFCXnhGnl2.	ccbkjkb636@mailkrank.com
+# amyuap365french@outlook.com	hZOJIuNIEaP0.	kfhiylv803@mailfrid.com
+# amelia27901nchow@outlook.com	vIcoOgZXNT9.	blusgpn170@mailhuba.com
+# mauricio85ut264armas@outlook.com	jZGdmatJZPN8.	melpcab849@imailito.com
+# mauricio8633smartnez@outlook.com	sFIKRoOJQTqH2.	zjoywoa343@affworker.com
+# elvirat7805leyva@outlook.com	cBTiJqdysJ7.	bdleixv656@mailfrid.com
+# matildai49636taylor@outlook.com	bFhVTDokUxsB8.	ywbxpza036@mailhuba.com
+# juliai14451gomez@outlook.com	aNJoJSoNGlc1.	uaarhvc076@affworker.com
+# amelia99883nnovak@outlook.com	oCLhMKajKT4.	osgmqnf975@mailfrid.com
+# mattqwc241mitchelle@outlook.com	yUlcdZucJpPY7.	qpgbcuk795@imailito.com
+# juanita3544rhoffman@outlook.com	zCyrNKBsjrVq5.	bhphhmh303@imailito.com
+# judy6852hturner@outlook.com	kHFBiFgfjtp4.	tbstmvw877@affworker.com
+# juliaiiw416johnson@outlook.com	aNiFhXVhmh5.	hqchcqw785@mailfrid.com
+# elvira52hj532robledo@outlook.com	eHzyaQQgTBX8.	mggsuyj864@affworker.com
+# lucashve595chambers@outlook.com	cMRkmqSpXErg2.	khasxzm878@mailfrid.com
+# ronald7262ajensen@outlook.com	zEQifmKZAH3.	ucnvkrm108@mailfrid.com
+# simone74012wmoura@outlook.com	xXNpDplsyGH9.	afkfvzk989@imailito.com
+# ava19172alo@outlook.com	iCmVlEdCMa7.	hljtwco385@mailfrid.com
+# avataw982patterson@outlook.com	lEhIrQAyXkRb2.	qeqmnlq641@mailhuba.com
+# avery7887ufrench@outlook.com	bDrpGBRqenQJ5.	izezfuk416@affworker.com
+# averycbq793denys@outlook.com	bCzBhyztsG4.	wpjizwn390@affworker.com
+# lson8743475fernandes@outlook.com	gQITpRGvaGjx4.	pwqnwex736@mailkrank.com
+# lucas8670jlavoie@outlook.com	lGOXqMyPMFCj0.	lvnjyom719@mailhuba.com
+# blake99514jthompson@outlook.com	gMMELBTUuQRh3.	ehmydqx195@mailkrank.com
+# jade5709450claire@outlook.com	gSVtZYcQRY3.	rakhsff948@mailkrank.com
+# marianneq7547novak@outlook.com	sYiYHOOhQxP5.	dbtnely519@mailfrid.com
+# marianneu11286claire@outlook.com	nGDZFIHiEMND8.	rvaselp113@affworker.com
+# marilouy70333clark@outlook.com	vCcnMFzDZez6.	wtqtuzl783@affworker.com
+# ins91rc179salinas@outlook.com	iTteqVMTISKD3.	vywycsi839@affworker.com
+# jerry44792mpeterson@outlook.com	eVlNINNnHcsb8.	zzcwdbg146@affworker.com
+# braxton5958staylor@outlook.com	sExEssQYpbRy5.	xukksmx857@affworker.com"""
+
+# data = td.split("\n")[1]
+# new_profile_data = {
+#     "email": data.split("\t")[0],
+#     "pass": data.split("\t")[1],
+#     "recovery": data.split("\t")[2],
+# }
+
+# xx = login_test(new_profile_data)
+
+# driver = xx[0]
+
+
+# from urllib.parse import urlsplit, parse_qs
+
+
+# iframe_element = 'iframe[title="Verification challenge"]'
+# driver.find_element()
+
+# iframe = driver.find_element(By.CSS_SELECTOR, iframe_element)
+
+# iframe_url = iframe.get_attribute("src")
+# query_string = urlsplit(iframe_url).query
+# params = parse_qs(query_string)
+
+# driver.current_url
+
+# app_id = params.get("app_id")[0]
+# session_id = params.get("session_id")[0]
