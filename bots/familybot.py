@@ -14,7 +14,7 @@ from selenium.webdriver.support import expected_conditions as EC
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from utils.server_ip_helper import get_server_ip
 
-from seleniumbase import Driver
+from seleniumbase import Driver, sb_cdp
 import pandas as pd
 import requests
 import threading
