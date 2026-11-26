@@ -3009,6 +3009,8 @@ def count_unassigned_sender_accounts(return_country_distribution=False):
         failed_emails_ = {row[0] for row in cursor.fetchall() if row and row[0]}
         cursor.execute("SELECT LOWER(email) FROM familybot_removed_family_members")
         failed_emails__ = {row[0] for row in cursor.fetchall() if row and row[0]}
+        cursor.execute("SELECT LOWER(email) FROM old_sendors_removed")
+        old_sender_emails = {row[0] for row in cursor.fetchall() if row and row[0]}
 
         available_emails = [
             email
@@ -3018,6 +3020,7 @@ def count_unassigned_sender_accounts(return_country_distribution=False):
             and email.lower() not in failed_emails
             and email.lower() not in failed_emails_
             and email.lower() not in failed_emails__
+            and email.lower() not in old_sender_emails
         ]
         unassigned_count = len(available_emails)
 
@@ -5156,7 +5159,7 @@ def render_hotmail_stats():
         cards = [
             {
                 "label": "Total Available Input Accounts",
-                "value": db_count("input_emails"),
+                "value": db_count("input_emails2"),
             },
             {
                 "label": "Total Available Family Links (from FamilyBot)",
