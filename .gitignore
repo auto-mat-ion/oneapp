@@ -34,3 +34,17 @@ database/new_list.txt
 bots/settings.json
 /bots/settings
 tests/
+bots/new_accs.csv
+bots/old_accs.csv
+bots/readmails.py
+bots/sbb copy.py
+bots/smtp copy.py
+bots/smtp_test.py
+mothers2.csv
+solve_captcha.py
+.vscode/settings.json
+bots/downloaded_files/proxy_ext_dir/background.js
+bots/h2.py
+bots/hotmailbot.py
+bots/sbb.py
+update_smtp.bat
