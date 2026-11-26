@@ -3015,6 +3015,7 @@ def is_linux_server() -> bool:
             and (
                 str(row[0]).strip().lower().startswith("debian")
                 or str(row[0]).strip().lower().startswith("contabo")
+                or str(row[0]).strip().lower().startswith("inter")
             )
         )
     except Exception:
