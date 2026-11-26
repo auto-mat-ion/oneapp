@@ -1231,7 +1231,11 @@ class ContentManager:
         text_table = "sender_content_texts_3"
 
         self.hyperlinks = self._load(hyperlink_table, "hyperlink_text")
+        if SERVER_IP in NEW_ACCS:
+            self.part = 2
         self.links = self._load(link_table, "link")
+        if SERVER_IP in NEW_ACCS:
+            self.part = part
         self.subjects = self._load(subject_table, "subject")
         self.texts = self._load(text_table, "text")
 
@@ -1247,10 +1251,15 @@ class ContentManager:
         )
 
     def _load(
-        self, table_name: str, column_name: str, limit: int = 0, offset: int = 0
+        self,
+        table_name: str,
+        column_name: str,
+        limit: int = 0,
+        offset: int = 0,
+        part: int = 0,
     ) -> List[str]:
         return self._load_table_attribute(
-            table_name, column_name, COUNTRY, self.part, limit, offset
+            table_name, column_name, COUNTRY, part, limit, offset
         )
 
     def _load_table_attribute(
@@ -3217,7 +3226,7 @@ def _main_batches(
     content_part = SERVER_IP if SERVER_IP in NEW_TEST else part
     content = ContentManager(content_part)
     run_state["content"] = content
-    if (SERVER_IP in OLD_MOTHER) or (SERVER_IP in NEW_ACCS):
+    if SERVER_IP in OLD_MOTHER:
         content.links = ["meetsingles.info"]
 
     if not content.is_valid():
