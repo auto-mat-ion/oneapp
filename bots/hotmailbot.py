@@ -463,9 +463,9 @@ def create_email():
 
 
 def fetch_messages(email_token: str):
-    url = f"{BASE_URL}/api/messages/{TEMPMAIL_API_KEY}"
+    url = f"{BASE_URL}/api/messages/{email_token}/{TEMPMAIL_API_KEY}"
     try:
-        resp = requests.post(url, json={"email_token": email_token}, timeout=15)
+        resp = requests.get(url, timeout=15)
         data = resp.json()
         if data.get("status") == "success":
             return True, data["data"]["messages"]
@@ -474,27 +474,46 @@ def fetch_messages(email_token: str):
         return False, []
 
 
+def delete_message(message_id: str):
+    try:
+        url = f"{BASE_URL}/api/message/delete/{message_id}/{TEMPMAIL_API_KEY}"
+        resp = requests.post(url, timeout=15)
+        data = resp.json()
+        if data.get("status") == "success":
+            return True
+        return False
+    except:
+        return False
+
+
 def wait_for_code(email_token, timeout=120, poll_interval=3):
     deadline = time.time() + timeout
     while time.time() < deadline:
-        _check_shutdown_requested()
-        ok, messages = fetch_messages(email_token)
-        if ok and messages:
-            for msg in messages:
-                combined = " ".join(
-                    [
-                        msg.get("subject", ""),
-                        msg.get("from", ""),
-                        msg.get("from_email", ""),
-                        msg.get("content", ""),
-                    ]
-                )
-                if "microsoft" in combined.lower():
-                    plain = re.sub(r"<[^>]+>", " ", combined)  # strip HTML
-                    match = re.search(r"Security code:\s*(\d{6})", plain)
-                    if match:
+        try:
+            message_id = None
+            _check_shutdown_requested()
+            ok, messages = fetch_messages(email_token)
+            last_message = messages[0]
+            message_id = last_message.get("id")
+
+            try:
+                plain = re.sub(r"<[^>]+>", " ", last_message.get("content"))
+                match = re.search(r"\s*(\d{6})", plain)
+                if match:
+                    try:
+                        if message_id:
+                            delete_message(message_id)
                         return True, match.group(1)
-        time.sleep(poll_interval)
+                    except:
+                        pass
+            except:
+                pass
+            if message_id:
+                delete_message(message_id)
+
+            time.sleep(poll_interval)
+        except:
+            pass
     return False, ""
 
 
@@ -4609,6 +4628,7 @@ def change_acc_pass(driver, new_profile_data):
     try:
         password = new_profile_data.get("pass")
         email = new_profile_data.get("email")
+        email_token = new_profile_data.get("email_token")
         print(f"{email} : Initializing change password")
 
         bring_to_front(driver)
@@ -4675,7 +4695,7 @@ def change_acc_pass(driver, new_profile_data):
                         enter_password(driver, password)
                         click_password_next_button(driver)
                     else:
-                        status, code = wait_for_code_by_recovery_mail(recovery)
+                        status, code = wait_for_code(email_token)
                         if not status:
                             return False, "Recovery code not received"
                         enter_code_and_click_next_after_pass_change(driver, code)
@@ -4897,6 +4917,7 @@ def initialize_new_profile(new_profile_data):
 
             status, temp_email, email_token = create_email()
             new_profile_data["recovery_email"] = temp_email
+            new_profile_data["email_token"] = email_token
             if not status:
                 print(
                     f"{email_address}: Error getting a temp mail from temp-mail. Tempmail unresponsive"
