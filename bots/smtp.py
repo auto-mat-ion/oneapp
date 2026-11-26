@@ -1256,10 +1256,9 @@ class ContentManager:
         column_name: str,
         limit: int = 0,
         offset: int = 0,
-        part: int = 0,
     ) -> List[str]:
         return self._load_table_attribute(
-            table_name, column_name, COUNTRY, part, limit, offset
+            table_name, column_name, COUNTRY, self.part, limit, offset
         )
 
     def _load_table_attribute(
