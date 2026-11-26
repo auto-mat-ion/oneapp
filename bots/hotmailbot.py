@@ -2299,6 +2299,7 @@ def click_join_family_link_btn(driver, new_profile_data):
             password = new_profile_data.get("pass", "")
             recovery = new_profile_data.get("recovery_email", "")
             email = new_profile_data.get("email", "")
+            email_token = new_profile_data.get("email_token")
             time.sleep(2)
             while click_looks_good_button(driver):
                 time.sleep(3)
@@ -2319,7 +2320,7 @@ def click_join_family_link_btn(driver, new_profile_data):
                         enter_password(driver, password)
                         click_password_next_button(driver)
                     else:
-                        status, code = wait_for_code_by_recovery_mail(recovery)
+                        status, code = wait_for_code(email_token)
                         if not status:
                             return False
                         enter_code_and_click_next_after_pass_change(driver, code)
@@ -3895,6 +3896,7 @@ def re_login_existing_acc(driver, new_profile_data):
         email = new_profile_data.get("email")
         password = new_profile_data.get("pass")
         recovery = new_profile_data.get("recovery_email")
+        email_token = new_profile_data.get("email_token")
         if click_existing_account_smtp(driver) or enter_email_and_click_next(
             driver, email
         ):
@@ -3907,7 +3909,7 @@ def re_login_existing_acc(driver, new_profile_data):
                 enter_password(driver, password)
                 click_password_next_button(driver)
             else:
-                status, code = wait_for_code_by_recovery_mail(recovery)
+                status, code = wait_for_code(email_token)
                 if not status:
                     return False
                 enter_code_and_click_next_after_pass_change(driver, code)
@@ -4517,6 +4519,7 @@ def entire_smtp_process(driver, new_profile_data):
         #         )
         #         return False, "Error clicking next button after entering password"
         recovery = new_profile_data.get("recovery_email")
+        email_token = new_profile_data.get("email_token")
         if enter_password(driver=driver, password=password):
             click_password_next_button(driver=driver)
             if password_use_unavailable(driver):
@@ -4529,7 +4532,7 @@ def entire_smtp_process(driver, new_profile_data):
                         enter_password(driver, password)
                         click_password_next_button(driver)
                     else:
-                        status, code = wait_for_code_by_recovery_mail(recovery)
+                        status, code = wait_for_code(email_token)
                         if not status:
                             return False, "Recovery code not received"
                         enter_code_and_click_next_after_pass_change(driver, code)
@@ -4543,7 +4546,7 @@ def entire_smtp_process(driver, new_profile_data):
                     enter_password(driver, password)
                     click_password_next_button(driver)
                 else:
-                    status, code = wait_for_code_by_recovery_mail(recovery)
+                    status, code = wait_for_code(email_token)
                     if not status:
                         return False, "Recovery code not received"
                     enter_code_and_click_next_after_pass_change(driver, code)
