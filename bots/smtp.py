@@ -38,6 +38,12 @@ SMTP_VERSION = "v1.5.0"
 # SAMPLE_RECIPIENT_EMAIL
 APP2_SERVERS = []
 OLD_SENDERS_SERVERS = [
+    "162.19.229.114",
+    "158.69.197.228",
+    "137.74.115.164",
+    "193.70.87.230",
+    "91.134.90.41",
+    "164.132.193.238",
     "51.178.81.140",
     "57.129.184.182",
     "57.129.184.183",
@@ -48,21 +54,6 @@ OLD_SENDERS_SERVERS = [
     "54.39.109.66",
     "54.39.109.63",
     "54.39.109.68",
-    "162.19.229.114",
-    "158.69.197.228",
-    "137.74.115.164",
-    "193.70.87.230",
-    "91.134.90.41",
-    "164.132.193.238",
-    "51.38.71.212",
-    "164.132.197.54",
-    "164.132.197.59",
-    "51.91.59.107",
-    "79.137.75.57",
-    "51.91.56.36",
-    "193.70.86.209",
-    "51.77.195.218",
-    "51.91.97.55",
 ]
 
 OLD_MOTHER = [
@@ -86,20 +77,29 @@ OLD_MOTHER = [
     "54.39.109.227",
     "54.39.109.221",
     "54.39.109.223",
-    "37.187.55.57",
-    "37.187.55.14",
-    "37.187.55.44",
-    "37.187.55.79",
-    "37.187.55.183",
-    "46.105.28.51",
-    "46.105.28.91",
-    "46.105.28.80",
-    "46.105.28.58",
-    "148.113.149.88",
-    "148.113.149.87",
-    "148.113.149.89",
-    "148.113.149.90",
-    "148.113.149.91",
+    "51.38.71.212",
+    "164.132.197.54",
+    "164.132.197.59",
+    "57.129.126.116",
+    "164.132.197.65",
+    "164.132.197.55",
+    "164.132.197.75",
+    "57.131.131.89",
+    "164.132.197.87",
+    "51.91.59.107",
+    "79.137.75.57",
+    "51.91.56.36",
+    "193.70.86.209",
+    "51.77.195.218",
+    "51.91.97.55",
+    "51.75.122.121",
+    "152.228.130.230",
+    "54.37.41.171",
+    "144.217.85.183",
+    "152.228.137.224",
+    "217.182.71.146",
+    "146.59.196.225",
+    "51.254.222.49",
     "162.19.26.243",
     "162.19.26.44",
     "162.19.27.233",
@@ -113,14 +113,9 @@ OLD_MOTHER = [
     "162.19.26.195",
     "162.19.27.202",
     "162.19.26.217",
-    "57.129.126.116",
-    "57.131.131.90",
-    "164.132.197.65",
-    "164.132.197.55",
-    "164.132.197.75",
-    "57.131.131.89",
-    "164.132.197.87",
 ]
+
+NEW_ACCS = ["162.35.51.100", "162.35.51.101"]
 
 SETTINGS_PATH = Path(__file__).resolve().parent / "settings.json"
 SENDER_LOG_DIR = Path(__file__).resolve().parent.parent / "sender_logs"
@@ -268,30 +263,30 @@ SMTP_MAILER = {
         "wrochna1988@gmail.com",
         "mitestingacc.01@gmail.com",
     ],  # debian1
-    "51.91.59.107": [
+    "162.19.229.114": [
         "mitestingacc.02@gmail.com",
         "stacash.affiliate@gmail.com",
-    ],  # smtp1
-    "162.19.229.114": [
+    ],  # hotmail4
+    "57.129.184.185": [
         "marcusfrancis0227@gmail.com",
         "mitestingacc.03@gmail.com",
-    ],  # hotmail4
-    "54.39.109.66": [
+    ],  # debian5
+    "54.39.109.136": [
         "mitestingacc.04@gmail.com",
         "andrewsetup17@gmail.com",
-    ],  # debian8 END OF NEW, BEGINING OF MOTHER
-    "54.39.109.140": [
+    ],  # Debian17
+    "164.132.197.65": [
         "mitestingacc.05@gmail.com",
         "durwoodstacks100@gmail.com",
-    ],  # debian19
-    "46.105.28.51": [
+    ],  # alibaba6
+    "162.19.27.233": [
         "mitestingacc.06@gmail.com",
-    ],  # Debian37
-    "162.19.27.118": ["stacho1988@gmail.com", "dover.miranach@gmail.com"],  # smtp43
-    "162.19.26.217": [
+    ],  # smtp42
+    "162.35.51.100": ["stacho1988@gmail.com", "dover.miranach@gmail.com"],  # inter1
+    "162.35.51.101": [
         "bradley.konsa@gmail.com",
         "aidanmotthews986@gmail.com",
-    ],  # smtp52
+    ],  # inter2
 }
 
 SAMPLE_RECIPIENT_EMAIL = (
@@ -3221,7 +3216,7 @@ def _main_batches(
     content_part = SERVER_IP if SERVER_IP in NEW_TEST else part
     content = ContentManager(content_part)
     run_state["content"] = content
-    if SERVER_IP in OLD_MOTHER:
+    if (SERVER_IP in OLD_MOTHER) or (SERVER_IP in NEW_ACCS):
         content.links = ["meetsingles.info"]
 
     if not content.is_valid():
@@ -3296,11 +3291,12 @@ def _main_batches(
             log("All recipients consumed.")
             break
 
-        MAX_CONCURRENT_ACCOUNTS = 1
-        if round_idx > 0:
-            MAX_CONCURRENT_ACCOUNTS = 1
-        if SERVER_IP in TESTY_SE:
-            MAX_CONCURRENT_ACCOUNTS = 2
+        # MAX_CONCURRENT_ACCOUNTS = 1
+        # if round_idx > 0:
+        #     MAX_CONCURRENT_ACCOUNTS = 1
+        # if SERVER_IP in TESTY_SE:
+        #     MAX_CONCURRENT_ACCOUNTS = 2
+        MAX_CONCURRENT_ACCOUNTS = 2
         log("=" * 55)
 
         log(
