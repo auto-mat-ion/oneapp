@@ -11279,3 +11279,4 @@ def run_family_link_extractor():
         else:
             print("No unshared family acc in database...")
             break
+        print("==" * 50)
