@@ -4,7 +4,6 @@ set -euo pipefail
 cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
 
 echo "Pulling latest code..."
-git reset --hard origin/main
 git pull origin main
 
 python311=""
