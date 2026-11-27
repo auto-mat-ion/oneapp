@@ -48,3 +48,4 @@ bots/h2.py
 bots/hotmailbot.py
 bots/sbb.py
 update_smtp.bat
+bots/downloaded_files/*

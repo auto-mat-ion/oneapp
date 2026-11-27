@@ -4,7 +4,8 @@ set -euo pipefail
 cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
 
 echo "Pulling latest code..."
-git pull --ff-only origin main
+
+git pull origin main
 
 python311=""
 if command -v python3.11 >/dev/null 2>&1; then
