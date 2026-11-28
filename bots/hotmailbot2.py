@@ -5759,15 +5759,13 @@ def get_new_profile_data():
                 "recovery": row[2],
                 "country": "Poland",
             }
-        cursor.execute(
-            "SELECT email, pass, recovery, country FROM input_emails3 LIMIT 1"
-        )
+        cursor.execute("SELECT email, pass, recovery FROM input_emails3 LIMIT 1")
         row = cursor.fetchone()
         if not row:
             cursor.close()
             conn.close()
             return False, {"email": "", "pass": "", "recovery": "", "country": ""}
-        email, password, recovery, country = row
+        email, password, recovery = row
         cursor.execute(
             "INSERT INTO processing_emails (email, pass, recovery, server_ip, bot_type, date_time) VALUES (%s, %s, %s, %s, %s, %s)",
             (
@@ -5790,7 +5788,6 @@ def get_new_profile_data():
             "email": email,
             "pass": password,
             "recovery": recovery,
-            "country": country,
         }
 
     try:
