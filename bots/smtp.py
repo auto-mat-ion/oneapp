@@ -117,6 +117,20 @@ OLD_MOTHER = [
 
 NEW_ACCS = ["162.35.51.100", "162.35.51.101"]
 
+NEW_MOTHER_ACCS_OTHER = [
+    "162.35.53.131",
+    "162.35.53.133",
+    "162.35.53.130",
+    "162.35.53.132",
+    "162.35.53.128",
+    "162.35.53.129",
+    "162.35.53.126",
+    "162.35.53.127",
+    "162.35.53.124",
+    "162.35.53.125",
+    "162.35.53.122",
+]
+
 SETTINGS_PATH = Path(__file__).resolve().parent / "settings.json"
 SENDER_LOG_DIR = Path(__file__).resolve().parent.parent / "sender_logs"
 LOG_FILE = SENDER_LOG_DIR / "email_sender.log"
@@ -267,21 +281,21 @@ SMTP_MAILER = {
         "mitestingacc.02@gmail.com",
         "stacash.affiliate@gmail.com",
     ],  # hotmail4
-    "57.129.184.185": [
+    "164.132.197.65": [
         "marcusfrancis0227@gmail.com",
         "mitestingacc.03@gmail.com",
-    ],  # debian5
-    "54.39.109.136": [
-        "mitestingacc.04@gmail.com",
-        "andrewsetup17@gmail.com",
-    ],  # Debian17
-    "164.132.197.65": [
-        "mitestingacc.05@gmail.com",
-        "durwoodstacks100@gmail.com",
     ],  # alibaba6
     "162.19.27.233": [
-        "mitestingacc.06@gmail.com",
+        "mitestingacc.04@gmail.com",
+        "andrewsetup17@gmail.com",
     ],  # smtp42
+    "162.35.53.130": [
+        "mitestingacc.05@gmail.com",
+        "durwoodstacks100@gmail.com",
+    ],  # inter5
+    "162.35.53.125": [
+        "mitestingacc.06@gmail.com",
+    ],  # inter12
     "162.35.51.100": ["stacho1988@gmail.com", "dover.miranach@gmail.com"],  # inter1
     "162.35.51.101": [
         "bradley.konsa@gmail.com",
