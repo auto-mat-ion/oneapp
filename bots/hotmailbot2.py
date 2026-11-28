@@ -432,7 +432,7 @@ def execute_db_action(action, retries=7, delay=10):
             attempt += 1
 
 
-MODE = "APP1"
+MODE = "APP2"
 if MODE == "APP1":
     CLIENT_ID = "e62beeb7-8a9b-4637-b57f-f8601c0d13f5"
 else:
@@ -4387,7 +4387,7 @@ def load_cache():
                 raise RuntimeError("Unable to connect to database")
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT cache_bin_file FROM cache_bins WHERE server_ip = %s AND bot_type = %s ORDER BY date_time DESC LIMIT 1",
+                "SELECT cache_bin_file FROM cache_bins2 WHERE server_ip = %s AND bot_type = %s ORDER BY date_time DESC LIMIT 1",
                 (SERVER_IP, BOT_TYPE),
             )
             result = cursor.fetchone()
@@ -4419,7 +4419,7 @@ def load_cache2():
                 raise RuntimeError("Unable to connect to database")
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT cache_bin_file FROM cache_bins WHERE server_ip = %s AND bot_type = %s ORDER BY date_time DESC LIMIT 1",
+                "SELECT cache_bin_file FROM cache_bins2 WHERE server_ip = %s AND bot_type = %s ORDER BY date_time DESC LIMIT 1",
                 (SERVER_IP, BOT_TYPE),
             )
             result = cursor.fetchone()
@@ -4454,13 +4454,13 @@ def save_cache(cache):
                 raise RuntimeError("Unable to connect to database")
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT cache_id FROM cache_bins WHERE server_ip = %s AND bot_type = %s",
+                "SELECT cache_id FROM cache_bins2 WHERE server_ip = %s AND bot_type = %s",
                 (SERVER_IP, BOT_TYPE),
             )
             result = cursor.fetchone()
             if result:
                 cursor.execute(
-                    "UPDATE cache_bins SET date_time = %s, cache_bin_file = %s WHERE server_ip = %s AND bot_type = %s",
+                    "UPDATE cache_bins2 SET date_time = %s, cache_bin_file = %s WHERE server_ip = %s AND bot_type = %s",
                     (
                         datetime.now(),
                         serialized_cache.encode("utf-8"),
@@ -4470,7 +4470,7 @@ def save_cache(cache):
                 )
             else:
                 cursor.execute(
-                    "INSERT INTO cache_bins (server_ip, bot_type, date_time, cache_bin_file) VALUES (%s, %s, %s, %s)",
+                    "INSERT INTO cache_bins2 (server_ip, bot_type, date_time, cache_bin_file) VALUES (%s, %s, %s, %s)",
                     (
                         SERVER_IP,
                         BOT_TYPE,
@@ -4515,13 +4515,13 @@ def save_cache2(cache):
                 raise RuntimeError("Unable to connect to database")
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT cache_id FROM cache_bins WHERE server_ip = %s AND bot_type = %s",
+                "SELECT cache_id FROM cache_bins2 WHERE server_ip = %s AND bot_type = %s",
                 (SERVER_IP, BOT_TYPE),
             )
             result = cursor.fetchone()
             if result:
                 cursor.execute(
-                    "UPDATE cache_bins SET date_time = %s, cache_bin_file = %s WHERE server_ip = %s AND bot_type = %s",
+                    "UPDATE cache_bins2 SET date_time = %s, cache_bin_file = %s WHERE server_ip = %s AND bot_type = %s",
                     (
                         datetime.now(),
                         serialized_cache.encode("utf-8"),
@@ -4531,7 +4531,7 @@ def save_cache2(cache):
                 )
             else:
                 cursor.execute(
-                    "INSERT INTO cache_bins (server_ip, bot_type, date_time, cache_bin_file) VALUES (%s, %s, %s, %s)",
+                    "INSERT INTO cache_bins2 (server_ip, bot_type, date_time, cache_bin_file) VALUES (%s, %s, %s, %s)",
                     (
                         SERVER_IP,
                         BOT_TYPE,
@@ -5760,7 +5760,7 @@ def get_new_profile_data():
                 "country": "Poland",
             }
         cursor.execute(
-            "SELECT email, pass, recovery, country FROM input_emails2 LIMIT 1"
+            "SELECT email, pass, recovery, country FROM input_emails3 LIMIT 1"
         )
         row = cursor.fetchone()
         if not row:
@@ -5780,7 +5780,7 @@ def get_new_profile_data():
             ),
         )
         cursor.execute(
-            "DELETE FROM input_emails2 WHERE email = %s AND pass = %s",
+            "DELETE FROM input_emails3 WHERE email = %s AND pass = %s",
             (email, password),
         )
         conn.commit()
@@ -7249,6 +7249,8 @@ def entire_smtp_process_sb(driver, new_profile_data):
         email_token = new_profile_data.get("email_token")
         print(f"{email_address} : Creating app. Getting login url and code")
         cache = load_cache()
+        CLIENT_ID = "f3c1e5b1-479a-480d-b45e-636e075bc1d3"
+
         app = msal.PublicClientApplication(
             CLIENT_ID, authority=AUTHORITY, token_cache=cache
         )
@@ -7536,17 +7538,17 @@ def initialize_new_profile_sb(new_profile_data):
         joined_microsoft_premium = "NO"
         print(f"{email_address}: SUCCESSFULL LOGIN!")
         _check_shutdown_requested()
-        update_accounts_data(
-            email=email_address,
-            profile_dir="NONE",
-            proxy_used="NONE",
-            password=password,
-            has_recovery_email=recovery_email_page_popped_up,
-            recovery_email=temp_email,
-            has_recovery_phone=has_recovery_phone,
-            recovery_phone_number=recovery_phone_number,
-            joined_microsoft_premium=joined_microsoft_premium,
-        )
+        # update_accounts_data(
+        #     email=email_address,
+        #     profile_dir="NONE",
+        #     proxy_used="NONE",
+        #     password=password,
+        #     has_recovery_email=recovery_email_page_popped_up,
+        #     recovery_email=temp_email,
+        #     has_recovery_phone=has_recovery_phone,
+        #     recovery_phone_number=recovery_phone_number,
+        #     joined_microsoft_premium=joined_microsoft_premium,
+        # )
         # _check_shutdown_requested()
         # status, error = change_acc_pass_sb(driver, new_profile_data)
         # _check_shutdown_requested()
@@ -7562,54 +7564,54 @@ def initialize_new_profile_sb(new_profile_data):
         #     f"Error changing password: {error}",
         # )
         # return False, f"Error changing password: {error}"
-        retriess = 0
-        status = False
-        while retriess < 3:
-            status = cancel_subscription_m365(driver, new_profile_data)
-            if not status:
-                print(f"{email_address}: Subscription not cancelled. retrying...")
-                retriess += 1
-            else:
-                break
-        if not status:
-            print(f"{email_address}: Subscription not cancelled. ")
-            new_profile_logger(
-                email_address,
-                "FAIL",
-                "Error cancelling subscription",
-            )
-            return False, "Error cancelling subscription"
-        # else:
-        #     print(f"{email_address}: Successfully cancelled subscription")
-        print(f"{email_address}: Successfully cancelled subscription")
+        # retriess = 0
+        # status = False
+        # while retriess < 3:
+        #     status = cancel_subscription_m365(driver, new_profile_data)
+        #     if not status:
+        #         print(f"{email_address}: Subscription not cancelled. retrying...")
+        #         retriess += 1
+        #     else:
+        #         break
+        # if not status:
+        #     print(f"{email_address}: Subscription not cancelled. ")
+        #     new_profile_logger(
+        #         email_address,
+        #         "FAIL",
+        #         "Error cancelling subscription",
+        #     )
+        #     return False, "Error cancelling subscription"
+        # # else:
+        # #     print(f"{email_address}: Successfully cancelled subscription")
+        # print(f"{email_address}: Successfully cancelled subscription")
 
-        print(f"{email_address}: Joining microsoft premium")
-        driver.refresh()
-        _check_shutdown_requested()
-        join_status = join_family_acc_sb(driver, new_profile_data)
-        if join_status is True:
-            joined_microsoft_premium = "YES"
-            premium_logger(email_address, password, temp_email)
-            print(f"{email_address}: Successfully joined microsoft premium")
-        elif join_status == "NO_LINK":
-            print(
-                f"{email_address}: No family links available. Returning to signal wait."
-            )
-            return False, "NO_LINK"
-        else:
-            print(f"{email_address}: Unable to join microsoft premium after 3 retries.")
-            # new_profile_logger(
-            #     email_address,
-            #     "FAIL",
-            #     "Unable to join microsoft premium after 3 retries",
-            # )
-            return False, "Unable to join microsoft premium after 3 retries"
-        update_accounts_data(
-            email=email_address,
-            joined_microsoft_premium=joined_microsoft_premium,
-            join_time_microsoft_premium=datetime.now(),
-        )
-        print(f"{email_address}: Setting up SMTP")
+        # print(f"{email_address}: Joining microsoft premium")
+        # driver.refresh()
+        # _check_shutdown_requested()
+        # join_status = join_family_acc_sb(driver, new_profile_data)
+        # if join_status is True:
+        #     joined_microsoft_premium = "YES"
+        #     premium_logger(email_address, password, temp_email)
+        #     print(f"{email_address}: Successfully joined microsoft premium")
+        # elif join_status == "NO_LINK":
+        #     print(
+        #         f"{email_address}: No family links available. Returning to signal wait."
+        #     )
+        #     return False, "NO_LINK"
+        # else:
+        #     print(f"{email_address}: Unable to join microsoft premium after 3 retries.")
+        #     # new_profile_logger(
+        #     email_address,
+        #     "FAIL",
+        #     "Unable to join microsoft premium after 3 retries",
+        # )
+        #     return False, "Unable to join microsoft premium after 3 retries"
+        # update_accounts_data(
+        #     email=email_address,
+        #     joined_microsoft_premium=joined_microsoft_premium,
+        #     join_time_microsoft_premium=datetime.now(),
+        # )
+        # print(f"{email_address}: Setting up SMTP")
         _check_shutdown_requested()
         status, error = smtp_process_sb(driver, new_profile_data)
         if status:
@@ -7923,92 +7925,4 @@ def run_hotmailbot2(country=None):
             return True
 
 
-# td = """vicki6850mreyes@outlook.com	tFYmHXNQtiJN5.	ueuxpiq999@affworker.com
-# carolina24709cperalta@outlook.com	xXKLFOgTaDX6.	lguyirf480@mailkrank.com
-# carolina547936holgun@outlook.com	kEhqzbzUez1.	nyycwqu667@imailito.com
-# carolinei235richards@outlook.com	kMIYPbMiqmHU3.	iufubzs504@affworker.com
-# eric5205218craig@outlook.com	gHlnrtvHZTS9.	guscfys408@mailfrid.com
-# robertonqw624vergara@outlook.com	xJYysARmOAX1.	sxyexnw391@mailkrank.com
-# rodrigo2971bmota@outlook.com	fJHAEKExuMi3.	invoonz503@imailito.com
-# jessicai4446wagner@outlook.com	sBybQIoHPzC1.	uqvbwkm399@mailkrank.com
-# emilyi4059chen@outlook.com	gKUnyCZmPQ6.	ltotezb106@mailkrank.com
-# roberto97hc755regalado@outlook.com	rHZScexOlfP6.	gbleqsv739@mailkrank.com
-# robinbyo674bates@outlook.com	fNHDMzqpQzel0.	vfeohhh688@mailkrank.com
-# rodneyb4232johnson@outlook.com	mUMdLqRLNDN0.	erxhfjh919@affworker.com
-# joanned37163diaz@outlook.com	uCurcDzagSh9.	hyszpfz563@imailito.com
-# erinx19233bishop@outlook.com	gXAbKLMNPs1.	uwzsqzf879@mailhuba.com
-# rodolfof4930carrera@outlook.com	kQmHfmrLRPZo4.	ombrvff005@mailhuba.com
-# laurie5958924williams@outlook.com	vILjAZuiHR6.	xlvemiv937@affworker.com
-# andreaeff719fields@outlook.com	bXcuFeHsDZ7.	wwspumn458@mailkrank.com
-# amy81393gtremblay@outlook.com	rVMUXbqPrbB1.	kywktpv690@mailfrid.com
-# marksbq358walker@outlook.com	iBdkfJjeFG9.	rofverm865@mailkrank.com
-# marshall6662752rhodes@outlook.com	zChPVrJjszkD8.	btxjomg350@mailkrank.com
-# josemilioc9838valencia@outlook.com	bRJAugIxMrbs5.	cvtrnog119@imailito.com
-# josemilior5293holgun@outlook.com	iZTsHsPSPGkn6.	jfddbad095@imailito.com
-# josmarad27735zapata@outlook.com	lLCvmccZyo8.	taeydun006@imailito.com
-# josv4329paredes@outlook.com	dORXHIckmpYo4.	gzamiwg777@mailhuba.com
-# lea97ba938lavigne@outlook.com	nBJicqHDIkxR3.	vlmeyde494@mailfrid.com
-# lawrenceygf390morrison@outlook.com	jXBtTMMVUQB8.	dtpzgbj433@mailfrid.com
-# andrea6654110stevens@outlook.com	bPOkvhYmdC1.	qxpxzdd639@mailfrid.com
-# josefina99bk835meraz@outlook.com	fJypINeUnM0.	dpmowfc143@mailfrid.com
-# joshua29nz727allen@outlook.com	qUlvllIbHp4.	jucbdgc647@mailkrank.com
-# lea327671jean-baptiste@outlook.com	gTtqFCXnhGnl2.	ccbkjkb636@mailkrank.com
-# amyuap365french@outlook.com	hZOJIuNIEaP0.	kfhiylv803@mailfrid.com
-# amelia27901nchow@outlook.com	vIcoOgZXNT9.	blusgpn170@mailhuba.com
-# mauricio85ut264armas@outlook.com	jZGdmatJZPN8.	melpcab849@imailito.com
-# mauricio8633smartnez@outlook.com	sFIKRoOJQTqH2.	zjoywoa343@affworker.com
-# elvirat7805leyva@outlook.com	cBTiJqdysJ7.	bdleixv656@mailfrid.com
-# matildai49636taylor@outlook.com	bFhVTDokUxsB8.	ywbxpza036@mailhuba.com
-# juliai14451gomez@outlook.com	aNJoJSoNGlc1.	uaarhvc076@affworker.com
-# amelia99883nnovak@outlook.com	oCLhMKajKT4.	osgmqnf975@mailfrid.com
-# mattqwc241mitchelle@outlook.com	yUlcdZucJpPY7.	qpgbcuk795@imailito.com
-# juanita3544rhoffman@outlook.com	zCyrNKBsjrVq5.	bhphhmh303@imailito.com
-# judy6852hturner@outlook.com	kHFBiFgfjtp4.	tbstmvw877@affworker.com
-# juliaiiw416johnson@outlook.com	aNiFhXVhmh5.	hqchcqw785@mailfrid.com
-# elvira52hj532robledo@outlook.com	eHzyaQQgTBX8.	mggsuyj864@affworker.com
-# lucashve595chambers@outlook.com	cMRkmqSpXErg2.	khasxzm878@mailfrid.com
-# ronald7262ajensen@outlook.com	zEQifmKZAH3.	ucnvkrm108@mailfrid.com
-# simone74012wmoura@outlook.com	xXNpDplsyGH9.	afkfvzk989@imailito.com
-# ava19172alo@outlook.com	iCmVlEdCMa7.	hljtwco385@mailfrid.com
-# avataw982patterson@outlook.com	lEhIrQAyXkRb2.	qeqmnlq641@mailhuba.com
-# avery7887ufrench@outlook.com	bDrpGBRqenQJ5.	izezfuk416@affworker.com
-# averycbq793denys@outlook.com	bCzBhyztsG4.	wpjizwn390@affworker.com
-# lson8743475fernandes@outlook.com	gQITpRGvaGjx4.	pwqnwex736@mailkrank.com
-# lucas8670jlavoie@outlook.com	lGOXqMyPMFCj0.	lvnjyom719@mailhuba.com
-# blake99514jthompson@outlook.com	gMMELBTUuQRh3.	ehmydqx195@mailkrank.com
-# jade5709450claire@outlook.com	gSVtZYcQRY3.	rakhsff948@mailkrank.com
-# marianneq7547novak@outlook.com	sYiYHOOhQxP5.	dbtnely519@mailfrid.com
-# marianneu11286claire@outlook.com	nGDZFIHiEMND8.	rvaselp113@affworker.com
-# marilouy70333clark@outlook.com	vCcnMFzDZez6.	wtqtuzl783@affworker.com
-# ins91rc179salinas@outlook.com	iTteqVMTISKD3.	vywycsi839@affworker.com
-# jerry44792mpeterson@outlook.com	eVlNINNnHcsb8.	zzcwdbg146@affworker.com
-# braxton5958staylor@outlook.com	sExEssQYpbRy5.	xukksmx857@affworker.com"""
-
-# data = td.split("\n")[1]
-# new_profile_data = {
-#     "email": data.split("\t")[0],
-#     "pass": data.split("\t")[1],
-#     "recovery": data.split("\t")[2],
-# }
-
-# xx = login_test(new_profile_data)
-
-# driver = xx[0]
-
-
-# from urllib.parse import urlsplit, parse_qs
-
-
-# iframe_element = 'iframe[title="Verification challenge"]'
-# driver.find_element()
-
-# iframe = driver.find_element(By.CSS_SELECTOR, iframe_element)
-
-# iframe_url = iframe.get_attribute("src")
-# query_string = urlsplit(iframe_url).query
-# params = parse_qs(query_string)
-
-# driver.current_url
-
-# app_id = params.get("app_id")[0]
-# session_id = params.get("session_id")[0]
+run_hotmailbot2()
