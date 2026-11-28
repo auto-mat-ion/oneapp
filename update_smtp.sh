@@ -4,6 +4,14 @@ set -euo pipefail
 cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
 
 echo "Pulling latest code..."
+for i in {1..30}; do
+    if getent hosts github.com > /dev/null 2>&1; then
+        break
+    fi
+    echo "Waiting for DNS..."
+    sleep 2
+done
+
 git pull origin main
 
 python311=""
