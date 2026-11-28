@@ -1258,6 +1258,10 @@ def get_server_uptime_status_df():
                 match = re.search(r"(\d+)", name)
                 number = int(match.group(1)) if match else 10**9
                 return (5, number, name)
+            if "inter" in name:
+                match = re.search(r"(\d+)", name)
+                number = int(match.group(1)) if match else 10**9
+                return (6, number, name)
             return (3, 10**9, name)
 
         status_order = {"good": 0, "mid": 1, "offline": 2}

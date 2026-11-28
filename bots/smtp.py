@@ -3315,11 +3315,11 @@ def _main_batches(
             break
 
         # MAX_CONCURRENT_ACCOUNTS = 1
-        # if round_idx > 0:
-        #     MAX_CONCURRENT_ACCOUNTS = 1
+        if round_idx > 0 and SERVER_IP == "162.35.53.125":
+            MAX_CONCURRENT_ACCOUNTS = 1
         # if SERVER_IP in TESTY_SE:
         #     MAX_CONCURRENT_ACCOUNTS = 2
-        MAX_CONCURRENT_ACCOUNTS = 2
+        # MAX_CONCURRENT_ACCOUNTS = 2
         log("=" * 55)
 
         log(
