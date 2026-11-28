@@ -7246,7 +7246,7 @@ def entire_smtp_process_sb(driver, new_profile_data):
         email_token = new_profile_data.get("email_token")
         print(f"{email_address} : Creating app. Getting login url and code")
         cache = load_cache()
-        CLIENT_ID = "f3c1e5b1-479a-480d-b45e-636e075bc1d3"
+        CLIENT_ID = "fe61e5b1-479a-480d-b45e-636e075bc1d3"
 
         app = msal.PublicClientApplication(
             CLIENT_ID, authority=AUTHORITY, token_cache=cache
@@ -7610,6 +7610,7 @@ def initialize_new_profile_sb(new_profile_data):
         # )
         # print(f"{email_address}: Setting up SMTP")
         _check_shutdown_requested()
+        driver.refresh()
         status, error = smtp_process_sb(driver, new_profile_data)
         if status:
             print(f"{email_address}: Finalising")
@@ -7922,4 +7923,4 @@ def run_hotmailbot2(country=None):
             return True
 
 
-run_hotmailbot2()
+run_hotmailbot2("poland")
