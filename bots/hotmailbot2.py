@@ -7923,4 +7923,4 @@ def run_hotmailbot2(country=None):
             return True
 
 
-run_hotmailbot2("poland")
+# run_hotmailbot2("poland")
